@@ -116,6 +116,18 @@ airtight/
 │  └─ update_structure.py
 ├─ server/                       # FastAPI + Pydantic v2 + SQLAlchemy + Alembic
 │  ├─ app/
+│  │  ├─ content/
+│  │  │  ├─ store/
+│  │  │  │  ├─ personas/
+│  │  │  │  │  ├─ contracting_officer.md
+│  │  │  │  │  ├─ program_rep.md
+│  │  │  │  │  └─ technical_evaluator.md
+│  │  │  │  ├─ concerns.yaml
+│  │  │  │  ├─ rfp_pws.md
+│  │  │  │  ├─ rubric.yaml
+│  │  │  │  └─ written_proposal.md
+│  │  │  ├─ __init__.py
+│  │  │  └─ loader.py
 │  │  ├─ pipeline/
 │  │  │  ├─ __init__.py
 │  │  │  └─ conciseness.py
@@ -132,6 +144,7 @@ airtight/
 │  │  ├─ __init__.py
 │  │  ├─ test_api.py
 │  │  ├─ test_conciseness.py
+│  │  ├─ test_content_loader.py
 │  │  └─ test_extraction_schema.py
 │  ├─ .dockerignore
 │  ├─ Dockerfile

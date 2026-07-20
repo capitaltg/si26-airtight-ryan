@@ -1,40 +1,29 @@
-<!--
-Mirror of docs/templates/PR_TEMPLATE.md. Keep the two in sync.
-GitHub prefills this into every new PR description.
--->
+## Problem
 
-## Summary
+<!-- What is broken or missing, and why it matters. Link the issue, for example: Closes #123. A few plain sentences. -->
 
-<!-- One or two sentences: what this PR does and why. -->
+## Solution / Changes
 
-## Related
+<!-- The approach in one or two sentences, then the details below. Include a subsection only if that layer changed. -->
 
-<!-- Closes #<issue>, or link the task/plan section it implements. -->
+### Server changes
 
-## Type
+<!-- Changes under /server (FastAPI / Python). Bullets, with file or function links, for example: server/app/routes/query.py:88 -->
 
-<!-- feat | fix | refactor | test | docs | chore | perf | ci -->
-
-## Changes
-
-<!-- Concrete changes grouped by area (server / frontend / e2e / docs). -->
 -
 
-## Verification
+### Frontend changes
 
-<!-- What you ran and the result. Evidence, not assertions. -->
-- [ ] Server: `ruff check .`, `mypy app`, `pytest -v` pass
-- [ ] Frontend: `npm run build` passes
-- [ ] E2E: `npm run e2e` passes (or N/A, say why)
-- [ ] Manual check: <what you drove and observed> (or N/A)
+<!-- Changes under /frontend (Vite / React / TypeScript). Bullets, with file or component links, for example: frontend/src/components/QueryOverlay.tsx:42 -->
 
-## Scoring-engine impact
+-
 
-<!-- The number stays code-owned and deterministic. Tick what applies. -->
-- [ ] No change to extraction schema, scoring engine, or the rubric
-- [ ] Scoring changed and the golden-set regression test still passes
-- [ ] No model call computes or influences the score
+## Test Cases
 
-## Notes and risks
+<!-- How you verified: automated tests added or updated, and manual steps a reviewer can repeat. Use checkboxes. -->
 
-<!-- Tradeoffs, follow-ups, deferred work, or "nothing here". -->
+-
+
+## Screenshots
+
+<!-- Before and after images or a short clip for frontend changes. Write "N/A" if nothing is visible. -->
