@@ -33,6 +33,9 @@ e2e/playwright/.cache/
 .env.local
 .env.*.local
 
+# --- Local agent artifacts ---
+docs/
+
 # --- OS / editors ---
 .DS_Store
 .idea/

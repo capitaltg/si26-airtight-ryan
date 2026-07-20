@@ -87,29 +87,6 @@ airtight/
 │  │  ├─ frontend.yml            # oxlint + oxfmt + build/typecheck (on frontend changes)
 │  │  └─ server.yml              # ruff + mypy + pytest (on server changes)
 │  └─ PULL_REQUEST_TEMPLATE.md
-├─ docs/
-│  ├─ ideation/
-│  │  ├─ ideas.md
-│  │  ├─ mvp-new.md
-│  │  ├─ mvp.md
-│  │  ├─ new-ideas.md
-│  │  └─ plan.md
-│  ├─ plans/
-│  │  ├─ 0-pitch.md
-│  │  ├─ 1-overview.md
-│  │  ├─ 2-scoring-and-drift.md
-│  │  ├─ 3-spec.md
-│  │  ├─ 4-chatbot-comparison.md
-│  │  └─ 5-reviewer-qa.md
-│  ├─ superpowers/
-│  │  ├─ plans/
-│  │  │  └─ 2026-07-17-airtight-poc-implementation.md
-│  │  └─ specs/
-│  │     └─ 2026-07-17-airtight-poc-design.md
-│  └─ templates/
-│     ├─ ISSUE_TEMPLATE.md
-│     ├─ PR_TEMPLATE.md
-│     └─ TASK_TEMPLATE.md
 ├─ e2e/                          # Playwright e2e smoke tests (boots stack via docker compose)
 │  ├─ tests/
 │  │  ├─ a11y-contrast.spec.ts   # axe-core WCAG 2.1 AA color-contrast check
