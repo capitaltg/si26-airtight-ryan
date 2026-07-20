@@ -1,0 +1,21 @@
+# Git hooks managed by lefthook. Run `npm run prepare` (or `lefthook install`)
+# once after cloning to wire these into .git/hooks.
+
+# GUI git clients (VS Code, etc.) don't inherit the shell PATH, so `npx`/node
+# installed via Homebrew (/opt/homebrew/bin on Apple silicon, /usr/local/bin on
+# Intel) is invisible and hooks fail with "npx: command not found". Prepend the
+# usual node install dirs; missing dirs are harmless on Linux / terminal runs.
+pre-commit:
+  piped: true # run in priority order; update the tree before lint-staged stashes
+  commands:
+    update-structure:
+      priority: 1
+      run: PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" python3 scripts/update_structure.py && git add AGENTS.md
+    lint-staged:
+      priority: 2
+      run: PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" npx lint-staged
+
+commit-msg:
+  commands:
+    commitlint:
+      run: PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" npx --no -- commitlint --edit {1}

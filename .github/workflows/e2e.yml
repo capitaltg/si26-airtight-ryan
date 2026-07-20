@@ -1,0 +1,60 @@
+name: e2e
+
+on:
+  push:
+  pull_request:
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Health path needs no AWS creds; defaults in docker-compose.yml cover the
+      # rest. A real .env lets compose interpolate without warnings.
+      - name: Prepare env file
+        run: cp .env.example .env
+
+      - name: Boot the stack
+        run: docker compose up -d --build
+
+      - name: Install e2e dependencies
+        working-directory: e2e
+        run: npm install
+
+      - name: Install Playwright browser
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Wait for services
+        working-directory: e2e
+        run: npx wait-on -t 120000 http-get://localhost:8000/health http-get://localhost:5173
+
+      - name: Run e2e tests
+        working-directory: e2e
+        run: npx playwright test
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 7
+
+      - name: Dump stack logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

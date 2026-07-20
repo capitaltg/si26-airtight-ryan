@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Boot the server (FastAPI via uvicorn --reload). On PATH inside the dev container.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT/server"
+# `python -m` avoids depending on ~/.local/bin being on PATH (only login
+# shells add it), which non-login terminals don't get.
+exec python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 "$@"

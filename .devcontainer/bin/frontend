@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Boot the frontend (Vite) dev server. On PATH inside the dev container.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT"
+exec npm run dev -w frontend -- --host 0.0.0.0 "$@"

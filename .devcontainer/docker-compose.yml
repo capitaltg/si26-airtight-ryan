@@ -1,0 +1,41 @@
+# Self-contained compose for the dev container: one dev box (python+node)
+# plus its own postgres. Kept separate from the root docker-compose.yml so
+# opening the dev container does NOT also spin up the api/web service images.
+services:
+  dev:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - ..:/workspaces/airtight:cached
+    # Keep the container alive; you run uvicorn / npm yourself inside it.
+    command: sleep infinity
+    environment:
+      DATABASE_URL: postgresql+psycopg://airtight:airtight@postgres:5432/airtight
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-anthropic.claude-sonnet-4-5-20250929}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: airtight
+      POSTGRES_PASSWORD: airtight
+      POSTGRES_DB: airtight
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airtight"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

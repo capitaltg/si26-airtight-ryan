@@ -1,0 +1,24 @@
+{
+  "name": "airtight",
+  "dockerComposeFile": ["docker-compose.yml"],
+  "service": "dev",
+  "workspaceFolder": "/workspaces/airtight",
+  "forwardPorts": [8000, 5173, 5432],
+  "portsAttributes": {
+    "8000": { "label": "api" },
+    "5173": { "label": "web" },
+    "5432": { "label": "postgres" }
+  },
+  "postCreateCommand": "pip install -e './server[dev]' && npm install",
+  "remoteUser": "vscode",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "charliermarsh.ruff",
+        "dbaeumer.vscode-eslint",
+        "bradlc.vscode-tailwindcss"
+      ]
+    }
+  }
+}
