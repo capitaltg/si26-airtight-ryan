@@ -113,25 +113,13 @@ airtight/
 │  ├─ tsconfig.node.json
 │  └─ vite.config.ts
 ├─ scripts/
+│  ├─ smoke_bedrock.py
 │  └─ update_structure.py
 ├─ server/                       # FastAPI + Pydantic v2 + SQLAlchemy + Alembic
 │  ├─ app/
-│  │  ├─ content/
-│  │  │  ├─ store/
-│  │  │  │  ├─ personas/
-│  │  │  │  │  ├─ contracting_officer.md
-│  │  │  │  │  ├─ program_rep.md
-│  │  │  │  │  └─ technical_evaluator.md
-│  │  │  │  ├─ concerns.yaml
-│  │  │  │  ├─ rfp_pws.md
-│  │  │  │  ├─ rubric.yaml
-│  │  │  │  └─ written_proposal.md
+│  │  ├─ bedrock/
 │  │  │  ├─ __init__.py
-│  │  │  └─ loader.py
-│  │  ├─ pipeline/
-│  │  │  ├─ __init__.py
-│  │  │  ├─ conciseness.py
-│  │  │  └─ scoring.py
+│  │  │  └─ client.py
 │  │  ├─ schemas/
 │  │  │  ├─ __init__.py
 │  │  │  ├─ content.py
@@ -144,9 +132,8 @@ airtight/
 │  ├─ tests/
 │  │  ├─ __init__.py
 │  │  ├─ test_api.py
-│  │  ├─ test_content_loader.py
-│  │  ├─ test_extraction_schema.py
-│  │  └─ test_scoring.py
+│  │  ├─ test_bedrock_client.py
+│  │  └─ test_extraction_schema.py
 │  ├─ .dockerignore
 │  ├─ Dockerfile
 │  └─ pyproject.toml             # deps + ruff + mypy + pytest config

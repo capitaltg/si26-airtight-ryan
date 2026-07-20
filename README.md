@@ -47,6 +47,26 @@ pytest -v            # health test
 uvicorn app.main:app --reload
 ```
 
+## AWS prerequisites (Bedrock)
+
+Any code path that calls the model needs three things in place. The variables
+themselves are documented in `.env.example`.
+
+1. `AWS_REGION` set to a region where you have Bedrock access.
+2. AWS credentials resolvable from the standard chain: environment variables, a
+   named profile, or an IAM role. No keys go in code.
+3. Bedrock model access enabled for `BEDROCK_MODEL_ID` in that region (request it
+   once from the Bedrock console under Model access).
+
+Confirm all three with the manual smoke check:
+
+```bash
+cd server && .venv/bin/python ../scripts/smoke_bedrock.py
+```
+
+It prints a short reply containing `READY` and exits non-zero on failure. The
+pytest suite never touches the network, so it passes without any of this.
+
 ## Frontend only (local)
 
 ```bash
