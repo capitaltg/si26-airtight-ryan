@@ -1,0 +1,27 @@
+# Scoring rubric v1. Row ids are a contract the scoring engine (#5) matches on via
+# matched_rows; keep them stable. Mirrors docs/ideation/2-scoring-and-drift.md:43-51.
+
+version: 1
+cap_ceiling: 25
+rows:
+  - id: red_line
+    support_value: -2
+    description: Crossed a persona hard limit; caps the meter.
+  - id: dodge
+    support_value: -2
+    description: Dodged the main question.
+  - id: unsubstantiated
+    support_value: 0
+    description: Unsubstantiated claim or generic reassurance.
+  - id: false_fact
+    support_value: -1
+    description: Stated a fact that turned out false.
+  - id: contradiction
+    support_value: -1
+    description: Contradicted an earlier answer or the written proposal.
+  - id: approach_cited
+    support_value: 1
+    description: Cited a concrete, compliant piece of the approach.
+  - id: evidence_backed
+    support_value: 2
+    description: Backed with specific staffing, schedule, or past-performance evidence.
