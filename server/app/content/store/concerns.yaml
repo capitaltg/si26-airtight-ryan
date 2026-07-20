@@ -1,0 +1,140 @@
+# Frozen concern bank for the POC (8 concerns).
+# concern_id / core_ask / requires seeded from docs/ideation/3-spec.md:58-67.
+# sub_questions, red_lines, and what_would_satisfy authored here; calibration is #7.
+
+- concern_id: technical_approach
+  core_ask: >-
+    Walk us through the architecture for the modernized system and why it is feasible.
+  sub_questions:
+    - id: architecture
+      text: What are the major components and how do they fit together?
+      requires: fact_or_commitment
+    - id: hosting
+      text: Where does it run, and does the environment carry the required authorization?
+      requires: fact
+    - id: integrations
+      text: How do the three downstream systems keep reading case status?
+      requires: fact_or_commitment
+  red_lines:
+    - Proposes on-premises hosting, which the PWS forbids.
+    - Claims a capability with no component, sequence, or evidence behind it.
+  what_would_satisfy: >-
+    A concrete component breakdown, a FedRAMP-authorized hosting environment, and a
+    named plan for the three required integrations.
+
+- concern_id: key_personnel
+  core_ask: >-
+    Your proposed program manager: what is their relevant experience, and are they
+    committed to this effort?
+  sub_questions:
+    - id: pm_experience
+      text: Does the PM meet the 10-year, comparable-size, PMP labor-category minimum?
+      requires: fact
+    - id: pm_commitment
+      text: Is the PM committed full-time, and for how long?
+      requires: commitment
+  red_lines:
+    - Proposes a PM who does not meet the stated labor-category qualifications.
+    - Claims experience the written proposal does not support.
+  what_would_satisfy: >-
+    A named PM whose experience meets or exceeds the PWS minimums, with a clear
+    full-time commitment.
+
+- concern_id: transition
+  core_ask: >-
+    How do you take over from the incumbent without disrupting operations, and on what
+    schedule?
+  sub_questions:
+    - id: schedule
+      text: Does transition-in complete within the required 90 calendar days?
+      requires: commitment
+    - id: continuity
+      text: How is adjudication work protected during the handover?
+      requires: commitment
+  red_lines:
+    - Commits to a transition longer than the 90-day PWS limit.
+    - Skips the required 60-day parallel run before retiring the legacy system.
+  what_would_satisfy: >-
+    A transition-in inside 90 days, knowledge transfer from the incumbent, and a
+    parallel run that protects live cases.
+
+- concern_id: past_performance
+  core_ask: >-
+    Where have you done work of this size and complexity, and what was the outcome?
+  sub_questions:
+    - id: comparable_scale
+      text: Is there a cited project of comparable case volume?
+      requires: fact
+    - id: outcome
+      text: What was the measurable result, and is it verifiable?
+      requires: fact
+  red_lines:
+    - Cites a past project that contradicts the written proposal.
+    - Inflates an outcome the proposal does not claim.
+  what_would_satisfy: >-
+    A comparable-scale project with a concrete, verifiable outcome consistent with the
+    written proposal.
+
+- concern_id: cost_realism
+  core_ask: >-
+    Your staffing looks lean for this scope. How is this priced realistically?
+  sub_questions:
+    - id: staffing_basis
+      text: What staffing level underlies the price, and does it fit the scope?
+      requires: fact_or_commitment
+    - id: price_stability
+      text: Is the price firm-fixed with no hidden assumption of adjustment?
+      requires: commitment
+  red_lines:
+    - Commits to prices or terms not in the written proposal.
+    - Signals scope creep to justify the price.
+  what_would_satisfy: >-
+    A staffing basis tied to the scope and a firm-fixed price consistent with PWS
+    Section 4.
+
+- concern_id: compliance_security
+  core_ask: How do you meet the security and ATO requirements in the PWS?
+  sub_questions:
+    - id: baseline
+      text: Does the system meet the NIST SP 800-53 moderate baseline?
+      requires: fact
+    - id: ato
+      text: Is production data held until the ATO is granted?
+      requires: commitment
+  red_lines:
+    - Claims to process production data before ATO.
+    - Overstates the authorization level of the hosting environment.
+  what_would_satisfy: >-
+    A moderate-baseline system, a FedRAMP-authorized environment, and no production
+    data before ATO.
+
+- concern_id: operational_impact
+  core_ask: What does cutover day look like for my end users, and what is your support model?
+  sub_questions:
+    - id: cutover_day
+      text: What is the end-user experience on cutover day?
+      requires: commitment
+    - id: support_model
+      text: What is the staffed support and incident-response model?
+      requires: commitment
+  red_lines:
+    - Over-promises a zero-risk or seamless cutover.
+    - Ignores the training and help-desk obligations in the PWS.
+  what_would_satisfy: >-
+    A realistic cutover story with training, a staffed help desk, and a fallback if
+    something breaks.
+
+- concern_id: risk
+  core_ask: What is the biggest risk in your approach, and how do you mitigate it?
+  sub_questions:
+    - id: named_risk
+      text: Is a genuine, specific risk named rather than deflected?
+      requires: commitment
+    - id: mitigation
+      text: Is there a concrete mitigation tied to that risk?
+      requires: commitment
+  red_lines:
+    - Denies that any real risk exists.
+    - Names a risk but offers no mitigation.
+  what_would_satisfy: >-
+    An honest, specific risk with a concrete, committed mitigation.
