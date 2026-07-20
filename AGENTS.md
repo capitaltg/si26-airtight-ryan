@@ -116,6 +116,9 @@ airtight/
 │  └─ update_structure.py
 ├─ server/                       # FastAPI + Pydantic v2 + SQLAlchemy + Alembic
 │  ├─ app/
+│  │  ├─ pipeline/
+│  │  │  ├─ __init__.py
+│  │  │  └─ conciseness.py
 │  │  ├─ schemas/
 │  │  │  ├─ __init__.py
 │  │  │  ├─ content.py
@@ -128,6 +131,7 @@ airtight/
 │  ├─ tests/
 │  │  ├─ __init__.py
 │  │  ├─ test_api.py
+│  │  ├─ test_conciseness.py
 │  │  └─ test_extraction_schema.py
 │  ├─ .dockerignore
 │  ├─ Dockerfile
