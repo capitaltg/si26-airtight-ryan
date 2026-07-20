@@ -116,12 +116,19 @@ airtight/
 │  └─ update_structure.py
 ├─ server/                       # FastAPI + Pydantic v2 + SQLAlchemy + Alembic
 │  ├─ app/
+│  │  ├─ schemas/
+│  │  │  ├─ __init__.py
+│  │  │  ├─ content.py
+│  │  │  ├─ extraction.py
+│  │  │  ├─ reaction.py
+│  │  │  └─ scoring.py
 │  │  ├─ __init__.py
 │  │  ├─ config.py               # pydantic-settings
 │  │  └─ main.py                 # FastAPI app + /health
 │  ├─ tests/
 │  │  ├─ __init__.py
-│  │  └─ test_api.py
+│  │  ├─ test_api.py
+│  │  └─ test_extraction_schema.py
 │  ├─ .dockerignore
 │  ├─ Dockerfile
 │  └─ pyproject.toml             # deps + ruff + mypy + pytest config
