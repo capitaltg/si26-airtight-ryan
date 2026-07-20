@@ -54,7 +54,7 @@ def _is_decimal_point(text: str, idx: int) -> bool:
 
 def _is_abbreviation(before: str) -> bool:
     match = _TRAILING_WORD.search(before)
-    return bool(match) and match.group(1).lower() in _ABBREVIATIONS
+    return match is not None and match.group(1).lower() in _ABBREVIATIONS
 
 
 def _split_sentences(text: str) -> list[str]:
