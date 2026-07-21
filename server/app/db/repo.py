@@ -133,6 +133,12 @@ def upsert_meter(
     return meter
 
 
+def get_meter(
+    db: Session, session_id: uuid.UUID, persona_id: str
+) -> PersonaMeter | None:
+    return db.get(PersonaMeter, (session_id, persona_id))
+
+
 def get_meters(db: Session, session_id: uuid.UUID) -> list[PersonaMeter]:
     stmt = (
         select(PersonaMeter)

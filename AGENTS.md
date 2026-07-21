@@ -122,6 +122,11 @@ airtight/
 │  │  ├─ env.py
 │  │  └─ script.py.mako
 │  ├─ app/
+│  │  ├─ api/
+│  │  │  ├─ __init__.py
+│  │  │  ├─ content.py
+│  │  │  ├─ deps.py
+│  │  │  └─ sessions.py
 │  │  ├─ bedrock/
 │  │  │  ├─ __init__.py
 │  │  │  └─ client.py
@@ -140,11 +145,13 @@ airtight/
 │  │  ├─ db/
 │  │  │  ├─ __init__.py
 │  │  │  ├─ models.py
-│  │  │  └─ repo.py
+│  │  │  ├─ repo.py
+│  │  │  └─ session.py
 │  │  ├─ pipeline/
 │  │  │  ├─ __init__.py
 │  │  │  ├─ conciseness.py
 │  │  │  ├─ extraction.py
+│  │  │  ├─ orchestrator.py
 │  │  │  ├─ reaction.py
 │  │  │  └─ scoring.py
 │  │  ├─ schemas/
@@ -168,6 +175,7 @@ airtight/
 │  │  ├─ test_content_loader.py
 │  │  ├─ test_extraction.py
 │  │  ├─ test_extraction_schema.py
+│  │  ├─ test_orchestrator.py
 │  │  ├─ test_reaction.py
 │  │  ├─ test_repo.py
 │  │  └─ test_scoring.py
