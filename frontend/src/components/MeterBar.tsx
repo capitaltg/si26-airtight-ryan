@@ -36,7 +36,7 @@ export function MeterPanel({ meters }: { meters: Meter[] }) {
   return (
     <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-        Evaluator support
+        Where the evaluators stand
       </h2>
       {meters.map((m) => (
         <MeterBar key={m.persona_id} meter={m} />
