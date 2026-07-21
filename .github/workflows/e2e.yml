@@ -17,7 +17,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       # Health path needs no AWS creds; defaults in docker-compose.yml cover the
       # rest. A real .env lets compose interpolate without warnings.

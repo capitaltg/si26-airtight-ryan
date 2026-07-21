@@ -17,6 +17,10 @@ services:
 
   api:
     build: ./server
+    # Apply migrations before serving so a fresh Postgres has the schema. Without
+    # this the app starts but every DB-backed route (e.g. POST /sessions) 500s on
+    # "relation does not exist".
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
       BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-anthropic.claude-sonnet-4-5-20250929}
       AWS_REGION: ${AWS_REGION:-us-east-1}

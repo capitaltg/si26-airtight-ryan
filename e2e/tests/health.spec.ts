@@ -11,9 +11,12 @@ test("API /health returns ok", async ({ request }) => {
   expect(await res.json()).toEqual({ status: "ok" })
 })
 
-test("web app loads and shows API health as ok", async ({ page }) => {
+test("web app loads and starts a rehearsal through the API proxy", async ({ page }) => {
   await page.goto("/")
   await expect(page.getByRole("heading", { name: "Airtight" })).toBeVisible()
-  // App.tsx fetches /api/health through the proxy and renders the status text.
-  await expect(page.getByText("ok", { exact: true })).toBeVisible()
+  // Starting a session exercises the full path: browser -> Vite proxy -> FastAPI
+  // (POST /api/sessions). The active-rehearsal view only renders on success, so
+  // its "How you're scored" control being visible proves the proxy round-trip.
+  await page.getByRole("button", { name: "Start rehearsal" }).click()
+  await expect(page.getByRole("button", { name: "How you're scored" })).toBeVisible()
 })
