@@ -14,7 +14,7 @@ export function MeterBar({ meter }: { meter: Meter }) {
         <span className="flex items-center gap-2 tabular-nums text-slate-500">
           {meter.capped && (
             <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-700">
-              red line · pinned
+              red line crossed
             </span>
           )}
           {meter.support}
@@ -36,7 +36,7 @@ export function MeterPanel({ meters }: { meters: Meter[] }) {
   return (
     <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-        Where the evaluators stand
+        Evaluator support
       </h2>
       {meters.map((m) => (
         <MeterBar key={m.persona_id} meter={m} />
