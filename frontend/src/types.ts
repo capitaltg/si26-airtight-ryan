@@ -63,6 +63,60 @@ export interface RubricDisclosure {
   concerns: ConcernDisclosure[]
 }
 
+// --- after-action report (GET /sessions/{id}/report) ---
+// Mirrors server/app/schemas/report.py. The scored part is code-rendered and
+// deterministic; the narrative is the one labeled "Not scored" model recap.
+
+export interface PersonaLine {
+  persona_id: string
+  support: number
+  capped: boolean
+}
+
+export interface CoverageCounts {
+  full: number
+  partial: number
+  none: number
+}
+
+export interface RateStats {
+  total_turns: number
+  dodge_count: number
+  dodges_per_turn: number
+  contradiction_count: number
+  concerns_total: number
+  concerns_satisfied: number
+  coverage_rate: number
+}
+
+export interface ScoredFinding {
+  turn_index: number
+  persona_id: string
+  concern_id: string
+  rubric_row: string
+  support_value: number
+  span: string // verbatim quote
+  detail: string
+}
+
+export interface NarrativeSection {
+  scored: boolean
+  header: string
+  text: string
+}
+
+export interface Report {
+  session_id: string
+  status: string
+  rate_stats: RateStats
+  personas: PersonaLine[]
+  coverage_counts: CoverageCounts
+  dodge_counts_by_type: Record<string, number>
+  contradiction_count: number
+  findings: ScoredFinding[]
+  narrative: NarrativeSection
+}
+
 // A single completed exchange as accumulated client-side for the transcript.
 // Built from the prompt shown plus the AnswerResponse it produced.
 export interface TranscriptTurn {

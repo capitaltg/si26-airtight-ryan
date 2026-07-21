@@ -101,6 +101,7 @@ airtight/
 │  │  ├─ api/
 │  │  │  └─ client.ts
 │  │  ├─ components/
+│  │  │  ├─ AfterActionReport.tsx
 │  │  │  ├─ ChatTurn.tsx
 │  │  │  ├─ MeterBar.tsx
 │  │  │  ├─ Rehearsal.tsx
@@ -163,11 +164,15 @@ airtight/
 │  │  │  ├─ orchestrator.py
 │  │  │  ├─ reaction.py
 │  │  │  └─ scoring.py
+│  │  ├─ report/
+│  │  │  ├─ __init__.py
+│  │  │  └─ builder.py
 │  │  ├─ schemas/
 │  │  │  ├─ __init__.py
 │  │  │  ├─ content.py
 │  │  │  ├─ extraction.py
 │  │  │  ├─ reaction.py
+│  │  │  ├─ report.py
 │  │  │  └─ scoring.py
 │  │  ├─ __init__.py
 │  │  ├─ config.py               # pydantic-settings
@@ -187,6 +192,7 @@ airtight/
 │  │  ├─ test_orchestrator.py
 │  │  ├─ test_reaction.py
 │  │  ├─ test_repo.py
+│  │  ├─ test_report.py
 │  │  └─ test_scoring.py
 │  ├─ .dockerignore
 │  ├─ alembic.ini

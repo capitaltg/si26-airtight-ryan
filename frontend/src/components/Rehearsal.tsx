@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react"
 import { useCreateSession, useSubmitAnswer } from "../api/client"
 import { prettify } from "../lib"
 import type { Meter, Prompt, TranscriptTurn } from "../types"
+import { AfterActionReport } from "./AfterActionReport"
 import { ChatTurn } from "./ChatTurn"
 import { MeterPanel } from "./MeterBar"
 import { RubricPanel } from "./RubricPanel"
@@ -20,6 +21,7 @@ export function Rehearsal() {
   const [done, setDone] = useState(false)
   const [draft, setDraft] = useState("")
   const [rubricOpen, setRubricOpen] = useState(false)
+  const [showReport, setShowReport] = useState(false)
 
   const create = useCreateSession()
   const submit = useSubmitAnswer(sessionId)
@@ -37,6 +39,7 @@ export function Rehearsal() {
         setPrompt(s.prompt)
         setDone(s.done)
         setTranscript([])
+        setShowReport(false)
       },
     })
   }
@@ -96,6 +99,22 @@ export function Rehearsal() {
     )
   }
 
+  // Session finished and the presenter asked to see the report: hand the whole
+  // screen to the after-action report.
+  if (done && showReport && sessionId) {
+    return (
+      <div className="mx-auto flex min-h-screen max-w-5xl flex-col gap-4 px-4 py-6">
+        <button
+          onClick={() => setShowReport(false)}
+          className="self-start text-sm font-medium text-slate-500 hover:text-slate-800 print:hidden"
+        >
+          ← Back to transcript
+        </button>
+        <AfterActionReport sessionId={sessionId} />
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto flex min-h-screen max-w-5xl flex-col gap-4 px-4 py-6">
       <header className="flex items-center justify-between">
@@ -124,8 +143,14 @@ export function Rehearsal() {
           </div>
 
           {done ? (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-center text-sm text-emerald-800">
-              Rehearsal complete — every concern has been covered. The after-action report is next.
+            <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-center text-sm text-emerald-800">
+              <p>Rehearsal complete — every concern has been covered.</p>
+              <button
+                onClick={() => setShowReport(true)}
+                className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700"
+              >
+                View after-action report
+              </button>
             </div>
           ) : (
             prompt && (

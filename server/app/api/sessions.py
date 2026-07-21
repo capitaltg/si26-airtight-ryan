@@ -20,9 +20,8 @@ from app.db import repo
 from app.db.models import RehearsalSession
 from app.pipeline import orchestrator
 from app.pipeline.orchestrator import SessionComplete
-from app.schemas.extraction import Extraction
-from app.schemas.reaction import PersonaReaction
-from app.schemas.scoring import ScoreOutput
+from app.report.builder import build_report
+from app.schemas.report import Report
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -67,27 +66,6 @@ class AnswerResponse(BaseModel):
     meters: list[MeterDTO]
     next_prompt: PromptDTO | None
     done: bool
-
-
-class TurnDTO(BaseModel):
-    turn_index: int
-    persona_id: str
-    concern_id: str
-    answer: str
-    extraction: Extraction
-    score: ScoreOutput
-    reaction: PersonaReaction | None
-
-
-class ReportDTO(BaseModel):
-    """Minimal, deterministic read of persisted state. Task 12 replaces this with
-    the code-rendered after-action report."""
-
-    id: uuid.UUID
-    status: str
-    meters: list[MeterDTO]
-    concern_status: dict[str, str]
-    turns: list[TurnDTO]
 
 
 def _meters(db: Session, session_id: uuid.UUID) -> list[MeterDTO]:
@@ -187,32 +165,23 @@ def end_session(
     return _state(db, content, session)
 
 
-@router.get("/{session_id}/report", response_model=ReportDTO)
+@router.get("/{session_id}/report", response_model=Report)
 def get_report(
     session_id: uuid.UUID,
     db: Session = Depends(get_db),
-) -> ReportDTO:
+    content: Content = Depends(get_content),
+    client: BedrockClient = Depends(get_bedrock_client),
+) -> Report:
+    """The after-action report: a 100% code-rendered scored part (rate stats,
+    per-persona meters, coverage/dodge/contradiction counts, and every finding's
+    verbatim span) plus one labeled 'Not scored' model narrative."""
     session = _require_session(db, session_id)
-    turns = [
-        TurnDTO(
-            turn_index=t.turn_index,
-            persona_id=t.persona_id,
-            concern_id=t.concern_id,
-            answer=t.user_answer,
-            extraction=Extraction.model_validate(t.extraction_json),
-            score=ScoreOutput.model_validate(t.score_json),
-            reaction=(
-                PersonaReaction.model_validate(t.reaction_json)
-                if t.reaction_json is not None
-                else None
-            ),
-        )
-        for t in repo.get_turns(db, session_id)
-    ]
-    return ReportDTO(
-        id=session.id,
+    return build_report(
+        session_id=session.id,
         status=session.status,
-        meters=_meters(db, session.id),
-        concern_status=repo.get_concern_statuses(db, session_id),
-        turns=turns,
+        turns=repo.get_turns(db, session_id),
+        meters=repo.get_meters(db, session_id),
+        concern_statuses=repo.get_concern_statuses(db, session_id),
+        content=content,
+        client=client,
     )

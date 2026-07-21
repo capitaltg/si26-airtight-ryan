@@ -4,7 +4,7 @@
 
 import { useMutation, useQuery } from "@tanstack/react-query"
 
-import type { AnswerResponse, RubricDisclosure, SessionState } from "../types"
+import type { AnswerResponse, Report, RubricDisclosure, SessionState } from "../types"
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -33,6 +33,7 @@ export const api = {
       body: JSON.stringify({ answer }),
     }),
   getRubric: () => request<RubricDisclosure>("/content/rubric"),
+  getReport: (id: string) => request<Report>(`/sessions/${id}/report`),
 }
 
 // Create-a-session mutation: the rehearsal starts empty and the presenter clicks
@@ -56,6 +57,21 @@ export function useRubric() {
   return useQuery({
     queryKey: ["rubric"],
     queryFn: api.getRubric,
+    staleTime: Infinity,
+  })
+}
+
+// The after-action report. Enabled only once the session is done, so the query
+// fires when the presenter finishes. The scored part is deterministic; the one
+// model narrative is regenerated per fetch, so don't over-cache it.
+export function useReport(sessionId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["report", sessionId],
+    queryFn: () => {
+      if (!sessionId) throw new Error("no active session")
+      return api.getReport(sessionId)
+    },
+    enabled: enabled && sessionId !== null,
     staleTime: Infinity,
   })
 }

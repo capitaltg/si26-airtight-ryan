@@ -69,6 +69,9 @@ class _FakeClient:
             )
         return PersonaReaction(in_character_reply="Concrete. Good.", rationale="+2 backed.")
 
+    def react(self, prompt: str, *, max_tokens: int = 1024) -> str:
+        return "Strong on the technical approach; keep drilling staffing specifics."
+
 
 @pytest.fixture
 def client() -> Iterator[TestClient]:
@@ -118,6 +121,27 @@ def test_answer_round_trip_moves_meter_and_advances(client: TestClient) -> None:
     assert body["concern_status"] == "satisfied"
     assert body["next_prompt"]["concern_id"] == "key_personnel"
     assert body["done"] is False
+
+
+def test_report_is_code_rendered_with_labeled_narrative(client: TestClient) -> None:
+    session_id = client.post("/sessions").json()["id"]
+    client.post(f"/sessions/{session_id}/answer", json={"answer": "Here is the architecture."})
+
+    r = client.get(f"/sessions/{session_id}/report")
+    assert r.status_code == 200
+    body = r.json()
+
+    # rate stats lead; the one backed answer satisfied its concern
+    assert body["rate_stats"]["total_turns"] == 1
+    assert body["rate_stats"]["concerns_satisfied"] == 1
+    # the backed commitment is a scored finding carrying its verbatim span
+    assert len(body["findings"]) == 1
+    assert body["findings"][0]["rubric_row"] == "evidence_backed"
+    assert body["findings"][0]["span"]
+    # the narrative sits under a "Not scored" header
+    assert body["narrative"]["scored"] is False
+    assert body["narrative"]["header"] == "Not scored"
+    assert body["narrative"]["text"]
 
 
 def test_unknown_session_is_404(client: TestClient) -> None:
