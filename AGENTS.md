@@ -98,9 +98,18 @@ airtight/
 │  └─ README.md
 ├─ frontend/                     # React 18 + Vite + TS + Tailwind + TanStack Query
 │  ├─ src/
+│  │  ├─ api/
+│  │  │  └─ client.ts
+│  │  ├─ components/
+│  │  │  ├─ ChatTurn.tsx
+│  │  │  ├─ MeterBar.tsx
+│  │  │  ├─ Rehearsal.tsx
+│  │  │  └─ RubricPanel.tsx
 │  │  ├─ App.tsx
 │  │  ├─ index.css
+│  │  ├─ lib.ts
 │  │  ├─ main.tsx
+│  │  ├─ types.ts
 │  │  └─ vite-env.d.ts
 │  ├─ .dockerignore
 │  ├─ Dockerfile
