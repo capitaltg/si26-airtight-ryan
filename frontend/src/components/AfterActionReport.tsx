@@ -162,7 +162,7 @@ function ReportBody({ report }: { report: Report }) {
           <span className="rounded bg-slate-200 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-600">
             {report.narrative.header}
           </span>
-          <span className="text-xs text-slate-400">model recap, never feeds a score</span>
+          <span className="text-xs text-slate-400">model recap: never feeds a score</span>
         </div>
         <p className="text-sm leading-relaxed text-slate-700">{report.narrative.text}</p>
       </section>

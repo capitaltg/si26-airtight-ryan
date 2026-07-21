@@ -97,6 +97,10 @@ def build_extraction_prompt(
             "Classify the presenter's answer against the schema using the "
             f"{TOOL_NAME} tool. Quote spans verbatim from the answer; a claim with "
             "no verbatim span does not count. You never assign a score.",
+            "When you write a free-text reason in the schema (for example the "
+            "'why' behind a red-line hit), write it the way a person would: plain "
+            "and direct, short sentences, no em dashes, no three-part lists, no "
+            "promotional adjectives.",
             "## Evaluator persona (context for what this evaluator cares about)",
             _render_persona(persona),
             "## Solicitation (RFP / PWS)",

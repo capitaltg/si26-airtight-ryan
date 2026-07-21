@@ -14,7 +14,7 @@ export function MeterBar({ meter }: { meter: Meter }) {
         <span className="flex items-center gap-2 tabular-nums text-slate-500">
           {meter.capped && (
             <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-700">
-              red line crossed
+              Red line crossed
             </span>
           )}
           {meter.support}
