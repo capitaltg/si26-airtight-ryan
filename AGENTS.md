@@ -116,10 +116,36 @@ airtight/
 │  ├─ smoke_bedrock.py
 │  └─ update_structure.py
 ├─ server/                       # FastAPI + Pydantic v2 + SQLAlchemy + Alembic
+│  ├─ alembic/
+│  │  ├─ versions/
+│  │  │  └─ 0001_init.py
+│  │  ├─ env.py
+│  │  └─ script.py.mako
 │  ├─ app/
 │  │  ├─ bedrock/
 │  │  │  ├─ __init__.py
 │  │  │  └─ client.py
+│  │  ├─ content/
+│  │  │  ├─ store/
+│  │  │  │  ├─ personas/
+│  │  │  │  │  ├─ contracting_officer.md
+│  │  │  │  │  ├─ program_rep.md
+│  │  │  │  │  └─ technical_evaluator.md
+│  │  │  │  ├─ concerns.yaml
+│  │  │  │  ├─ rfp_pws.md
+│  │  │  │  ├─ rubric.yaml
+│  │  │  │  └─ written_proposal.md
+│  │  │  ├─ __init__.py
+│  │  │  └─ loader.py
+│  │  ├─ db/
+│  │  │  ├─ __init__.py
+│  │  │  ├─ models.py
+│  │  │  └─ repo.py
+│  │  ├─ pipeline/
+│  │  │  ├─ __init__.py
+│  │  │  ├─ conciseness.py
+│  │  │  ├─ extraction.py
+│  │  │  └─ scoring.py
 │  │  ├─ schemas/
 │  │  │  ├─ __init__.py
 │  │  │  ├─ content.py
@@ -133,8 +159,14 @@ airtight/
 │  │  ├─ __init__.py
 │  │  ├─ test_api.py
 │  │  ├─ test_bedrock_client.py
-│  │  └─ test_extraction_schema.py
+│  │  ├─ test_conciseness.py
+│  │  ├─ test_content_loader.py
+│  │  ├─ test_extraction.py
+│  │  ├─ test_extraction_schema.py
+│  │  ├─ test_repo.py
+│  │  └─ test_scoring.py
 │  ├─ .dockerignore
+│  ├─ alembic.ini
 │  ├─ Dockerfile
 │  └─ pyproject.toml             # deps + ruff + mypy + pytest config
 ├─ .env.example                  # BEDROCK_MODEL_ID, AWS_REGION, DATABASE_URL, ...
