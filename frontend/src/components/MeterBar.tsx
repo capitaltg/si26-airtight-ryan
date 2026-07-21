@@ -13,7 +13,7 @@ export function MeterBar({ meter }: { meter: Meter }) {
         <span className="font-medium text-slate-700">{prettify(meter.persona_id)}</span>
         <span className="flex items-center gap-2 tabular-nums text-slate-500">
           {meter.capped && (
-            <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-700">
+            <span className="whitespace-nowrap rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-700">
               Red line crossed
             </span>
           )}
