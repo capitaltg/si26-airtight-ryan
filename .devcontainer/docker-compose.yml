@@ -10,13 +10,14 @@ services:
       - ..:/workspaces/airtight:cached
     # Keep the container alive; you run uvicorn / npm yourself inside it.
     command: sleep infinity
+    # Bedrock creds + model id come from the repo-root .env (gitignored), so a
+    # rebuilt dev container picks them up automatically. The DATABASE_URL below
+    # overrides .env's localhost value (environment wins over env_file) so the
+    # app reaches the compose postgres service by name.
+    env_file:
+      - ../.env
     environment:
       DATABASE_URL: postgresql+psycopg://airtight:airtight@postgres:5432/airtight
-      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-anthropic.claude-sonnet-4-5-20250929}
-      AWS_REGION: ${AWS_REGION:-us-east-1}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy

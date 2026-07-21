@@ -21,14 +21,14 @@ services:
     # this the app starts but every DB-backed route (e.g. POST /sessions) 500s on
     # "relation does not exist".
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    # Bedrock creds + pinned model id come from the repo-root .env (gitignored).
+    # The DATABASE_URL override wins over .env's localhost value (environment
+    # beats env_file) so the api reaches the compose postgres service by name.
+    # For a real deploy, drop the AWS_* lines from .env and use an IAM role.
+    env_file:
+      - .env
     environment:
-      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-anthropic.claude-sonnet-4-5-20250929}
-      AWS_REGION: ${AWS_REGION:-us-east-1}
       DATABASE_URL: postgresql+psycopg://airtight:airtight@postgres:5432/airtight
-      # AWS credentials come from the environment / IAM role. No keys in code.
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
     ports:
       - "8000:8000"
     depends_on:
