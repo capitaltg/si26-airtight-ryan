@@ -128,6 +128,10 @@ airtight/
 │  │  │  │  └─ written_proposal.md
 │  │  │  ├─ __init__.py
 │  │  │  └─ loader.py
+│  │  ├─ pipeline/
+│  │  │  ├─ __init__.py
+│  │  │  ├─ conciseness.py
+│  │  │  └─ scoring.py
 │  │  ├─ schemas/
 │  │  │  ├─ __init__.py
 │  │  │  ├─ content.py
@@ -141,7 +145,8 @@ airtight/
 │  │  ├─ __init__.py
 │  │  ├─ test_api.py
 │  │  ├─ test_content_loader.py
-│  │  └─ test_extraction_schema.py
+│  │  ├─ test_extraction_schema.py
+│  │  └─ test_scoring.py
 │  ├─ .dockerignore
 │  ├─ Dockerfile
 │  └─ pyproject.toml             # deps + ruff + mypy + pytest config
