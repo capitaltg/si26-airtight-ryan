@@ -43,7 +43,7 @@ export function ChatTurn({ turn }: { turn: TranscriptTurn }) {
                 key={r}
                 className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600"
               >
-                {r}
+                {prettify(r)}
               </span>
             ))}
           </div>
