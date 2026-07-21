@@ -8,7 +8,7 @@ send ``temperature=0``.
 
 from typing import Any, Protocol, TypeVar, cast
 
-from anthropic import AnthropicBedrockMantle
+from anthropic import AnthropicBedrock
 from pydantic import BaseModel, ValidationError
 
 from app.config import settings
@@ -42,7 +42,7 @@ class BedrockClient:
         # cast is needed because the real client's `messages.create` is a set of
         # overloads rather than the **kwargs shape this wrapper calls it with.
         self._transport: Transport = transport or cast(
-            Transport, AnthropicBedrockMantle(aws_region=settings.aws_region)
+            Transport, AnthropicBedrock(aws_region=settings.aws_region)
         )
 
     def extract(
