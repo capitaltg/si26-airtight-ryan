@@ -163,7 +163,7 @@ export function Rehearsal() {
                   <span className="text-slate-500">{prettify(prompt.concern_id)}</span>
                   {prompt.is_follow_up && (
                     <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700">
-                      follow-up
+                      Follow-up
                     </span>
                   )}
                 </div>

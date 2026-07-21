@@ -44,6 +44,10 @@ const ROW_TONE: Record<string, string> = {
 function FindingCard({ f }: { f: ScoredFinding }) {
   const tone = ROW_TONE[f.rubric_row] ?? "bg-slate-100 text-slate-600"
   const sign = f.support_value > 0 ? `+${f.support_value}` : `${f.support_value}`
+  // dodge and approach_cited carry a category enum (e.g. "non_commitment") as
+  // their detail; the rest carry prose, which must stay verbatim.
+  const detail =
+    f.rubric_row === "dodge" || f.rubric_row === "approach_cited" ? prettify(f.detail) : f.detail
   return (
     <details className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm print:shadow-none print:open">
       <summary className="flex cursor-pointer items-center gap-2 text-sm">
@@ -59,7 +63,7 @@ function FindingCard({ f }: { f: ScoredFinding }) {
         <blockquote className="border-l-2 border-slate-300 pl-2 italic text-slate-700">
           “{f.span}”
         </blockquote>
-        {f.detail && <p className="text-slate-500">{f.detail}</p>}
+        {detail && <p className="text-slate-500">{detail}</p>}
       </div>
     </details>
   )
