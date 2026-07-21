@@ -80,6 +80,9 @@ def build_reaction_prompt(
             "Respond in this evaluator's voice, reacting to the answer in a way that "
             "matches the locked score, then give a one-line rationale tying your "
             "reaction to the matched rubric rows.",
+            "Write the way a real evaluator speaks: plain and direct. Use short "
+            "sentences. Do not use em dashes. Do not pad the reply with three-part "
+            "lists or promotional adjectives.",
         ]
     )
 

@@ -124,7 +124,7 @@ function ReportBody({ report }: { report: Report }) {
                 Dodges by type
               </h3>
               {dodgeTypes.length === 0 ? (
-                <p className="py-1.5 text-sm text-slate-400">No dodges — clean run.</p>
+                <p className="py-1.5 text-sm text-slate-400">No dodges. Clean run.</p>
               ) : (
                 dodgeTypes.map(([type, n]) => (
                   <CountRow key={type} label={prettify(type)} value={n} />
@@ -136,7 +136,7 @@ function ReportBody({ report }: { report: Report }) {
           {/* scored findings, each with its verbatim quote */}
           <section className="space-y-2">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Scored findings — every line carries its quote
+              Scored findings: every line carries its quote
             </h2>
             {report.findings.length === 0 ? (
               <p className="text-sm text-slate-400">No span-bearing findings were recorded.</p>
@@ -162,7 +162,7 @@ function ReportBody({ report }: { report: Report }) {
           <span className="rounded bg-slate-200 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-600">
             {report.narrative.header}
           </span>
-          <span className="text-xs text-slate-400">model recap — never feeds a score</span>
+          <span className="text-xs text-slate-400">model recap, never feeds a score</span>
         </div>
         <p className="text-sm leading-relaxed text-slate-700">{report.narrative.text}</p>
       </section>

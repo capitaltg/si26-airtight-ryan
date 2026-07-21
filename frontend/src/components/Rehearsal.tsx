@@ -118,7 +118,7 @@ export function Rehearsal() {
   return (
     <div className="mx-auto flex min-h-screen max-w-5xl flex-col gap-4 px-4 py-6">
       <header className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-slate-900">Airtight — rehearsal</h1>
+        <h1 className="text-xl font-semibold text-slate-900">Airtight rehearsal</h1>
         <button
           onClick={() => setRubricOpen(true)}
           className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
@@ -144,7 +144,7 @@ export function Rehearsal() {
 
           {done ? (
             <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-center text-sm text-emerald-800">
-              <p>Rehearsal complete — every concern has been covered.</p>
+              <p>Rehearsal complete. Every concern has been covered.</p>
               <button
                 onClick={() => setShowReport(true)}
                 className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700"
