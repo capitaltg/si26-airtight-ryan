@@ -1,0 +1,311 @@
+# Golden-set regression cases (task 8).
+#
+# Each case is a hand-graded exchange. The harness (test_golden.py) runs every
+# case 3x against REAL Bedrock extraction -> the pure scoring engine and asserts:
+#   1. stability  — all three runs agree with each other (temperature=0 + forced
+#                   schema should make extraction deterministic), and
+#   2. validity   — the score matches the hand grade below.
+#
+# The `expected` block is graded against the scoring engine AS BUILT
+# (app/pipeline/scoring.py), not against an ideal. Two engine behaviours drive
+# most of the combinations here, so keep them in mind when reading expectations:
+#   - A crossed red line fires FIRST and alone: delta -2, capped, rows [red_line].
+#   - `approach_cited` (+1) fires whenever ANY sub-question is marked full/partial
+#     and the turn is not already `evidence_backed`. So an on-topic negative
+#     answer (a wrong fact, a contradiction) that still addresses the question
+#     nets that -1 against a +1 -> delta 0. That is the engine, not a mistake.
+#
+# CALIBRATION (step 3, needs AWS creds): expected values are authored from domain
+# judgment. Run `pytest tests/golden -m golden -v`; for any case that swings
+# across the 3 runs (extraction instability) add a worked exemplar to the
+# relevant persona file and re-run; for any case whose stable score disagrees
+# with the hand grade, decide whether the grade or the content is wrong. Log any
+# case that will not settle.
+#
+# Coverage: every rubric row (red_line, dodge, unsubstantiated, false_fact,
+# contradiction, approach_cited, evidence_backed), 4 red-line crossings, and 2
+# Tier-0 contradictions (which require `prior_claims`).
+
+# --- Red-line crossings (fire first, cap the meter) ------------------------
+
+- id: red_line_onprem
+  concern_id: technical_approach
+  persona_id: technical_evaluator
+  answer: >-
+    For maximum control over the case data, we would host the modernized CMS
+    on-premises in our own accredited data center rather than in a cloud
+    environment.
+  expected:
+    support_delta: -2
+    capped: true
+    matched_rows: [red_line]
+  note: PWS 3.1 forbids on-premises hosting -> concern red line.
+
+- id: red_line_transition_six_months
+  concern_id: transition
+  persona_id: program_rep
+  answer: >-
+    Realistically, to protect the adjudicators, we would want about six months
+    for transition-in so nothing gets rushed.
+  expected:
+    support_delta: -2
+    capped: true
+    matched_rows: [red_line]
+  note: >-
+    Six months exceeds the 90-calendar-day transition limit (PWS 3.3) -> red
+    line.
+
+- id: red_line_production_before_ato
+  concern_id: compliance_security
+  persona_id: contracting_officer
+  answer: >-
+    To keep the schedule tight, we would begin loading and processing live
+    production case data in parallel while the ATO package is still under
+    review.
+  expected:
+    support_delta: -2
+    capped: true
+    matched_rows: [red_line]
+  note: Processing production data before ATO (PWS 3.4) -> red line.
+
+- id: red_line_overstate_authorization
+  concern_id: compliance_security
+  persona_id: contracting_officer
+  answer: >-
+    Security is fully covered: our GovCloud environment holds a FedRAMP High
+    authorization and the system meets the NIST 800-53 high baseline.
+  expected:
+    support_delta: -2
+    capped: true
+    matched_rows: [red_line]
+  note: >-
+    RFP and proposal are Moderate; claiming High overstates the authorization
+    level -> concern red line.
+
+# --- approach_cited (+1): concrete, compliant, but no backed commitment ----
+
+- id: approach_architecture_concrete
+  concern_id: technical_approach
+  persona_id: technical_evaluator
+  answer: >-
+    The CMS is a containerized microservices application running on AWS
+    GovCloud. PostgreSQL is the system of record, an event-driven pipeline
+    handles the LCS data migration, and we expose a versioned REST API that the
+    Payments Engine, Benefits Portal, and data warehouse read case status from.
+  expected:
+    support_delta: 1
+    capped: false
+    matched_rows: [approach_cited]
+  note: >-
+    Concrete, compliant architecture that covers the sub-questions, but no
+    staffing/schedule/past-performance evidence -> approach_cited, not
+    evidence_backed.
+
+- id: approach_past_performance
+  concern_id: past_performance
+  persona_id: technical_evaluator
+  answer: >-
+    On the Veterans Claims Office modernization from 2021 to 2024 we migrated a
+    1.8-million-case system to a cloud-native platform on schedule with zero
+    data loss, and we hold an Exceptional CPARS rating for it.
+  expected:
+    support_delta: 1
+    capped: false
+    matched_rows: [approach_cited]
+  note: >-
+    Facts consistent with the proposal that cover the concern. evidence_backed
+    requires a *commitment* with backing; past performance is empirical, so this
+    lands on approach_cited.
+
+- id: approach_transition_compliant
+  concern_id: transition
+  persona_id: program_rep
+  answer: >-
+    We complete transition-in within 90 calendar days, run the legacy and new
+    systems in parallel for 60 days with reconciled outputs before retiring LCS,
+    and take structured knowledge transfer from Meridian.
+  expected:
+    support_delta: 1
+    capped: false
+    matched_rows: [approach_cited]
+  note: >-
+    Compliant, specified commitments that cover the concern but carry no named
+    personnel / past-performance backing -> approach_cited. Contrast with
+    backed_transition_migration_lead.
+
+# --- evidence_backed (+2): a commitment backed by specifics ----------------
+
+- id: backed_pm_qualified
+  concern_id: key_personnel
+  persona_id: technical_evaluator
+  answer: >-
+    Our PM is Karen Holloway. She has twelve years managing federal software
+    programs, including the 1.8-million-case-per-year modernization at the
+    Veterans Claims Office, and she is PMP-certified. She is committed to this
+    effort full-time for the base period.
+  expected:
+    support_delta: 2
+    capped: false
+    matched_rows: [evidence_backed]
+  note: >-
+    Full-time commitment backed by named experience and past performance ->
+    evidence_backed. approach_cited is suppressed to avoid double-counting.
+
+- id: backed_transition_migration_lead
+  concern_id: transition
+  persona_id: technical_evaluator
+  answer: >-
+    We commit to the 90-day transition-in and the 60-day parallel run, and it is
+    owned by our Migration Lead Anil Kapoor, who has seven years in large-scale
+    migration including a 50-million-record financial-services migration.
+  expected:
+    support_delta: 2
+    capped: false
+    matched_rows: [evidence_backed]
+  note: A schedule commitment backed by a named lead's track record.
+
+# --- dodge (-2): evades the question, no coverage ---------------------------
+
+- id: dodge_culture_topic_switch
+  concern_id: key_personnel
+  persona_id: technical_evaluator
+  answer: >-
+    What really sets us apart is our culture and our passion for public service.
+    Our people love the mission and we have won several industry awards for
+    being a great place to work.
+  expected:
+    support_delta: -2
+    capped: false
+    matched_rows: [dodge]
+  note: >-
+    Topic switch away from the PM question, no sub-question addressed -> clean
+    dodge with no approach_cited.
+
+- id: dodge_risk_deflection
+  concern_id: risk
+  persona_id: technical_evaluator
+  answer: >-
+    I would rather focus on the strengths of our approach than dwell on
+    hypotheticals. Our track record speaks for itself and we are confident in
+    the team.
+  expected:
+    support_delta: -2
+    capped: false
+    matched_rows: [dodge]
+  note: >-
+    Deflection, no named risk. FRAGILE: "confident in the team" borders on the
+    risk red line "denies that any real risk exists"; if it grades as a red line
+    during calibration, soften the answer or move the case.
+
+# --- false_fact (-1): a checkable claim that is refuted --------------------
+
+- id: false_fact_record_count
+  concern_id: technical_approach
+  persona_id: technical_evaluator
+  answer: >-
+    We will migrate the roughly twelve million legacy case records in three
+    oldest-first waves, with an automated reconciliation report after each wave.
+  expected:
+    support_delta: 0
+    capped: false
+    matched_rows: [false_fact, approach_cited]
+  note: >-
+    ~42M records per PWS 3.1, so "twelve million" is refuted (-1). The wave +
+    reconciliation approach still covers the concern (+1) -> net 0.
+
+- id: false_fact_pm_years
+  concern_id: key_personnel
+  persona_id: contracting_officer
+  answer: >-
+    Our program manager, Karen Holloway, brings eighteen years managing federal
+    software programs and is committed full-time.
+  expected:
+    support_delta: 0
+    capped: false
+    matched_rows: [false_fact, approach_cited]
+  note: >-
+    Proposal says 12 years, so "eighteen years" is refuted (-1); the answer still
+    addresses the PM sub-questions (+1) -> net 0. FRAGILE: if the model reads the
+    full-time claim as a *backed* commitment it would flip to evidence_backed;
+    the years claim is empirical, not backing, so it should not.
+
+# --- contradiction (-1): Tier-0 conflict with a prior claim ----------------
+
+- id: contradiction_top_risk
+  concern_id: risk
+  persona_id: technical_evaluator
+  prior_claims:
+    - turn_index: 0
+      text: Our biggest risk is data-migration integrity.
+      type: commitment
+      backing: specified
+      span: the biggest risk is data-migration integrity
+  answer: >-
+    Earlier I would have pointed to data migration, but honestly our top risk is
+    staffing ramp-up, which we mitigate with a bench of pre-cleared engineers
+    ready to backfill.
+  expected:
+    support_delta: 0
+    capped: false
+    matched_rows: [contradiction, approach_cited]
+  note: >-
+    Reverses the prior top-risk claim (-1) but names a risk with a concrete
+    mitigation, covering the concern (+1) -> net 0. Mitigation is present so it
+    does not trip the "no mitigation" risk red line.
+
+- id: contradiction_cutover_plan
+  concern_id: operational_impact
+  persona_id: program_rep
+  prior_claims:
+    - turn_index: 0
+      text: Cutover happens in a single weekend maintenance window.
+      type: commitment
+      backing: specified
+      span: cut over during a single weekend maintenance window
+  answer: >-
+    For cutover we will actually roll out gradually, region by region over about
+    three weeks, so there is no single big-bang weekend.
+  expected:
+    support_delta: 0
+    capped: false
+    matched_rows: [contradiction, approach_cited]
+  note: >-
+    Contradicts the prior single-weekend commitment (-1) while still describing a
+    cutover approach (+1) -> net 0. The proposal does not fix cutover timing, so
+    this is a Tier-0 contradiction, not a proposal fact_check.
+
+# --- unsubstantiated (0): on-topic but empty -------------------------------
+
+- id: unsubstantiated_support
+  concern_id: operational_impact
+  persona_id: program_rep
+  answer: >-
+    Your users will be well supported after go-live. We take support seriously
+    and our team is very capable, so people will be in good hands.
+  expected:
+    support_delta: 0
+    capped: false
+    matched_rows: [unsubstantiated]
+  note: >-
+    On-topic reassurance with no specifics and no sub-question concretely
+    addressed -> unsubstantiated fallback. FRAGILE: if the model marks this a
+    pure_affect dodge it becomes -2; if it credits partial coverage it becomes
+    +1. This is the hardest row to hold; calibrate with an exemplar.
+
+# --- combination: dodge + approach_cited, exercises clamp/mixing -----------
+
+- id: combo_dodge_plus_approach
+  concern_id: key_personnel
+  persona_id: technical_evaluator
+  answer: >-
+    Karen Holloway brings twelve years and led the 1.8-million-case Veterans
+    Claims Office modernization. As for her exact time split on this contract, we
+    will work that out during onboarding.
+  expected:
+    support_delta: -1
+    capped: false
+    matched_rows: [dodge, approach_cited]
+  note: >-
+    Covers pm_experience concretely (+1) but dodges the commitment sub-question
+    (-2) -> net -1. The experience is empirical, not a backed commitment, so this
+    is approach_cited, not evidence_backed.

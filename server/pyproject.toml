@@ -34,6 +34,9 @@ include = ["app*"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+    "golden: live-Bedrock golden-set regression (skips without AWS credentials)",
+]
 
 [tool.ruff]
 line-length = 100

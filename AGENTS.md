@@ -156,6 +156,10 @@ airtight/
 │  │  ├─ config.py               # pydantic-settings
 │  │  └─ main.py                 # FastAPI app + /health
 │  ├─ tests/
+│  │  ├─ golden/
+│  │  │  ├─ __init__.py
+│  │  │  ├─ cases.yaml
+│  │  │  └─ test_golden.py
 │  │  ├─ __init__.py
 │  │  ├─ test_api.py
 │  │  ├─ test_bedrock_client.py
