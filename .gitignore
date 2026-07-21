@@ -16,6 +16,7 @@ coverage.xml
 node_modules/
 dist/
 frontend/dist/
+frontend/.vite/
 *.tsbuildinfo
 
 # TS build artifacts emitted by `tsc -b` for the vite config project
