@@ -166,7 +166,10 @@ export function Rehearsal() {
               <p>Rehearsal complete — every concern has been covered.</p>
               <div className="flex items-center justify-center gap-3">
                 <button
-                  onClick={() => setShowReport(true)}
+                  onClick={() => {
+                    create.reset() // drop any stale retry error before leaving this panel
+                    setShowReport(true)
+                  }}
                   className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700"
                 >
                   View after-action report
