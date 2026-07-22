@@ -40,8 +40,19 @@ export function Rehearsal() {
         setDone(s.done)
         setTranscript([])
         setShowReport(false)
+        setDraft("")
       },
     })
+  }
+
+  // Shared "start over" control. Used on the done panel and the after-action
+  // report header so both share one definition of label / disabled / error.
+  function renderRetryButton(className: string) {
+    return (
+      <button onClick={startSession} disabled={create.isPending} className={className}>
+        {create.isPending ? "Starting…" : "Start a new rehearsal"}
+      </button>
+    )
   }
 
   function sendAnswer() {
@@ -104,12 +115,20 @@ export function Rehearsal() {
   if (done && showReport && sessionId) {
     return (
       <div className="mx-auto flex min-h-screen max-w-5xl flex-col gap-4 px-4 py-6">
-        <button
-          onClick={() => setShowReport(false)}
-          className="self-start text-sm font-medium text-slate-500 hover:text-slate-800 print:hidden"
-        >
-          ← Back to transcript
-        </button>
+        <div className="flex items-center justify-between print:hidden">
+          <button
+            onClick={() => setShowReport(false)}
+            className="text-sm font-medium text-slate-500 hover:text-slate-800"
+          >
+            ← Back to transcript
+          </button>
+          {renderRetryButton(
+            "rounded-lg border border-slate-300 bg-white px-4 py-1.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50",
+          )}
+        </div>
+        {create.isError && (
+          <p className="text-sm text-red-700 print:hidden">{(create.error as Error).message}</p>
+        )}
         <AfterActionReport sessionId={sessionId} />
       </div>
     )
@@ -145,12 +164,23 @@ export function Rehearsal() {
           {done ? (
             <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-center text-sm text-emerald-800">
               <p>Rehearsal complete. Every concern has been covered.</p>
-              <button
-                onClick={() => setShowReport(true)}
-                className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700"
-              >
-                View after-action report
-              </button>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  onClick={() => {
+                    create.reset() // drop any stale retry error before leaving this panel
+                    setShowReport(true)
+                  }}
+                  className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700"
+                >
+                  View after-action report
+                </button>
+                {renderRetryButton(
+                  "rounded-lg border border-emerald-300 bg-white px-5 py-2 text-sm font-semibold text-emerald-800 shadow-sm transition hover:bg-emerald-100 disabled:opacity-50",
+                )}
+              </div>
+              {create.isError && (
+                <p className="text-sm text-red-700">{(create.error as Error).message}</p>
+              )}
             </div>
           ) : (
             prompt && (
