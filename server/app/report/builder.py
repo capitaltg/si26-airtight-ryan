@@ -178,7 +178,7 @@ def _narrative_prompt(scored: ScoredReport, content: Content) -> str:
             "You are a presentation coach writing a short recap of a federal-orals "
             "rehearsal. This recap is NOT scored: the numbers below were already "
             "computed by code and are final. Do not invent, restate, or assign any "
-            "score — describe patterns and give one or two concrete next steps.",
+            "score. Describe patterns and give one or two concrete next steps.",
             "## Rehearsal summary (already scored, do not change)",
             "\n".join(
                 [
@@ -191,8 +191,10 @@ def _narrative_prompt(scored: ScoredReport, content: Content) -> str:
                 ]
             ),
             "## Your task",
-            "In 3-4 sentences, tell the presenter what went well, where they lost "
-            "ground, and what to drill next time. Plain prose, no headings, no scores.",
+            "In 3 or 4 sentences, tell the presenter how the rehearsal went and what "
+            "to work on next. Write like a person talking to them: plain prose, short "
+            "sentences, no headings, no scores. Do not use em dashes, and do not force "
+            "the recap into a three-part list or lean on promotional adjectives.",
         ]
     )
 

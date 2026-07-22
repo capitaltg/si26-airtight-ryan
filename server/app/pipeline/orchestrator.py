@@ -145,8 +145,8 @@ def _core_prompt(persona: PersonaDefinition, concern: Concern) -> str:
 def _follow_up_prompt(concern: Concern, last: Extraction) -> str:
     by_id = {c.id: c.addressed for c in last.sub_question_coverage}
     uncovered = [sq for sq in concern.sub_questions if by_id.get(sq.id) is not Addressed.full]
-    detail = "; ".join(sq.text for sq in uncovered) or concern.core_ask
-    return f"Let's stay on this. That didn't fully land — {detail}"
+    detail = " ".join(sq.text for sq in uncovered) or concern.core_ask
+    return f"Let's stay on this. That didn't fully land. {detail}"
 
 
 def _last_extraction_on(turns: list[Turn], concern_id: str) -> Extraction | None:
