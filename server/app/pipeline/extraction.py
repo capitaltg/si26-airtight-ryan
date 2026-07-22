@@ -72,9 +72,9 @@ def _render_concern(concern: Concern) -> str:
 
 def _render_ledger(prior_claims: Sequence[ClaimLedger]) -> str:
     if not prior_claims:
-        return "(no prior claims — this is the first scored answer of the session)"
+        return "(no prior claims: this is the first scored answer of the session)"
     return "\n".join(
-        f"  - [turn {row.turn_index}] \"{row.span}\" — {row.text}" for row in prior_claims
+        f"  - [turn {row.turn_index}] \"{row.span}\": {row.text}" for row in prior_claims
     )
 
 
@@ -97,6 +97,10 @@ def build_extraction_prompt(
             "Classify the presenter's answer against the schema using the "
             f"{TOOL_NAME} tool. Quote spans verbatim from the answer; a claim with "
             "no verbatim span does not count. You never assign a score.",
+            "When you write a free-text reason in the schema (for example the "
+            "'why' behind a red-line hit), write it the way a person would: plain "
+            "and direct, short sentences, no em dashes, no three-part lists, no "
+            "promotional adjectives.",
             "## Evaluator persona (context for what this evaluator cares about)",
             _render_persona(persona),
             "## Solicitation (RFP / PWS)",
@@ -105,7 +109,7 @@ def build_extraction_prompt(
             content.proposal_text,
             "## Active concern",
             _render_concern(concern),
-            "## Prior claim ledger (verbatim spans — flag Tier-0 contradictions "
+            "## Prior claim ledger (verbatim spans; flag Tier-0 contradictions "
             "against these)",
             _render_ledger(prior_claims),
             "## Presenter's answer to classify",

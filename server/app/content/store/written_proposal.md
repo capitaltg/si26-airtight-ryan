@@ -1,4 +1,4 @@
-# Written Proposal (SYNTHETIC — for evaluation use only)
+# Written Proposal (SYNTHETIC, for evaluation use only)
 
 > **This document is synthetic.** It was authored for the Airtight POC to give the
 > evaluation a written record to fact-check answers against. It does not describe a

@@ -44,6 +44,10 @@ const ROW_TONE: Record<string, string> = {
 function FindingCard({ f }: { f: ScoredFinding }) {
   const tone = ROW_TONE[f.rubric_row] ?? "bg-slate-100 text-slate-600"
   const sign = f.support_value > 0 ? `+${f.support_value}` : `${f.support_value}`
+  // dodge and approach_cited carry a category enum (e.g. "non_commitment") as
+  // their detail; the rest carry prose, which must stay verbatim.
+  const detail =
+    f.rubric_row === "dodge" || f.rubric_row === "approach_cited" ? prettify(f.detail) : f.detail
   return (
     <details className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm print:shadow-none print:open">
       <summary className="flex cursor-pointer items-center gap-2 text-sm">
@@ -59,7 +63,7 @@ function FindingCard({ f }: { f: ScoredFinding }) {
         <blockquote className="border-l-2 border-slate-300 pl-2 italic text-slate-700">
           “{f.span}”
         </blockquote>
-        {f.detail && <p className="text-slate-500">{f.detail}</p>}
+        {detail && <p className="text-slate-500">{detail}</p>}
       </div>
     </details>
   )
@@ -124,7 +128,7 @@ function ReportBody({ report }: { report: Report }) {
                 Dodges by type
               </h3>
               {dodgeTypes.length === 0 ? (
-                <p className="py-1.5 text-sm text-slate-400">No dodges — clean run.</p>
+                <p className="py-1.5 text-sm text-slate-400">No dodges. Clean run.</p>
               ) : (
                 dodgeTypes.map(([type, n]) => (
                   <CountRow key={type} label={prettify(type)} value={n} />
@@ -136,7 +140,7 @@ function ReportBody({ report }: { report: Report }) {
           {/* scored findings, each with its verbatim quote */}
           <section className="space-y-2">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Scored findings — every line carries its quote
+              Scored findings: every line carries its quote
             </h2>
             {report.findings.length === 0 ? (
               <p className="text-sm text-slate-400">No span-bearing findings were recorded.</p>
@@ -162,7 +166,7 @@ function ReportBody({ report }: { report: Report }) {
           <span className="rounded bg-slate-200 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-600">
             {report.narrative.header}
           </span>
-          <span className="text-xs text-slate-400">model recap — never feeds a score</span>
+          <span className="text-xs text-slate-400">model recap: never feeds a score</span>
         </div>
         <p className="text-sm leading-relaxed text-slate-700">{report.narrative.text}</p>
       </section>
