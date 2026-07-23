@@ -250,4 +250,7 @@ def test_cap_ceiling_falls_back_to_100_when_no_row_caps():
     )
     assert rubric.cap_ceiling == 100
     # With no ceiling, a sticky-capped meter is still bounded only by 100.
-    assert apply_to_meter(80, +2, capped=True, cap_ceiling=rubric.cap_ceiling, already_capped=False) == (82, True)
+    meter, capped = apply_to_meter(
+        80, +2, capped=True, cap_ceiling=rubric.cap_ceiling, already_capped=False
+    )
+    assert (meter, capped) == (82, True)
