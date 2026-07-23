@@ -6,12 +6,15 @@ retried once, then fails loud. Unvalidated model JSON never reaches the scorer
 send ``temperature=0``.
 """
 
+import logging
 from typing import Any, Protocol, TypeVar, cast
 
 from anthropic import AnthropicBedrock
 from pydantic import BaseModel, ValidationError
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
@@ -20,6 +23,23 @@ _ATTEMPTS = 2  # initial call + one retry
 
 class ExtractionValidationError(RuntimeError):
     """The model never produced tool input that validates against the schema."""
+
+
+def _log_cache_usage(tool_name: str, usage: Any) -> None:
+    """Emit prompt-cache token counts so cache hits are observable.
+
+    Guarded with ``getattr`` because the test transport fakes return responses
+    with no ``usage`` attribute.
+    """
+    if usage is None:
+        return
+    logger.info(
+        "bedrock %s usage: input=%s cache_write=%s cache_read=%s",
+        tool_name,
+        getattr(usage, "input_tokens", None),
+        getattr(usage, "cache_creation_input_tokens", None),
+        getattr(usage, "cache_read_input_tokens", None),
+    )
 
 
 class MessagesProtocol(Protocol):
@@ -47,13 +67,23 @@ class BedrockClient:
 
     def extract(
         self,
-        prompt: str,
+        content: str | list[dict[str, Any]],
         *,
         content_schema: type[ModelT],
         tool_name: str,
         max_tokens: int = 4096,
     ) -> ModelT:
-        """Force `tool_name`, validate its input, retry once, then raise."""
+        """Force `tool_name`, validate its input, retry once, then raise.
+
+        ``content`` is either a plain string (wrapped as a single text block) or
+        a pre-built list of content blocks. A caller passing blocks can place a
+        ``cache_control`` breakpoint on the static prefix so Bedrock reuses it
+        across turns; the block list is re-sent verbatim on retry, so the cache
+        still applies.
+        """
+        blocks: list[dict[str, Any]] = (
+            [{"type": "text", "text": content}] if isinstance(content, str) else content
+        )
         tool = {
             "name": tool_name,
             "description": f"Record the structured {tool_name} for this turn.",
@@ -68,8 +98,10 @@ class BedrockClient:
                 temperature=0,
                 tools=[tool],
                 tool_choice={"type": "tool", "name": tool_name},
-                messages=[{"role": "user", "content": prompt}],
+                messages=[{"role": "user", "content": blocks}],
             )
+
+            _log_cache_usage(tool_name, getattr(response, "usage", None))
 
             if getattr(response, "stop_reason", None) == "max_tokens":
                 # Tool input is cut mid-JSON. A retry truncates identically, so

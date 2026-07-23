@@ -63,7 +63,7 @@ class ScriptedClient:
 
     def extract(
         self,
-        prompt: str,
+        content: str | list,
         *,
         content_schema: type[BaseModel],
         tool_name: str,

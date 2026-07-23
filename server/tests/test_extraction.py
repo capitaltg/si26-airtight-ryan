@@ -14,7 +14,9 @@ from app.content.loader import load_content
 from app.db.models import ClaimLedger
 from app.pipeline.extraction import (
     ExtractionResult,
+    build_extraction_dynamic_suffix,
     build_extraction_prompt,
+    build_extraction_static_prefix,
     run_extraction,
 )
 from app.schemas.extraction import Backing, Claim, ClaimType, Extraction
@@ -27,14 +29,18 @@ class FakeBedrockClient:
 
     def extract(
         self,
-        prompt: str,
+        content: str | list,
         *,
         content_schema: type[BaseModel],
         tool_name: str,
         max_tokens: int = 4096,
     ) -> BaseModel:
         self.calls.append(
-            {"prompt": prompt, "content_schema": content_schema, "tool_name": tool_name}
+            {
+                "content": content,
+                "content_schema": content_schema,
+                "tool_name": tool_name,
+            }
         )
         return self._result
 
@@ -91,6 +97,80 @@ def test_prompt_rehydrates_persona_concern_and_prior_spans() -> None:
         assert row.span in prompt
     # the answer under evaluation is included
     assert answer in prompt
+
+
+def test_static_prefix_holds_cacheable_context() -> None:
+    content, persona, concern = _fixture()
+
+    prefix = build_extraction_static_prefix(persona=persona, content=content)
+
+    # the cacheable prefix carries the turn-invariant context
+    assert persona.voice in prefix
+    assert content.rfp_text.strip()[:40] in prefix
+    assert content.proposal_text.strip()[:40] in prefix
+    # ...and none of the turn-varying rebuild
+    assert concern.core_ask not in prefix
+
+
+def test_dynamic_suffix_holds_the_anti_drift_rebuild() -> None:
+    content, persona, concern = _fixture()
+    prior = _prior_claims()
+    answer = "We follow a phased approach with two-week sprints and a named PM."
+
+    suffix = build_extraction_dynamic_suffix(
+        answer=answer, concern=concern, prior_claims=prior
+    )
+
+    # the concern, the ledger spans, and the answer are sent fresh every turn
+    assert concern.core_ask in suffix
+    for row in prior:
+        assert row.span in suffix
+    assert answer in suffix
+    # the cacheable context must not leak into the uncached suffix
+    assert persona.voice not in suffix
+    assert content.rfp_text.strip()[:40] not in suffix
+
+
+def test_run_extraction_sends_cached_prefix_and_uncached_suffix() -> None:
+    content, persona, concern = _fixture()
+    prior = _prior_claims()
+    answer = "We follow a phased approach with two-week sprints and a named PM."
+    client = FakeBedrockClient(
+        Extraction(
+            claims=[
+                Claim(
+                    text="Named PM leads the effort.",
+                    type=ClaimType.commitment,
+                    backing=Backing.specified,
+                    span="a named PM",
+                )
+            ]
+        )
+    )
+
+    run_extraction(
+        answer=answer,
+        concern=concern,
+        persona=persona,
+        content=content,
+        prior_claims=prior,
+        client=client,
+    )
+
+    blocks = client.calls[0]["content"]
+    assert isinstance(blocks, list) and len(blocks) == 2
+    prefix, suffix = blocks
+    # the static prefix carries the cache breakpoint and the cacheable context
+    assert prefix["cache_control"] == {"type": "ephemeral"}
+    assert persona.voice in prefix["text"]
+    assert content.rfp_text.strip()[:40] in prefix["text"]
+    assert content.proposal_text.strip()[:40] in prefix["text"]
+    # the dynamic suffix is uncached and carries the anti-drift rebuild
+    assert "cache_control" not in suffix
+    assert concern.core_ask in suffix["text"]
+    assert answer in suffix["text"]
+    for row in prior:
+        assert row.span in suffix["text"]
 
 
 def test_prompt_handles_empty_ledger() -> None:
