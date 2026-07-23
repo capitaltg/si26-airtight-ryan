@@ -218,7 +218,10 @@ def test_content_rubric_is_disclosed(client: TestClient) -> None:
     assert r.status_code == 200
     body = r.json()
     assert body["version"] == 1
-    assert body["cap_ceiling"] == 25
+    assert "cap_ceiling" not in body  # the cap now rides inside the red_line row
     assert len(body["rows"]) == 7
+    red_line = next(row for row in body["rows"] if row["id"] == "red_line")
+    assert red_line["cap"] == 25
+    assert all(row["cap"] is None for row in body["rows"] if row["id"] != "red_line")
     assert len(body["concerns"]) == 8
     assert all(c["red_lines"] for c in body["concerns"])

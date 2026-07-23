@@ -34,7 +34,7 @@ export function RubricPanel({ open, onClose }: { open: boolean; onClose: () => v
             <h2 className="text-lg font-semibold text-slate-900">How you&apos;re scored</h2>
             {data && (
               <p className="text-xs text-slate-500">
-                Rubric v{data.version} · red line pins support at ≤ {data.cap_ceiling}
+                Rubric v{data.version} · code-owned, deterministic scoring
               </p>
             )}
           </div>
@@ -77,6 +77,11 @@ export function RubricPanel({ open, onClose }: { open: boolean; onClose: () => v
                         <td className="py-1.5 align-top">
                           <div className="font-medium text-slate-800">{prettify(row.id)}</div>
                           <div className="text-xs text-slate-500">{row.description}</div>
+                          {row.cap !== null && (
+                            <div className="mt-1 inline-block rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-700">
+                              {row.support_value} per turn · {row.cap} permanent cap
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}

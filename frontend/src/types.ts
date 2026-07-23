@@ -51,6 +51,7 @@ export interface RubricRow {
   id: string
   description: string
   support_value: number
+  cap: number | null
 }
 
 export interface ConcernDisclosure {
@@ -62,7 +63,6 @@ export interface ConcernDisclosure {
 
 export interface RubricDisclosure {
   version: number
-  cap_ceiling: number
   rows: RubricRow[]
   concerns: ConcernDisclosure[]
 }

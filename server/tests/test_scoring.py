@@ -7,6 +7,7 @@ sticky per-persona cap.
 
 from app.content.loader import load_content
 from app.pipeline.scoring import apply_to_meter, score_turn
+from app.schemas.content import Rubric, RubricRow
 from app.schemas.extraction import (
     Addressed,
     Backing,
@@ -232,3 +233,24 @@ def test_uncapped_meter_can_exceed_ceiling():
     # cap_ceiling only bites when sticky; an uncapped persona is unbounded by 25.
     m, capped = apply_to_meter(50, +2, capped=False, cap_ceiling=25, already_capped=False)
     assert m == 52 and capped is False
+
+
+def test_cap_ceiling_derives_from_the_red_line_row():
+    rubric = _rubric()
+    # The computed ceiling equals the red_line row's inline cap.
+    red_line = next(r for r in rubric.rows if r.id == "red_line")
+    assert red_line.cap == 25
+    assert rubric.cap_ceiling == 25
+
+
+def test_cap_ceiling_falls_back_to_100_when_no_row_caps():
+    rubric = Rubric(
+        version=1,
+        rows=[RubricRow(id="dodge", description="d", support_value=-2)],
+    )
+    assert rubric.cap_ceiling == 100
+    # With no ceiling, a sticky-capped meter is still bounded only by 100.
+    meter, capped = apply_to_meter(
+        80, +2, capped=True, cap_ceiling=rubric.cap_ceiling, already_capped=False
+    )
+    assert (meter, capped) == (82, True)
