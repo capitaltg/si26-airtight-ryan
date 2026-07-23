@@ -217,7 +217,10 @@ export function Rehearsal() {
               )}
             </div>
           ) : (
-            prompt && (
+            // Hidden while scoring: the pending turn in the transcript carries the
+            // live stage stepper, so the input box would only duplicate the wait.
+            prompt &&
+            !submit.isPending && (
               <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-center gap-2 text-sm">
                   <span className="font-semibold text-slate-800">
