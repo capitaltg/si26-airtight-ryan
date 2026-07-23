@@ -33,7 +33,7 @@ def _log_cache_usage(tool_name: str, usage: Any) -> None:
     """
     if usage is None:
         return
-    logger.info(
+    logger.debug(
         "bedrock %s usage: input=%s cache_write=%s cache_read=%s",
         tool_name,
         getattr(usage, "input_tokens", None),

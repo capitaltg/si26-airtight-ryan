@@ -217,7 +217,7 @@ def submit_answer(
     persona, concern = current.persona, current.concern
 
     prior_claims = repo.get_claims(db, session.id)
-    _t0 = time.perf_counter()
+    extraction_start = time.perf_counter()
     extraction = run_extraction(
         answer=answer,
         concern=concern,
@@ -229,7 +229,7 @@ def submit_answer(
     logger.info(
         "extraction (%s) took %.0f ms",
         persona.id,
-        (time.perf_counter() - _t0) * 1000,
+        (time.perf_counter() - extraction_start) * 1000,
     )
 
     score = score_turn(extraction, content.rubric)
@@ -246,7 +246,7 @@ def submit_answer(
     )
 
     # Reaction runs only after the number is locked; it can never move it.
-    _t1 = time.perf_counter()
+    reaction_start = time.perf_counter()
     reaction = run_reaction(
         persona=persona,
         concern=concern,
@@ -257,7 +257,7 @@ def submit_answer(
     logger.info(
         "reaction (%s) took %.0f ms",
         persona.id,
-        (time.perf_counter() - _t1) * 1000,
+        (time.perf_counter() - reaction_start) * 1000,
     )
 
     turn_index = len(repo.get_turns(db, session.id))
