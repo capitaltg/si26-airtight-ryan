@@ -104,8 +104,10 @@ airtight/
 │  │  │  ├─ AfterActionReport.tsx
 │  │  │  ├─ ChatTurn.tsx
 │  │  │  ├─ MeterBar.tsx
+│  │  │  ├─ PendingTurn.tsx
 │  │  │  ├─ Rehearsal.tsx
-│  │  │  └─ RubricPanel.tsx
+│  │  │  ├─ RubricPanel.tsx
+│  │  │  └─ StageStepper.tsx
 │  │  ├─ App.tsx
 │  │  ├─ index.css
 │  │  ├─ lib.ts

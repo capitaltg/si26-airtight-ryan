@@ -26,7 +26,9 @@ from __future__ import annotations
 import logging
 import time
 from collections import Counter
+from collections.abc import Iterator
 from dataclasses import dataclass
+from typing import cast
 
 from sqlalchemy.orm import Session
 
@@ -199,17 +201,20 @@ def next_concern(
     return None
 
 
-def submit_answer(
+def submit_answer_events(
     db: Session,
     content: Content,
     client: object,
     session: RehearsalSession,
     answer: str,
-) -> TurnResult:
-    """Run one turn: extract → score → persist → meter → react → advance.
+) -> Iterator[dict[str, object]]:
+    """Run one turn, yielding stage-progress events around the same pipeline.
 
-    Concern selection is code-driven; the model is invoked only for extraction
-    and reaction, and the score is locked before the reaction runs.
+    This is the single source of truth for a turn. It yields ``{"stage": ...}``
+    at the three natural boundaries (extracting → scoring → reacting) and, as its
+    final action after persist/advance, ``{"result": TurnResult(...)}``. The
+    thin ``submit_answer`` driver below drains it, so behavior is byte-identical
+    to the pre-streaming pipeline; scoring and the DB writes are untouched.
     """
     current = next_concern(db, content, session)
     if current is None:
@@ -217,6 +222,7 @@ def submit_answer(
     persona, concern = current.persona, current.concern
 
     prior_claims = repo.get_claims(db, session.id)
+    yield {"stage": "extracting"}
     extraction_start = time.perf_counter()
     extraction = run_extraction(
         answer=answer,
@@ -232,6 +238,7 @@ def submit_answer(
         (time.perf_counter() - extraction_start) * 1000,
     )
 
+    yield {"stage": "scoring"}
     score = score_turn(extraction, content.rubric)
 
     meter_row = repo.get_meter(db, session.id, persona.id)
@@ -246,6 +253,7 @@ def submit_answer(
     )
 
     # Reaction runs only after the number is locked; it can never move it.
+    yield {"stage": "reacting"}
     reaction_start = time.perf_counter()
     reaction = run_reaction(
         persona=persona,
@@ -295,16 +303,41 @@ def submit_answer(
         session.status = "complete"
         db.flush()
 
-    return TurnResult(
-        turn=turn,
-        reaction=reaction,
-        persona_id=persona.id,
-        concern_id=concern.concern_id,
-        concern_status=status,
-        support_delta=score.support_delta,
-        matched_rows=score.matched_rows,
-        meter=new_meter,
-        capped=capped,
-        next=following,
-        done=done,
-    )
+    yield {
+        "result": TurnResult(
+            turn=turn,
+            reaction=reaction,
+            persona_id=persona.id,
+            concern_id=concern.concern_id,
+            concern_status=status,
+            support_delta=score.support_delta,
+            matched_rows=score.matched_rows,
+            meter=new_meter,
+            capped=capped,
+            next=following,
+            done=done,
+        )
+    }
+
+
+def submit_answer(
+    db: Session,
+    content: Content,
+    client: object,
+    session: RehearsalSession,
+    answer: str,
+) -> TurnResult:
+    """Run one turn: extract → score → persist → meter → react → advance.
+
+    Thin driver over :func:`submit_answer_events`: it drains the generator and
+    returns the terminal ``result`` event, keeping the synchronous JSON contract
+    (``POST /answer``) unchanged. Concern selection is code-driven; the model is
+    invoked only for extraction and reaction, and the score is locked before the
+    reaction runs.
+    """
+    result: TurnResult | None = None
+    for ev in submit_answer_events(db, content, client, session, answer):
+        if "result" in ev:
+            result = cast(TurnResult, ev["result"])
+    assert result is not None  # the generator always yields a terminal result
+    return result

@@ -7,10 +7,11 @@ import { useEffect, useRef, useState } from "react"
 
 import { useCreateSession, useSubmitAnswer } from "../api/client"
 import { prettify } from "../lib"
-import type { Meter, Prompt, TranscriptTurn } from "../types"
+import type { Meter, Prompt, Stage, TranscriptTurn } from "../types"
 import { AfterActionReport } from "./AfterActionReport"
 import { ChatTurn } from "./ChatTurn"
 import { MeterPanel } from "./MeterBar"
+import { PendingTurn } from "./PendingTurn"
 import { RubricPanel } from "./RubricPanel"
 
 export function Rehearsal() {
@@ -22,6 +23,11 @@ export function Rehearsal() {
   const [draft, setDraft] = useState("")
   const [rubricOpen, setRubricOpen] = useState(false)
   const [showReport, setShowReport] = useState(false)
+  // Optimistic pending turn: the submitted answer + which prompt it answered,
+  // shown with a live stage stepper while the backend scores it.
+  const [pending, setPending] = useState<{ prompt: Prompt; answer: string } | null>(null)
+  const [stage, setStage] = useState<Stage>("extracting")
+  const [elapsed, setElapsed] = useState(0)
 
   const create = useCreateSession()
   const submit = useSubmitAnswer(sessionId)
@@ -29,7 +35,16 @@ export function Rehearsal() {
   const transcriptEndRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [transcript, done])
+  }, [transcript, done, pending, stage])
+
+  // Elapsed-seconds clock: runs only while a turn is pending, reset on each start.
+  useEffect(() => {
+    if (!pending) return
+    setElapsed(0)
+    const started = Date.now()
+    const timer = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000)
+    return () => clearInterval(timer)
+  }, [pending])
 
   function startSession() {
     create.mutate(undefined, {
@@ -59,30 +74,41 @@ export function Rehearsal() {
     const answer = draft.trim()
     if (!answer || !prompt || submit.isPending) return
     const asked = prompt // capture the prompt this answer responds to
-    submit.mutate(answer, {
-      onSuccess: (res) => {
-        setTranscript((prev) => [
-          ...prev,
-          {
-            key: prev.length,
-            personaId: res.persona_id,
-            concernId: res.concern_id,
-            isFollowUp: asked.is_follow_up,
-            prompt: asked.prompt,
-            answer,
-            reply: res.reply,
-            rationale: res.rationale,
-            supportDelta: res.support_delta,
-            matchedRows: res.matched_rows,
-            capped: res.capped,
-          },
-        ])
-        setMeters(res.meters)
-        setPrompt(res.next_prompt)
-        setDone(res.done)
-        setDraft("")
+    // Show the answer immediately with a stepper starting at the first stage;
+    // `onStage` advances it as the SSE stream reports each pipeline boundary.
+    setPending({ prompt: asked, answer })
+    setStage("extracting")
+    submit.mutate(
+      { answer, onStage: setStage },
+      {
+        onSuccess: (res) => {
+          setTranscript((prev) => [
+            ...prev,
+            {
+              key: prev.length,
+              personaId: res.persona_id,
+              concernId: res.concern_id,
+              isFollowUp: asked.is_follow_up,
+              prompt: asked.prompt,
+              answer,
+              reply: res.reply,
+              rationale: res.rationale,
+              supportDelta: res.support_delta,
+              matchedRows: res.matched_rows,
+              capped: res.capped,
+            },
+          ])
+          setMeters(res.meters)
+          setPrompt(res.next_prompt)
+          setDone(res.done)
+          setDraft("")
+          setPending(null)
+        },
+        // Clear the placeholder; the existing submit.isError red text surfaces
+        // the message and the presenter retries with the draft still intact.
+        onError: () => setPending(null),
       },
-    })
+    )
   }
 
   // Not started yet: a single call to action.
@@ -150,7 +176,7 @@ export function Rehearsal() {
         {/* transcript + input */}
         <div className="flex flex-col gap-4">
           <div className="flex-1 space-y-4 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-4">
-            {transcript.length === 0 && !done && (
+            {transcript.length === 0 && !pending && !done && (
               <p className="text-sm text-slate-400">
                 Your answers and each evaluator&apos;s reply will appear here.
               </p>
@@ -158,6 +184,14 @@ export function Rehearsal() {
             {transcript.map((turn) => (
               <ChatTurn key={turn.key} turn={turn} />
             ))}
+            {pending && (
+              <PendingTurn
+                prompt={pending.prompt}
+                answer={pending.answer}
+                stage={stage}
+                elapsed={elapsed}
+              />
+            )}
             <div ref={transcriptEndRef} />
           </div>
 
@@ -183,7 +217,10 @@ export function Rehearsal() {
               )}
             </div>
           ) : (
-            prompt && (
+            // Hidden while scoring: the pending turn in the transcript carries the
+            // live stage stepper, so the input box would only duplicate the wait.
+            prompt &&
+            !submit.isPending && (
               <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-center gap-2 text-sm">
                   <span className="font-semibold text-slate-800">

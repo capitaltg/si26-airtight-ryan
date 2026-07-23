@@ -7,13 +7,19 @@ mirrors in ``types.ts`` (task 11).
 
 from __future__ import annotations
 
+import asyncio
+import json
+import logging
 import uuid
+from collections.abc import AsyncIterator
+from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
-from app.api.deps import get_bedrock_client, get_content, get_db
+from app.api.deps import get_bedrock_client, get_content, get_db, get_session_factory
 from app.bedrock.client import BedrockClient
 from app.content.loader import Content
 from app.db import repo
@@ -22,6 +28,8 @@ from app.pipeline import orchestrator
 from app.pipeline.orchestrator import SessionComplete
 from app.report.builder import build_report
 from app.schemas.report import Report
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -99,6 +107,28 @@ def _state(db: Session, content: Content, session: RehearsalSession) -> SessionS
     )
 
 
+def _answer_payload(
+    db: Session, session_id: uuid.UUID, result: orchestrator.TurnResult
+) -> AnswerResponse:
+    """The AnswerResponse for one scored turn. Shared by the plain-JSON
+    ``/answer`` endpoint and the SSE ``/answer/stream`` result frame so both
+    carry byte-identical fields."""
+    return AnswerResponse(
+        reply=result.reaction.in_character_reply,
+        rationale=result.reaction.rationale,
+        persona_id=result.persona_id,
+        concern_id=result.concern_id,
+        concern_status=result.concern_status,
+        support_delta=result.support_delta,
+        matched_rows=result.matched_rows,
+        meter=result.meter,
+        capped=result.capped,
+        meters=_meters(db, session_id),
+        next_prompt=_prompt_dto(result.next),
+        done=result.done,
+    )
+
+
 def _require_session(db: Session, session_id: uuid.UUID) -> RehearsalSession:
     session = repo.get_session(db, session_id)
     if session is None:
@@ -137,20 +167,83 @@ def submit_answer(
         result = orchestrator.submit_answer(db, content, client, session, body.answer)
     except SessionComplete as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return AnswerResponse(
-        reply=result.reaction.in_character_reply,
-        rationale=result.reaction.rationale,
-        persona_id=result.persona_id,
-        concern_id=result.concern_id,
-        concern_status=result.concern_status,
-        support_delta=result.support_delta,
-        matched_rows=result.matched_rows,
-        meter=result.meter,
-        capped=result.capped,
-        meters=_meters(db, session.id),
-        next_prompt=_prompt_dto(result.next),
-        done=result.done,
-    )
+    return _answer_payload(db, session.id, result)
+
+
+# Sentinel put on the queue by the worker thread when the stream is exhausted.
+_DONE = object()
+
+
+@router.post("/{session_id}/answer/stream")
+async def submit_answer_stream(
+    session_id: uuid.UUID,
+    body: AnswerRequest,
+    content: Content = Depends(get_content),
+    client: BedrockClient = Depends(get_bedrock_client),
+    session_factory: sessionmaker[Session] = Depends(get_session_factory),
+) -> StreamingResponse:
+    """Streaming twin of ``/answer``: emits SSE ``data:`` frames tagged by key —
+    ``{"stage": ...}`` at each pipeline boundary, then one ``{"result": {...}}``
+    (the same payload ``/answer`` returns) or ``{"error": ...}``.
+
+    The pipeline is blocking and synchronous, so it runs in one worker thread
+    with its own DB session (clean thread affinity — no cross-thread SQLAlchemy
+    use), bridged to the async response via an ``asyncio.Queue``.
+    """
+    queue: asyncio.Queue[object] = asyncio.Queue()
+    loop = asyncio.get_running_loop()
+
+    def emit(ev: object) -> None:
+        loop.call_soon_threadsafe(queue.put_nowait, ev)
+
+    def worker() -> None:
+        db = session_factory()
+        try:
+            session = repo.get_session(db, session_id)
+            if session is None:
+                emit({"error": "session not found"})
+                return
+            for ev in orchestrator.submit_answer_events(
+                db, content, client, session, body.answer
+            ):
+                if "result" in ev:
+                    result = cast(orchestrator.TurnResult, ev["result"])
+                    payload = _answer_payload(db, session_id, result).model_dump(mode="json")
+                    emit({"result": payload})
+                else:
+                    emit(ev)
+            db.commit()
+        except SessionComplete as exc:
+            # Domain-meaningful and already surfaced verbatim by /answer (409); safe
+            # to pass through so the frontend shows the same "session complete" text.
+            db.rollback()
+            emit({"error": str(exc)})
+        except Exception:
+            # Mirror /answer's opaque 500: log the real error server-side, never
+            # leak internal exception text to the client.
+            db.rollback()
+            logger.exception("streaming answer failed for session %s", session_id)
+            emit({"error": "internal error"})
+        finally:
+            db.close()
+            emit(_DONE)
+
+    async def event_stream() -> AsyncIterator[str]:
+        # Hold the reference: a bare create_task can be garbage-collected
+        # mid-flight. The worker runs to completion and closes its own DB session
+        # in `finally`, so a client disconnect leaks nothing (the thread can't be
+        # preempted in any case); it just self-terminates on the next iteration.
+        task = asyncio.ensure_future(asyncio.to_thread(worker))
+        try:
+            while True:
+                ev = await queue.get()
+                if ev is _DONE:
+                    break
+                yield f"data: {json.dumps(ev)}\n\n"
+        finally:
+            await task
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @router.post("/{session_id}/end", response_model=SessionStateDTO)
