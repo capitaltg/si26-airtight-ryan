@@ -25,6 +25,21 @@ function DeltaBadge({ delta, capped }: { delta: number; capped: boolean }) {
 export function ChatTurn({ turn }: { turn: TranscriptTurn }) {
   return (
     <div className="space-y-3">
+      {/* question */}
+      <div className="space-y-1">
+        <div className="flex items-center gap-2 text-sm">
+          <span className="font-semibold text-slate-800">{prettify(turn.personaId)}</span>
+          <span className="text-slate-400">·</span>
+          <span className="text-slate-500">{prettify(turn.concernId)}</span>
+          {turn.isFollowUp && (
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700">
+              Follow-up
+            </span>
+          )}
+        </div>
+        <p className="text-sm text-slate-800">{turn.prompt}</p>
+      </div>
+
       {/* presenter */}
       <div className="flex justify-end">
         <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-slate-800 px-4 py-2.5 text-sm text-white">
