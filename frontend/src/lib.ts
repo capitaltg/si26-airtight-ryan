@@ -10,6 +10,13 @@ export function prettify(id: string): string {
     .join(" ")
 }
 
+// Chat-bubble class strings shared by a scored turn (ChatTurn) and the pending
+// placeholder (PendingTurn) so the two stay visually identical as styles evolve.
+export const PRESENTER_BUBBLE =
+  "max-w-[85%] rounded-2xl rounded-br-sm bg-slate-800 px-4 py-2.5 text-sm text-white"
+export const REPLY_BUBBLE =
+  "max-w-[85%] space-y-2 rounded-2xl rounded-bl-sm border border-slate-200 bg-white px-4 py-2.5 shadow-sm"
+
 // A red-line cap is crossed once support is pinned at the ceiling; surface it as
 // a color threshold so a pinned meter reads as "in trouble" at a glance.
 export function meterTone(support: number, capped: boolean): string {

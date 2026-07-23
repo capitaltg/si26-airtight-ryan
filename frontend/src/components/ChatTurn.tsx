@@ -4,7 +4,7 @@
 // separately from the reply, sourced from the scoring engine.
 
 import type { TranscriptTurn } from "../types"
-import { prettify } from "../lib"
+import { PRESENTER_BUBBLE, REPLY_BUBBLE, prettify } from "../lib"
 
 function DeltaBadge({ delta, capped }: { delta: number; capped: boolean }) {
   const sign = delta > 0 ? `+${delta}` : `${delta}`
@@ -42,14 +42,12 @@ export function ChatTurn({ turn }: { turn: TranscriptTurn }) {
 
       {/* presenter */}
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-sm bg-slate-800 px-4 py-2.5 text-sm text-white">
-          {turn.answer}
-        </div>
+        <div className={PRESENTER_BUBBLE}>{turn.answer}</div>
       </div>
 
       {/* persona reply + score */}
       <div className="flex justify-start">
-        <div className="max-w-[85%] space-y-2 rounded-2xl rounded-bl-sm border border-slate-200 bg-white px-4 py-2.5 shadow-sm">
+        <div className={REPLY_BUBBLE}>
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-slate-500">{prettify(turn.personaId)}</span>
             <DeltaBadge delta={turn.supportDelta} capped={turn.capped} />

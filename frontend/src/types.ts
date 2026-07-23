@@ -26,6 +26,10 @@ export interface SessionState {
   done: boolean
 }
 
+// The scoring pipeline stage currently running, streamed from the SSE endpoint
+// so the UI can show which step the wait is on rather than an opaque spinner.
+export type Stage = "extracting" | "scoring" | "reacting"
+
 export interface AnswerResponse {
   reply: string
   rationale: string

@@ -1,3 +1,4 @@
+import json
 from collections.abc import Iterator
 
 import pytest
@@ -7,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.api.deps import get_bedrock_client, get_db
+from app.api.deps import get_bedrock_client, get_db, get_session_factory
 from app.content.loader import Content
 from app.db.models import Base
 from app.main import app
@@ -91,6 +92,9 @@ def client() -> Iterator[TestClient]:
 
     app.dependency_overrides[get_db] = _get_db
     app.dependency_overrides[get_bedrock_client] = _FakeClient
+    # The SSE endpoint opens its own session off the factory (own worker thread),
+    # so point it at the same in-memory engine the request sessions use.
+    app.dependency_overrides[get_session_factory] = lambda: factory
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
@@ -121,6 +125,66 @@ def test_answer_round_trip_moves_meter_and_advances(client: TestClient) -> None:
     assert body["concern_status"] == "satisfied"
     assert body["next_prompt"]["concern_id"] == "key_personnel"
     assert body["done"] is False
+
+
+def _collect_sse(response) -> list[dict]:
+    """Parse `data: {json}` SSE frames from a streamed response into dicts."""
+    events = []
+    for line in response.iter_lines():
+        if line.startswith("data: "):
+            events.append(json.loads(line[len("data: ") :]))
+    return events
+
+
+def test_answer_stream_emits_stages_then_result(client: TestClient) -> None:
+    session_id = client.post("/sessions").json()["id"]
+
+    with client.stream(
+        "POST",
+        f"/sessions/{session_id}/answer/stream",
+        json={"answer": "Here is the architecture."},
+    ) as r:
+        assert r.status_code == 200
+        assert r.headers["content-type"].startswith("text/event-stream")
+        events = _collect_sse(r)
+
+    # Stages arrive in pipeline order, then exactly one result frame closes it.
+    stages = [e["stage"] for e in events if "stage" in e]
+    assert stages == ["extracting", "scoring", "reacting"]
+    results = [e["result"] for e in events if "result" in e]
+    assert len(results) == 1
+    body = results[0]
+    # The result frame matches the /answer contract exactly.
+    assert body["reply"] == "Concrete. Good."
+    assert body["support_delta"] == 2
+    assert body["meter"] == 52
+    assert body["concern_status"] == "satisfied"
+    assert body["next_prompt"]["concern_id"] == "key_personnel"
+    assert body["done"] is False
+
+    # The turn was persisted: a follow-up read reflects the advanced state.
+    state = client.get(f"/sessions/{session_id}").json()
+    assert state["concern_status"]["technical_approach"] == "satisfied"
+    assert state["prompt"]["concern_id"] == "key_personnel"
+
+
+def test_answer_stream_after_done_emits_error(client: TestClient) -> None:
+    session_id = client.post("/sessions").json()["id"]
+    # Drive every concern to a terminal state so the next submit has no open concern.
+    for _ in range(20):
+        state = client.get(f"/sessions/{session_id}").json()
+        if state["done"]:
+            break
+        client.post(f"/sessions/{session_id}/answer", json={"answer": "Here is the architecture."})
+    assert client.get(f"/sessions/{session_id}").json()["done"] is True
+
+    with client.stream(
+        "POST", f"/sessions/{session_id}/answer/stream", json={"answer": "late answer"}
+    ) as r:
+        events = _collect_sse(r)
+
+    assert any("error" in e for e in events)
+    assert not any("result" in e for e in events)
 
 
 def test_report_is_code_rendered_with_labeled_narrative(client: TestClient) -> None:
