@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
     ClaimLedger,
+    Clarification,
     ConcernStatus,
     PersonaMeter,
     RehearsalSession,
@@ -146,6 +147,48 @@ def get_meters(db: Session, session_id: uuid.UUID) -> list[PersonaMeter]:
         .order_by(PersonaMeter.persona_id)
     )
     return list(db.scalars(stmt))
+
+
+def append_clarification(
+    db: Session,
+    *,
+    session_id: uuid.UUID,
+    concern_id: str,
+    persona_id: str,
+    seq: int,
+    question: str,
+    reply: str,
+) -> Clarification:
+    row = Clarification(
+        session_id=session_id,
+        concern_id=concern_id,
+        persona_id=persona_id,
+        seq=seq,
+        question=question,
+        reply=reply,
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def get_clarifications(db: Session, session_id: uuid.UUID) -> list[Clarification]:
+    stmt = (
+        select(Clarification)
+        .where(Clarification.session_id == session_id)
+        .order_by(Clarification.id)
+    )
+    return list(db.scalars(stmt))
+
+
+def count_clarifications(
+    db: Session, session_id: uuid.UUID, concern_id: str
+) -> int:
+    stmt = select(func.count()).where(
+        Clarification.session_id == session_id,
+        Clarification.concern_id == concern_id,
+    )
+    return db.scalar(stmt) or 0
 
 
 def set_concern_status(

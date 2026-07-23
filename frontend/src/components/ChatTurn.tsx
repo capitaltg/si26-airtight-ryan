@@ -23,6 +23,7 @@ function DeltaBadge({ delta, capped }: { delta: number; capped: boolean }) {
 }
 
 export function ChatTurn({ turn }: { turn: TranscriptTurn }) {
+  const notScored = turn.scored === false
   return (
     <div className="space-y-3">
       {/* question */}
@@ -50,15 +51,25 @@ export function ChatTurn({ turn }: { turn: TranscriptTurn }) {
         <div className={REPLY_BUBBLE}>
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-slate-500">{prettify(turn.personaId)}</span>
-            <DeltaBadge delta={turn.supportDelta} capped={turn.capped} />
-            {turn.matchedRows.map((r) => (
-              <span
-                key={r}
-                className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600"
-              >
-                {prettify(r)}
+            {notScored ? (
+              // Clarification: no number moved. Match the report's "Not scored"
+              // slate badge so the visual language is consistent.
+              <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                Not scored
               </span>
-            ))}
+            ) : (
+              <>
+                <DeltaBadge delta={turn.supportDelta} capped={turn.capped} />
+                {turn.matchedRows.map((r) => (
+                  <span
+                    key={r}
+                    className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600"
+                  >
+                    {prettify(r)}
+                  </span>
+                ))}
+              </>
+            )}
           </div>
           <p className="text-sm text-slate-800">{turn.reply}</p>
           {turn.rationale && (

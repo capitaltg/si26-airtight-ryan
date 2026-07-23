@@ -58,6 +58,16 @@ class ScoredFinding(BaseModel):
     detail: str
 
 
+class ClarificationLine(BaseModel):
+    """One non-scored clarification exchange, surfaced in the report so overuse is
+    auditable. It never carries a support value: a clarification does not score."""
+
+    persona_id: str
+    concern_id: str
+    question: str
+    reply: str
+
+
 class NarrativeSection(BaseModel):
     """The one model-authored recap. Explicitly not scored; it never feeds a number."""
 
@@ -77,6 +87,7 @@ class ScoredReport(BaseModel):
     dodge_counts_by_type: dict[str, int] = Field(default_factory=dict)
     contradiction_count: int
     findings: list[ScoredFinding] = Field(default_factory=list)
+    clarifications: list[ClarificationLine] = Field(default_factory=list)
 
 
 class Report(ScoredReport):

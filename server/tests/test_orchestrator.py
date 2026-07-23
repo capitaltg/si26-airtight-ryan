@@ -76,6 +76,9 @@ class ScriptedClient:
             return self.reaction
         raise AssertionError(f"unexpected schema {content_schema!r}")
 
+    def react(self, prompt: str, *, max_tokens: int = 1024) -> str:
+        return "Here's what I'm looking for. I still need a real answer."
+
 
 def _full(concern: Concern) -> Extraction:
     """A backed answer that fully covers every sub-question → satisfies, +2."""
@@ -202,6 +205,57 @@ def test_red_line_caps_and_stays_capped_across_next_good_answer(
     assert second.persona_id == "technical_evaluator"
     assert second.meter == 25  # +2 would be 27, held at the ceiling
     assert second.capped is True
+
+
+def test_clarification_does_not_score_advance_or_count_as_attempt(
+    db: Session, content: Content
+) -> None:
+    session = orchestrator.start_session(db, content)
+    client = ScriptedClient()
+
+    before = orchestrator.next_concern(db, content, session)
+    assert before is not None
+
+    first = orchestrator.ask_clarification(db, content, client, session, "What do you mean by X?")
+    assert first.reply
+    assert first.remaining == 1
+    # meter untouched, no turn recorded, concern statuses unchanged
+    assert repo.get_meter(db, session.id, before.persona.id).support == 50
+    assert repo.get_turns(db, session.id) == []
+    assert all(v == "open" for v in repo.get_concern_statuses(db, session.id).values())
+
+    # same prompt stays active — the agenda did not advance
+    after = orchestrator.next_concern(db, content, session)
+    assert after is not None
+    assert after.concern.concern_id == before.concern.concern_id
+    assert after.is_follow_up == before.is_follow_up
+
+    # second clarification is allowed, then the cap is enforced
+    second = orchestrator.ask_clarification(db, content, client, session, "And Y?")
+    assert second.remaining == 0
+    with pytest.raises(orchestrator.ClarificationCapReached):
+        orchestrator.ask_clarification(db, content, client, session, "One more?")
+
+
+def test_clarification_cap_is_per_concern(db: Session, content: Content) -> None:
+    session = orchestrator.start_session(db, content)
+    client = ScriptedClient()
+
+    # Exhaust the first concern's clarification allowance.
+    first_concern = orchestrator.next_concern(db, content, session).concern.concern_id
+    orchestrator.ask_clarification(db, content, client, session, "q1")
+    orchestrator.ask_clarification(db, content, client, session, "q2")
+
+    # Satisfy the first concern so the agenda advances to a new one.
+    client.next_extraction = _full(content.concerns[first_concern])
+    result = orchestrator.submit_answer(db, content, client, session, "backed answer")
+    assert result.next is not None
+    assert result.next.concern.concern_id != first_concern
+
+    # The new concern gets its own full allowance.
+    fresh = orchestrator.ask_clarification(db, content, client, session, "new concern q")
+    assert fresh.concern_id == result.next.concern.concern_id
+    assert fresh.remaining == 1
 
 
 def test_session_ends_after_all_concerns_resolved(db: Session, content: Content) -> None:

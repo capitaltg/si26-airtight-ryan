@@ -130,7 +130,8 @@ airtight/
 ├─ server/                       # FastAPI + Pydantic v2 + SQLAlchemy + Alembic
 │  ├─ alembic/
 │  │  ├─ versions/
-│  │  │  └─ 0001_init.py
+│  │  │  ├─ 0001_init.py
+│  │  │  └─ 0002_clarifications.py
 │  │  ├─ env.py
 │  │  └─ script.py.mako
 │  ├─ app/

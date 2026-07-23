@@ -108,6 +108,31 @@ class ClaimLedger(Base):
     span: Mapped[str] = mapped_column(Text)
 
 
+class Clarification(Base):
+    """A non-scored clarifying question and the evaluator's reply.
+
+    Kept in its own table on purpose: a clarification must never land in
+    ``turns``, where ``attempts`` are counted from — storing it here means it
+    cannot inflate the attempt count, advance the agenda, or move a meter. It is
+    persisted only so the exchange renders in the live transcript and the
+    auditable after-action report."""
+
+    __tablename__ = "clarifications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("sessions.id", ondelete="CASCADE"), index=True
+    )
+    concern_id: Mapped[str] = mapped_column(String(64))
+    persona_id: Mapped[str] = mapped_column(String(64))
+    seq: Mapped[int] = mapped_column(Integer)  # per-concern order for transcript render
+    question: Mapped[str] = mapped_column(Text)
+    reply: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class PersonaMeter(Base):
     """Per-persona support meter. ``capped`` is sticky: once a red line is crossed
     it stays true and the meter is held at the rubric's ceiling for the session."""

@@ -4,7 +4,14 @@
 
 import { useMutation, useQuery } from "@tanstack/react-query"
 
-import type { AnswerResponse, Report, RubricDisclosure, SessionState, Stage } from "../types"
+import type {
+  AnswerResponse,
+  ClarifyResponse,
+  Report,
+  RubricDisclosure,
+  SessionState,
+  Stage,
+} from "../types"
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -89,6 +96,11 @@ export const api = {
       body: JSON.stringify({ answer }),
     }),
   submitAnswerStream,
+  askClarification: (id: string, question: string) =>
+    request<ClarifyResponse>(`/sessions/${id}/clarify`, {
+      method: "POST",
+      body: JSON.stringify({ question }),
+    }),
   getRubric: () => request<RubricDisclosure>("/content/rubric"),
   getReport: (id: string) => request<Report>(`/sessions/${id}/report`),
 }
@@ -107,6 +119,17 @@ export function useSubmitAnswer(sessionId: string | null) {
     mutationFn: ({ answer, onStage }: { answer: string; onStage: (s: Stage) => void }) => {
       if (!sessionId) throw new Error("no active session")
       return api.submitAnswerStream(sessionId, answer, onStage)
+    },
+  })
+}
+
+// Ask a clarifying question. Plain POST (no SSE): the backend makes one quick
+// react call and returns the reply plus the unchanged active prompt.
+export function useAskClarification(sessionId: string | null) {
+  return useMutation({
+    mutationFn: (question: string) => {
+      if (!sessionId) throw new Error("no active session")
+      return api.askClarification(sessionId, question)
     },
   })
 }

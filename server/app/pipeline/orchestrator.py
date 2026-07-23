@@ -36,7 +36,7 @@ from app.content.loader import Content
 from app.db import repo
 from app.db.models import RehearsalSession, Turn
 from app.pipeline.extraction import run_extraction
-from app.pipeline.reaction import run_reaction
+from app.pipeline.reaction import run_clarification, run_reaction
 from app.pipeline.scoring import apply_to_meter, score_turn
 from app.schemas.content import Concern, PersonaDefinition
 from app.schemas.extraction import Addressed, Extraction
@@ -51,6 +51,10 @@ PERSONA_ORDER = ("technical_evaluator", "contracting_officer", "program_rep")
 SCENARIO_VERSION = "poc-v1"
 MAX_TURNS_PER_CONCERN = 2  # first ask + one follow-up
 
+# Guard against dodging disguised as questions: a free no-score channel would
+# otherwise let a presenter stall a concern indefinitely.
+MAX_CLARIFICATIONS_PER_CONCERN = 2
+
 # Non-terminal statuses: the concern still needs a turn (subject to the turn cap).
 _OPEN = "open"
 _PARTIAL = "partial"
@@ -60,6 +64,10 @@ _DODGED = "dodged"
 
 class SessionComplete(RuntimeError):
     """Raised when an answer is submitted to a session with no open concern."""
+
+
+class ClarificationCapReached(RuntimeError):
+    """Raised when a concern has already used its clarification allowance."""
 
 
 @dataclass(frozen=True)
@@ -87,6 +95,18 @@ class TurnResult:
     capped: bool
     next: Assignment | None
     done: bool
+
+
+@dataclass(frozen=True)
+class ClarificationResult:
+    """A non-scored clarification exchange and the (unchanged) active prompt."""
+
+    persona_id: str
+    concern_id: str
+    question: str
+    reply: str
+    remaining: int  # clarifications left on this concern
+    prompt: Assignment  # unchanged active prompt, echoed back
 
 
 def _persona_order(content: Content) -> list[str]:
@@ -341,3 +361,58 @@ def submit_answer(
             result = cast(TurnResult, ev["result"])
     assert result is not None  # the generator always yields a terminal result
     return result
+
+
+def ask_clarification(
+    db: Session,
+    content: Content,
+    client: object,
+    session: RehearsalSession,
+    question: str,
+) -> ClarificationResult:
+    """Answer a clarifying question without scoring the turn.
+
+    None of the scored-path side effects run: no extraction, no ``score_turn``,
+    no meter change, no claim-ledger append, no concern-status write, and no
+    ``append_turn``. ``next_concern`` is read-only, so re-reading the active
+    concern does not advance the agenda; the row is stored in ``clarifications``,
+    not ``turns``, so it cannot count as an attempt. The same prompt stays active
+    afterward — the presenter still owes a real answer to it.
+    """
+    current = next_concern(db, content, session)
+    if current is None:
+        raise SessionComplete("no open concern; the session is already complete")
+    concern_id = current.concern.concern_id
+
+    used = repo.count_clarifications(db, session.id, concern_id)
+    if used >= MAX_CLARIFICATIONS_PER_CONCERN:
+        raise ClarificationCapReached(
+            f"clarification cap ({MAX_CLARIFICATIONS_PER_CONCERN}) reached on "
+            f"concern {concern_id}"
+        )
+
+    reply = run_clarification(
+        persona=current.persona,
+        concern=current.concern,
+        question=question,
+        client=client,  # type: ignore[arg-type]
+    )
+    repo.append_clarification(
+        db,
+        session_id=session.id,
+        concern_id=concern_id,
+        persona_id=current.persona.id,
+        seq=used,
+        question=question,
+        reply=reply,
+    )
+    db.flush()
+
+    return ClarificationResult(
+        persona_id=current.persona.id,
+        concern_id=concern_id,
+        question=question,
+        reply=reply,
+        remaining=MAX_CLARIFICATIONS_PER_CONCERN - used - 1,
+        prompt=current,
+    )

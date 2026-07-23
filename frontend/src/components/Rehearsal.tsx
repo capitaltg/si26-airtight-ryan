@@ -5,7 +5,7 @@
 
 import { useEffect, useRef, useState } from "react"
 
-import { useCreateSession, useSubmitAnswer } from "../api/client"
+import { useAskClarification, useCreateSession, useSubmitAnswer } from "../api/client"
 import { prettify } from "../lib"
 import type { Meter, Prompt, Stage, TranscriptTurn } from "../types"
 import { AfterActionReport } from "./AfterActionReport"
@@ -28,14 +28,24 @@ export function Rehearsal() {
   const [pending, setPending] = useState<{ prompt: Prompt; answer: string } | null>(null)
   const [stage, setStage] = useState<Stage>("extracting")
   const [elapsed, setElapsed] = useState(0)
+  // Clarifications left on the current concern. null = not yet asked (full
+  // allowance); reset whenever the active concern changes.
+  const [clarifyRemaining, setClarifyRemaining] = useState<number | null>(null)
 
   const create = useCreateSession()
   const submit = useSubmitAnswer(sessionId)
+  const clarify = useAskClarification(sessionId)
 
   const transcriptEndRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [transcript, done, pending, stage])
+
+  // A new concern gets a fresh clarification allowance; drop the stale counter
+  // when the active prompt moves to a different concern.
+  useEffect(() => {
+    setClarifyRemaining(null)
+  }, [prompt?.concern_id])
 
   // Elapsed-seconds clock: runs only while a turn is pending, reset on each start.
   useEffect(() => {
@@ -109,6 +119,38 @@ export function Rehearsal() {
         onError: () => setPending(null),
       },
     )
+  }
+
+  function sendClarification() {
+    const question = draft.trim()
+    if (!question || !prompt || clarify.isPending || clarifyRemaining === 0) return
+    const asked = prompt
+    clarify.mutate(question, {
+      onSuccess: (res) => {
+        // Append the exchange marked not scored. Deliberately do NOT touch
+        // meters, prompt, or done: the meter is unmoved and the same prompt
+        // stays active, so the presenter still owes a real answer.
+        setTranscript((prev) => [
+          ...prev,
+          {
+            key: prev.length,
+            personaId: res.persona_id,
+            concernId: res.concern_id,
+            isFollowUp: asked.is_follow_up,
+            prompt: asked.prompt,
+            answer: question,
+            reply: res.reply,
+            rationale: "",
+            supportDelta: 0,
+            matchedRows: [],
+            capped: false,
+            scored: false,
+          },
+        ])
+        setClarifyRemaining(res.remaining)
+        setDraft("")
+      },
+    })
   }
 
   // Not started yet: a single call to action.
@@ -244,21 +286,42 @@ export function Rehearsal() {
                   rows={4}
                   placeholder="Your answer… (⌘/Ctrl+Enter to submit)"
                   className="w-full resize-y rounded-md border border-slate-300 p-3 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
-                  disabled={submit.isPending}
+                  disabled={submit.isPending || clarify.isPending}
                 />
-                <div className="flex items-center justify-between">
-                  {submit.isError ? (
-                    <span className="text-sm text-red-700">{(submit.error as Error).message}</span>
-                  ) : (
-                    <span />
-                  )}
-                  <button
-                    onClick={sendAnswer}
-                    disabled={submit.isPending || !draft.trim()}
-                    className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:opacity-50"
-                  >
-                    {submit.isPending ? "Scoring…" : "Submit"}
-                  </button>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm">
+                    {submit.isError ? (
+                      <span className="text-red-700">{(submit.error as Error).message}</span>
+                    ) : clarify.isError ? (
+                      <span className="text-red-700">{(clarify.error as Error).message}</span>
+                    ) : clarifyRemaining === 0 ? (
+                      <span className="text-slate-400">
+                        No clarifications left on this concern.
+                      </span>
+                    ) : null}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={sendClarification}
+                      disabled={
+                        submit.isPending ||
+                        clarify.isPending ||
+                        clarifyRemaining === 0 ||
+                        !draft.trim()
+                      }
+                      title="Ask the evaluator what they mean, without being scored"
+                      className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      {clarify.isPending ? "Asking…" : "Ask a clarifying question"}
+                    </button>
+                    <button
+                      onClick={sendAnswer}
+                      disabled={submit.isPending || clarify.isPending || !draft.trim()}
+                      className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:opacity-50"
+                    >
+                      {submit.isPending ? "Scoring…" : "Submit"}
+                    </button>
+                  </div>
                 </div>
               </div>
             )
