@@ -18,6 +18,14 @@ def test_load_content_returns_full_bundle() -> None:
     assert content.rubric.cap_ceiling == 25  # computed from the red_line row's cap
 
 
+def test_rubric_rows_are_in_non_descending_order() -> None:
+    content = load_content()
+    values = [row.support_value for row in content.rubric.rows]
+    assert values == sorted(values), (
+        f"rubric rows must ascend by support_value, got {values}"
+    )
+
+
 def test_rubric_cap_lives_on_the_red_line_row() -> None:
     content = load_content()
     rows = {row.id: row for row in content.rubric.rows}
