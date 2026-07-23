@@ -45,6 +45,16 @@ export interface AnswerResponse {
   done: boolean
 }
 
+// A clarification is a non-scored turn: the evaluator answers a clarifying
+// question, the meter does not move, and the same prompt stays active.
+export interface ClarifyResponse {
+  reply: string
+  persona_id: string
+  concern_id: string
+  remaining: number // clarifications left on this concern
+  prompt: Prompt // unchanged active prompt
+}
+
 // --- disclosed rubric panel (GET /content/rubric) ---
 
 export interface RubricRow {
@@ -103,6 +113,13 @@ export interface ScoredFinding {
   detail: string
 }
 
+export interface ClarificationLine {
+  persona_id: string
+  concern_id: string
+  question: string
+  reply: string
+}
+
 export interface NarrativeSection {
   scored: boolean
   header: string
@@ -118,6 +135,7 @@ export interface Report {
   dodge_counts_by_type: Record<string, number>
   contradiction_count: number
   findings: ScoredFinding[]
+  clarifications: ClarificationLine[]
   narrative: NarrativeSection
 }
 
@@ -135,4 +153,7 @@ export interface TranscriptTurn {
   supportDelta: number
   matchedRows: string[]
   capped: boolean
+  // A clarification turn is not scored: ChatTurn branches on this to suppress the
+  // delta badge and rubric chips. Absent/true means a normal scored turn.
+  scored?: boolean
 }

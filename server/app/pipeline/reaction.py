@@ -109,6 +109,57 @@ def build_reaction_prompt(
     )
 
 
+def build_clarification_prompt(
+    *,
+    persona: PersonaDefinition,
+    concern: Concern,
+    question: str,
+) -> str:
+    """Assemble the score-free clarification prompt.
+
+    Deliberately omits ``_render_score`` and ``_render_extraction_summary``:
+    there is no score and nothing was extracted. The evaluator answers the
+    presenter's clarifying question in character without evaluating, scoring, or
+    judging the presenter — the presenter still owes a real answer afterward.
+    """
+    return "\n\n".join(
+        [
+            "You are an evaluator in an oral-defense rehearsal. The presenter has "
+            "asked you a clarifying question about what you are looking for. Answer "
+            "it briefly and in character. This is NOT a scored answer: you are not "
+            "evaluating, scoring, or judging the presenter, and asking is not a "
+            "dodge. Do not assign or mention any score.",
+            "## Evaluator persona",
+            _render_persona(persona),
+            "## Concern under discussion",
+            f"{concern.concern_id}: {concern.core_ask}",
+            "## The presenter's clarifying question",
+            question,
+            "## Your task",
+            "Answer the clarifying question in this evaluator's voice: say what you "
+            "are actually looking for on this concern, briefly. Then make clear you "
+            "still expect a real answer to the original ask. Write the way a real "
+            "evaluator speaks: plain and direct, short sentences. Do not use em "
+            "dashes. Do not pad with three-part lists or promotional adjectives.",
+        ]
+    )
+
+
+def run_clarification(
+    *,
+    persona: PersonaDefinition,
+    concern: Concern,
+    question: str,
+    client: BedrockClient,
+) -> str:
+    """Plain-text clarification reply. No tool-use, no ``PersonaReaction``, no
+    scoring artifacts — just the ``react`` path, so nothing here can move a
+    number."""
+    return client.react(
+        build_clarification_prompt(persona=persona, concern=concern, question=question)
+    )
+
+
 def run_reaction(
     *,
     persona: PersonaDefinition,

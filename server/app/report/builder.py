@@ -23,7 +23,7 @@ from collections import Counter
 from typing import Protocol
 
 from app.content.loader import Content
-from app.db.models import PersonaMeter, Turn
+from app.db.models import Clarification, PersonaMeter, Turn
 from app.schemas.content import Rubric
 from app.schemas.extraction import (
     Addressed,
@@ -33,6 +33,7 @@ from app.schemas.extraction import (
     Verdict,
 )
 from app.schemas.report import (
+    ClarificationLine,
     CoverageCounts,
     NarrativeSection,
     PersonaLine,
@@ -111,8 +112,13 @@ def build_scored_report(
     meters: list[PersonaMeter],
     concern_statuses: dict[str, str],
     content: Content,
+    clarifications: list[Clarification] | None = None,
 ) -> ScoredReport:
-    """Render the deterministic, code-owned part of the after-action report."""
+    """Render the deterministic, code-owned part of the after-action report.
+
+    ``clarifications`` are purely additive: they are non-scored exchanges shown
+    for auditability and never touch any stat above.
+    """
     values = _row_values(content.rubric)
 
     extractions = [Extraction.model_validate(t.extraction_json) for t in turns]
@@ -165,6 +171,15 @@ def build_scored_report(
         dodge_counts_by_type=dict(sorted(dodge_types.items())),
         contradiction_count=contradiction_count,
         findings=findings,
+        clarifications=[
+            ClarificationLine(
+                persona_id=c.persona_id,
+                concern_id=c.concern_id,
+                question=c.question,
+                reply=c.reply,
+            )
+            for c in (clarifications or [])
+        ],
     )
 
 
@@ -217,6 +232,7 @@ def build_report(
     concern_statuses: dict[str, str],
     content: Content,
     client: ReactClient,
+    clarifications: list[Clarification] | None = None,
 ) -> Report:
     """Build the full report: the deterministic scored part plus the labeled narrative."""
     scored = build_scored_report(
@@ -226,6 +242,7 @@ def build_report(
         meters=meters,
         concern_statuses=concern_statuses,
         content=content,
+        clarifications=clarifications,
     )
     narrative = render_narrative(scored, content, client)
     return Report(**scored.model_dump(), narrative=narrative)

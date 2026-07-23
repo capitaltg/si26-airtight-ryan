@@ -25,7 +25,7 @@ from app.content.loader import Content
 from app.db import repo
 from app.db.models import RehearsalSession
 from app.pipeline import orchestrator
-from app.pipeline.orchestrator import SessionComplete
+from app.pipeline.orchestrator import ClarificationCapReached, SessionComplete
 from app.report.builder import build_report
 from app.schemas.report import Report
 
@@ -74,6 +74,18 @@ class AnswerResponse(BaseModel):
     meters: list[MeterDTO]
     next_prompt: PromptDTO | None
     done: bool
+
+
+class ClarifyRequest(BaseModel):
+    question: str
+
+
+class ClarifyResponse(BaseModel):
+    reply: str
+    persona_id: str
+    concern_id: str
+    remaining: int  # clarifications left on this concern
+    prompt: PromptDTO  # unchanged active prompt
 
 
 def _meters(db: Session, session_id: uuid.UUID) -> list[MeterDTO]:
@@ -168,6 +180,34 @@ def submit_answer(
     except SessionComplete as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _answer_payload(db, session.id, result)
+
+
+@router.post("/{session_id}/clarify", response_model=ClarifyResponse)
+def clarify(
+    session_id: uuid.UUID,
+    body: ClarifyRequest,
+    db: Session = Depends(get_db),
+    content: Content = Depends(get_content),
+    client: BedrockClient = Depends(get_bedrock_client),
+) -> ClarifyResponse:
+    """Answer a clarifying question without scoring the turn. The active prompt is
+    echoed back unchanged; no meter, ledger, agenda, or attempt count moves."""
+    session = _require_session(db, session_id)
+    try:
+        result = orchestrator.ask_clarification(db, content, client, session, body.question)
+    except SessionComplete as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ClarificationCapReached as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    prompt = _prompt_dto(result.prompt)
+    assert prompt is not None  # ask_clarification returns the active (non-None) prompt
+    return ClarifyResponse(
+        reply=result.reply,
+        persona_id=result.persona_id,
+        concern_id=result.concern_id,
+        remaining=result.remaining,
+        prompt=prompt,
+    )
 
 
 # Sentinel put on the queue by the worker thread when the stream is exhausted.
@@ -277,4 +317,5 @@ def get_report(
         concern_statuses=repo.get_concern_statuses(db, session_id),
         content=content,
         client=client,
+        clarifications=repo.get_clarifications(db, session_id),
     )

@@ -121,6 +121,7 @@ airtight/
 │  ├─ package.json
 │  ├─ postcss.config.js
 │  ├─ tailwind.config.js
+│  ├─ tsconfig.app.json
 │  ├─ tsconfig.json
 │  ├─ tsconfig.node.json
 │  └─ vite.config.ts
@@ -130,7 +131,8 @@ airtight/
 ├─ server/                       # FastAPI + Pydantic v2 + SQLAlchemy + Alembic
 │  ├─ alembic/
 │  │  ├─ versions/
-│  │  │  └─ 0001_init.py
+│  │  │  ├─ 0001_init.py
+│  │  │  └─ 0002_clarifications.py
 │  │  ├─ env.py
 │  │  └─ script.py.mako
 │  ├─ app/

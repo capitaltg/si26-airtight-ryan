@@ -208,6 +208,46 @@ def test_report_is_code_rendered_with_labeled_narrative(client: TestClient) -> N
     assert body["narrative"]["text"]
 
 
+def test_clarify_does_not_move_meter_and_keeps_prompt(client: TestClient) -> None:
+    session_id = client.post("/sessions").json()["id"]
+    before = client.get(f"/sessions/{session_id}").json()
+
+    r = client.post(f"/sessions/{session_id}/clarify", json={"question": "What do you mean?"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["reply"]
+    assert body["remaining"] == 1
+    # unchanged active prompt echoed back
+    assert body["prompt"]["concern_id"] == before["prompt"]["concern_id"]
+
+    # meter and agenda untouched after the clarification
+    after = client.get(f"/sessions/{session_id}").json()
+    assert after["meters"] == before["meters"]
+    assert after["prompt"]["concern_id"] == before["prompt"]["concern_id"]
+    assert after["concern_status"] == before["concern_status"]
+
+
+def test_clarify_cap_returns_429(client: TestClient) -> None:
+    session_id = client.post("/sessions").json()["id"]
+
+    first = client.post(f"/sessions/{session_id}/clarify", json={"question": "q1"})
+    assert first.json()["remaining"] == 1
+    second = client.post(f"/sessions/{session_id}/clarify", json={"question": "q2"})
+    assert second.json()["remaining"] == 0
+    third = client.post(f"/sessions/{session_id}/clarify", json={"question": "q3"})
+    assert third.status_code == 429
+
+
+def test_report_lists_clarifications(client: TestClient) -> None:
+    session_id = client.post("/sessions").json()["id"]
+    client.post(f"/sessions/{session_id}/clarify", json={"question": "Which vehicle?"})
+
+    body = client.get(f"/sessions/{session_id}/report").json()
+    assert len(body["clarifications"]) == 1
+    assert body["clarifications"][0]["question"] == "Which vehicle?"
+    assert body["clarifications"][0]["reply"]
+
+
 def test_unknown_session_is_404(client: TestClient) -> None:
     r = client.get("/sessions/00000000-0000-0000-0000-000000000000")
     assert r.status_code == 404
