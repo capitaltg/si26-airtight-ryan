@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import uuid
 from collections.abc import AsyncIterator
 from typing import cast
@@ -27,6 +28,8 @@ from app.pipeline import orchestrator
 from app.pipeline.orchestrator import SessionComplete
 from app.report.builder import build_report
 from app.schemas.report import Report
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -211,11 +214,16 @@ async def submit_answer_stream(
                     emit(ev)
             db.commit()
         except SessionComplete as exc:
+            # Domain-meaningful and already surfaced verbatim by /answer (409); safe
+            # to pass through so the frontend shows the same "session complete" text.
             db.rollback()
             emit({"error": str(exc)})
-        except Exception as exc:  # noqa: BLE001 — surface any pipeline failure as an SSE error frame
+        except Exception:
+            # Mirror /answer's opaque 500: log the real error server-side, never
+            # leak internal exception text to the client.
             db.rollback()
-            emit({"error": str(exc)})
+            logger.exception("streaming answer failed for session %s", session_id)
+            emit({"error": "internal error"})
         finally:
             db.close()
             emit(_DONE)
