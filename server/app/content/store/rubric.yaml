@@ -15,15 +15,15 @@ rows:
     description: >-
       Dodged the main question. Costs -2 this turn, but no cap, so the meter can
       recover.
-  - id: unsubstantiated
-    support_value: 0
-    description: Unsubstantiated claim or generic reassurance.
   - id: false_fact
     support_value: -1
     description: Stated a fact that turned out false.
   - id: contradiction
     support_value: -1
     description: Contradicted an earlier answer or the written proposal.
+  - id: unsubstantiated
+    support_value: 0
+    description: Unsubstantiated claim or generic reassurance.
   - id: approach_cited
     support_value: 1
     description: Cited a concrete, compliant piece of the approach.
