@@ -25,7 +25,11 @@ export function Rehearsal() {
   const [showReport, setShowReport] = useState(false)
   // Optimistic pending turn: the submitted answer + which prompt it answered,
   // shown with a live stage stepper while the backend scores it.
-  const [pending, setPending] = useState<{ prompt: Prompt; answer: string } | null>(null)
+  const [pending, setPending] = useState<{
+    prompt: Prompt
+    answer: string
+    kind: "answer" | "clarify"
+  } | null>(null)
   const [stage, setStage] = useState<Stage>("extracting")
   const [elapsed, setElapsed] = useState(0)
   // Clarifications left on the current concern. null = not yet asked (full
@@ -86,7 +90,7 @@ export function Rehearsal() {
     const asked = prompt // capture the prompt this answer responds to
     // Show the answer immediately with a stepper starting at the first stage;
     // `onStage` advances it as the SSE stream reports each pipeline boundary.
-    setPending({ prompt: asked, answer })
+    setPending({ prompt: asked, answer, kind: "answer" })
     setStage("extracting")
     submit.mutate(
       { answer, onStage: setStage },
@@ -125,6 +129,9 @@ export function Rehearsal() {
     const question = draft.trim()
     if (!question || !prompt || clarify.isPending || clarifyRemaining === 0) return
     const asked = prompt
+    // Same optimistic placeholder as a scored answer: the question lands
+    // immediately with a live spinner while the evaluator replies.
+    setPending({ prompt: asked, answer: question, kind: "clarify" })
     clarify.mutate(question, {
       onSuccess: (res) => {
         // Append the exchange marked not scored. Deliberately do NOT touch
@@ -149,7 +156,11 @@ export function Rehearsal() {
         ])
         setClarifyRemaining(res.remaining)
         setDraft("")
+        setPending(null)
       },
+      // Clear the placeholder; clarify.isError red text surfaces the message and
+      // the draft stays intact for a retry.
+      onError: () => setPending(null),
     })
   }
 
@@ -232,6 +243,7 @@ export function Rehearsal() {
                 answer={pending.answer}
                 stage={stage}
                 elapsed={elapsed}
+                kind={pending.kind}
               />
             )}
             <div ref={transcriptEndRef} />
@@ -259,10 +271,12 @@ export function Rehearsal() {
               )}
             </div>
           ) : (
-            // Hidden while scoring: the pending turn in the transcript carries the
-            // live stage stepper, so the input box would only duplicate the wait.
+            // Hidden while a turn is pending (scored answer or clarification):
+            // the pending turn in the transcript carries the live spinner, so the
+            // input box would only duplicate the wait.
             prompt &&
-            !submit.isPending && (
+            !submit.isPending &&
+            !clarify.isPending && (
               <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-center gap-2 text-sm">
                   <span className="font-semibold text-slate-800">
