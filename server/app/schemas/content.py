@@ -56,9 +56,21 @@ class RubricRow(BaseModel):
     id: str
     description: str
     support_value: int
+    cap: int | None = None  # if set, crossing this row pins the meter at <= cap, sticky forever
 
 
 class Rubric(BaseModel):
     version: int
     rows: list[RubricRow] = Field(default_factory=list)
-    cap_ceiling: int = 25  # sticky per-persona ceiling once a red line is crossed
+
+    @property
+    def cap_ceiling(self) -> int:
+        """Sticky per-persona ceiling once a capping row is crossed.
+
+        Derived from whichever row carries a ``cap`` (the red line). Falls back
+        to 100 (no effective ceiling — the meter is already clamped to <=100).
+        """
+        for row in self.rows:
+            if row.cap is not None:
+                return row.cap
+        return 100

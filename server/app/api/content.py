@@ -26,7 +26,6 @@ class ConcernDisclosureDTO(BaseModel):
 
 class RubricDisclosureDTO(BaseModel):
     version: int
-    cap_ceiling: int
     rows: list[RubricRow]
     concerns: list[ConcernDisclosureDTO]
 
@@ -35,7 +34,6 @@ class RubricDisclosureDTO(BaseModel):
 def get_rubric(content: Content = Depends(get_content)) -> RubricDisclosureDTO:
     return RubricDisclosureDTO(
         version=content.rubric.version,
-        cap_ceiling=content.rubric.cap_ceiling,
         rows=content.rubric.rows,
         concerns=[
             ConcernDisclosureDTO(
