@@ -7,7 +7,7 @@ stored in the DB.
 
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class Requires(StrEnum):
@@ -63,12 +63,26 @@ class Rubric(BaseModel):
     version: int
     rows: list[RubricRow] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def _red_line_must_carry_a_cap(self) -> "Rubric":
+        """Guard the scoring contract: the red_line row pins the meter.
+
+        ``score_turn`` returns ``capped=True`` on a red line, but the pin is
+        enforced only through ``cap_ceiling`` in ``apply_to_meter``. If the
+        red_line row loses its ``cap`` the ceiling would silently fall back to
+        100 and never pin, so require the cap here instead of failing quietly.
+        """
+        red_line = next((row for row in self.rows if row.id == "red_line"), None)
+        if red_line is not None and red_line.cap is None:
+            raise ValueError("the red_line rubric row must carry a cap")
+        return self
+
     @property
     def cap_ceiling(self) -> int:
         """Sticky per-persona ceiling once a capping row is crossed.
 
         Derived from whichever row carries a ``cap`` (the red line). Falls back
-        to 100 (no effective ceiling — the meter is already clamped to <=100).
+        to 100 (no effective ceiling, since the meter is already clamped to <=100).
         """
         for row in self.rows:
             if row.cap is not None:

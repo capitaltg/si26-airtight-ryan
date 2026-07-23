@@ -63,6 +63,16 @@ def test_malformed_rubric_raises(tmp_path: Path) -> None:
         load_content(store)
 
 
+def test_red_line_without_a_cap_raises(tmp_path: Path) -> None:
+    store = tmp_path / "store"
+    shutil.copytree(STORE, store)
+    rubric = store / "rubric.yaml"
+    # dropping the red_line cap would silently defeat the sticky pin; reject it.
+    rubric.write_text(rubric.read_text().replace("    cap: 25\n", ""))
+    with pytest.raises(ValidationError):
+        load_content(store)
+
+
 def test_missing_file_raises(tmp_path: Path) -> None:
     store = tmp_path / "store"
     shutil.copytree(STORE, store)
