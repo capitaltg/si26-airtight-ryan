@@ -15,7 +15,16 @@ from app.pipeline.reaction import (
     build_reaction_prompt,
     run_reaction,
 )
-from app.schemas.extraction import Backing, Claim, ClaimType, Extraction
+from app.schemas.extraction import (
+    Backing,
+    Claim,
+    ClaimType,
+    Dodge,
+    DodgeType,
+    Extraction,
+    RedLineHit,
+    RedLineSourceKind,
+)
 from app.schemas.reaction import PersonaReaction
 from app.schemas.scoring import ScoreOutput
 
@@ -27,14 +36,18 @@ class FakeBedrockClient:
 
     def extract(
         self,
-        prompt: str,
+        content: str | list,
         *,
         content_schema: type[BaseModel],
         tool_name: str,
         max_tokens: int = 4096,
     ) -> BaseModel:
         self.calls.append(
-            {"prompt": prompt, "content_schema": content_schema, "tool_name": tool_name}
+            {
+                "content": content,
+                "content_schema": content_schema,
+                "tool_name": tool_name,
+            }
         )
         return self._result
 
@@ -126,6 +139,51 @@ def test_prompt_states_the_cap_when_capped() -> None:
     assert "red_line" in prompt
     # the reply must know the red line was crossed
     assert "cap" in prompt.lower()
+
+
+def test_prompt_summarizes_extraction_without_full_json_dump() -> None:
+    persona, concern = _fixture()
+    score = ScoreOutput(support_delta=-2, matched_rows=["red_line"], capped=True)
+    extraction = Extraction(
+        claims=[
+            Claim(
+                text="Named PM leads the effort.",
+                type=ClaimType.commitment,
+                backing=Backing.backed,
+                span="a named PM with twelve years",
+            )
+        ],
+        dodges=[
+            Dodge(
+                sub_question_id="staffing",
+                type=DodgeType.topic_switch,
+                evidence="pivoted to timeline",
+            )
+        ],
+        red_line_hits=[
+            RedLineHit(
+                source_id="key_personnel",
+                source_kind=RedLineSourceKind.concern_red_line,
+                span="we may substitute leads",
+                why="Named key personnel are not guaranteed.",
+            )
+        ],
+    )
+
+    prompt = build_reaction_prompt(
+        persona=persona,
+        concern=concern,
+        extraction=extraction,
+        score=score,
+    )
+
+    # the qualitative shape the reply references is present
+    assert "Named PM leads the effort." in prompt
+    assert "topic_switch" in prompt
+    assert "Named key personnel are not guaranteed." in prompt
+    # the verbose full-object JSON dump is gone
+    assert '"sub_question_coverage"' not in prompt
+    assert '"backing":' not in prompt
 
 
 def test_run_reaction_returns_validated_persona_reaction() -> None:

@@ -34,6 +34,28 @@ def _render_persona(persona: PersonaDefinition) -> str:
     )
 
 
+def _render_extraction_summary(extraction: Extraction) -> str:
+    """A compact view of just what the reply references: claim texts, dodge types,
+    and red-line reasons.
+
+    The number is already locked and passed via ``_render_score``, so the reply
+    only needs the qualitative shape of the answer — not the full ``Extraction``
+    JSON (sub-question coverage, fact checks, consistency flags, per-field
+    scaffolding), which only padded the second Bedrock call.
+    """
+    lines: list[str] = []
+    if extraction.claims:
+        lines.append("Claims:")
+        lines.extend(f"  - {claim.text}" for claim in extraction.claims)
+    if extraction.dodges:
+        lines.append("Dodges:")
+        lines.extend(f"  - {dodge.type.value}" for dodge in extraction.dodges)
+    if extraction.red_line_hits:
+        lines.append("Red lines crossed:")
+        lines.extend(f"  - {hit.why}" for hit in extraction.red_line_hits)
+    return "\n".join(lines) if lines else "(nothing notable extracted from the answer)"
+
+
 def _render_score(score: ScoreOutput) -> str:
     lines = [
         "The turn has already been scored by code. You cannot change it.",
@@ -75,7 +97,7 @@ def build_reaction_prompt(
             "## Locked score for the presenter's latest answer",
             _render_score(score),
             "## What the extraction found in the answer",
-            extraction.model_dump_json(indent=2),
+            _render_extraction_summary(extraction),
             "## Your task",
             "Respond in this evaluator's voice, reacting to the answer in a way that "
             "matches the locked score, then give a one-line rationale tying your "

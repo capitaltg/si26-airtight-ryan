@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from app.bedrock.client import BedrockClient
 from app.content.loader import Content
@@ -78,18 +79,17 @@ def _render_ledger(prior_claims: Sequence[ClaimLedger]) -> str:
     )
 
 
-def build_extraction_prompt(
+def build_extraction_static_prefix(
     *,
-    answer: str,
-    concern: Concern,
     persona: PersonaDefinition,
     content: Content,
-    prior_claims: Sequence[ClaimLedger],
 ) -> str:
-    """Assemble the extraction prompt, rehydrating all authored context verbatim.
+    """The turn-invariant head of the extraction prompt: the system instructions,
+    the persona block, the RFP, and the proposal.
 
-    Prior claim spans are included exactly as stored so the model can flag a
-    Tier-0 contradiction against something the presenter already committed to.
+    This prefix is byte-identical across every turn of a given persona's session,
+    so it carries the Bedrock prompt-cache breakpoint. It clears Sonnet 4.5's
+    1024-token minimum cacheable prefix on the RFP + proposal alone.
     """
     return "\n\n".join(
         [
@@ -107,6 +107,25 @@ def build_extraction_prompt(
             content.rfp_text,
             "## Written proposal",
             content.proposal_text,
+        ]
+    )
+
+
+def build_extraction_dynamic_suffix(
+    *,
+    answer: str,
+    concern: Concern,
+    prior_claims: Sequence[ClaimLedger],
+) -> str:
+    """The turn-varying tail: the active concern, the running claim ledger, and
+    the answer under evaluation.
+
+    This is the anti-drift rebuild — it is sent fresh, uncached, every turn.
+    Prior claim spans are included exactly as stored so the model can flag a
+    Tier-0 contradiction against something the presenter already committed to.
+    """
+    return "\n\n".join(
+        [
             "## Active concern",
             _render_concern(concern),
             "## Prior claim ledger (verbatim spans; flag Tier-0 contradictions "
@@ -114,6 +133,29 @@ def build_extraction_prompt(
             _render_ledger(prior_claims),
             "## Presenter's answer to classify",
             answer,
+        ]
+    )
+
+
+def build_extraction_prompt(
+    *,
+    answer: str,
+    concern: Concern,
+    persona: PersonaDefinition,
+    content: Content,
+    prior_claims: Sequence[ClaimLedger],
+) -> str:
+    """Assemble the full extraction prompt (prefix + suffix) as one string.
+
+    Kept as the single source of the assembled text; the reassembly here is
+    byte-identical to the two blocks ``run_extraction`` sends to Bedrock.
+    """
+    return "\n\n".join(
+        [
+            build_extraction_static_prefix(persona=persona, content=content),
+            build_extraction_dynamic_suffix(
+                answer=answer, concern=concern, prior_claims=prior_claims
+            ),
         ]
     )
 
@@ -128,14 +170,28 @@ def run_extraction(
     client: BedrockClient,
 ) -> ExtractionResult:
     """Build the prompt, force the ``Extraction`` schema through the tool, and
-    attach code-computed conciseness."""
-    prompt = build_extraction_prompt(
-        answer=answer,
-        concern=concern,
-        persona=persona,
-        content=content,
-        prior_claims=prior_claims,
+    attach code-computed conciseness.
+
+    The prompt goes out as two content blocks: a cached static prefix (persona +
+    RFP + proposal) and an uncached dynamic suffix (concern + ledger + answer).
+    The model sees the exact same text as a single string would produce, so the
+    extraction — and therefore the score — is unchanged.
+    """
+    content_blocks: list[dict[str, Any]] = [
+        {
+            "type": "text",
+            "text": build_extraction_static_prefix(persona=persona, content=content),
+            "cache_control": {"type": "ephemeral"},
+        },
+        {
+            "type": "text",
+            "text": build_extraction_dynamic_suffix(
+                answer=answer, concern=concern, prior_claims=prior_claims
+            ),
+        },
+    ]
+    extraction = client.extract(
+        content_blocks, content_schema=Extraction, tool_name=TOOL_NAME
     )
-    extraction = client.extract(prompt, content_schema=Extraction, tool_name=TOOL_NAME)
     conciseness = compute_conciseness(answer, extraction)
     return ExtractionResult(extraction=extraction, conciseness=conciseness)

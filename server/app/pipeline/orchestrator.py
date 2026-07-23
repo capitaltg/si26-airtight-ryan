@@ -23,6 +23,8 @@ session is complete — the turn cap guarantees the loop halts.
 
 from __future__ import annotations
 
+import logging
+import time
 from collections import Counter
 from dataclasses import dataclass
 
@@ -37,6 +39,8 @@ from app.pipeline.scoring import apply_to_meter, score_turn
 from app.schemas.content import Concern, PersonaDefinition
 from app.schemas.extraction import Addressed, Extraction
 from app.schemas.reaction import PersonaReaction
+
+logger = logging.getLogger(__name__)
 
 # Fixed persona turn order. The walk below depends on it to assign each concern a
 # single owner; changing it changes which persona presses overlapping concerns.
@@ -213,6 +217,7 @@ def submit_answer(
     persona, concern = current.persona, current.concern
 
     prior_claims = repo.get_claims(db, session.id)
+    extraction_start = time.perf_counter()
     extraction = run_extraction(
         answer=answer,
         concern=concern,
@@ -221,6 +226,11 @@ def submit_answer(
         prior_claims=prior_claims,
         client=client,  # type: ignore[arg-type]
     ).extraction
+    logger.info(
+        "extraction (%s) took %.0f ms",
+        persona.id,
+        (time.perf_counter() - extraction_start) * 1000,
+    )
 
     score = score_turn(extraction, content.rubric)
 
@@ -236,12 +246,18 @@ def submit_answer(
     )
 
     # Reaction runs only after the number is locked; it can never move it.
+    reaction_start = time.perf_counter()
     reaction = run_reaction(
         persona=persona,
         concern=concern,
         extraction=extraction,
         score=score,
         client=client,  # type: ignore[arg-type]
+    )
+    logger.info(
+        "reaction (%s) took %.0f ms",
+        persona.id,
+        (time.perf_counter() - reaction_start) * 1000,
     )
 
     turn_index = len(repo.get_turns(db, session.id))
