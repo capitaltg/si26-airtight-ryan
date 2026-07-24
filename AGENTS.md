@@ -126,6 +126,10 @@ airtight/
 │  ├─ tsconfig.node.json
 │  └─ vite.config.ts
 ├─ scripts/
+│  ├─ replay/
+│  │  ├─ README.md
+│  │  └─ scenario-mixed.json
+│  ├─ replay_session.py
 │  ├─ smoke_bedrock.py
 │  └─ update_structure.py
 ├─ server/                       # FastAPI + Pydantic v2 + SQLAlchemy + Alembic
