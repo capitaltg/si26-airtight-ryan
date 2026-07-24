@@ -17,10 +17,8 @@ services:
 
   api:
     build: ./server
-    # Apply migrations before serving so a fresh Postgres has the schema. Without
-    # this the app starts but every DB-backed route (e.g. POST /sessions) 500s on
-    # "relation does not exist".
-    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    # Migrations run in the image CMD (see server/Dockerfile), so the schema is
+    # brought to head before uvicorn serves — no command override needed here.
     # Bedrock creds + pinned model id come from the repo-root .env (gitignored).
     # The DATABASE_URL override wins over .env's localhost value (environment
     # beats env_file) so the api reaches the compose postgres service by name.

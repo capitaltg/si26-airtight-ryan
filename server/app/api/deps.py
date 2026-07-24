@@ -10,6 +10,7 @@ from __future__ import annotations
 from fastapi import Request
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.bedrock.cache import DbResponseCache
 from app.bedrock.client import BedrockClient
 from app.content.loader import Content
 from app.db.session import SessionLocal, get_db  # re-exported for routers to depend on
@@ -23,8 +24,11 @@ def get_content(request: Request) -> Content:
 
 def get_bedrock_client() -> BedrockClient:
     # Constructed per request; the AWS credential chain is read lazily. Tests
-    # override this with a scripted fake.
-    return BedrockClient()
+    # override this with a scripted fake. The response cache pins the first
+    # output per exact request and replays it, so a rehearsal repeats identically
+    # despite temperature=0 not being reproducible on Bedrock; it opens its own
+    # short session per lookup/store off the same factory.
+    return BedrockClient(cache=DbResponseCache(SessionLocal))
 
 
 def get_session_factory() -> sessionmaker[Session]:

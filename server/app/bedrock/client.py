@@ -12,6 +12,7 @@ from typing import Any, Protocol, TypeVar, cast
 from anthropic import AnthropicBedrock
 from pydantic import BaseModel, ValidationError
 
+from app.bedrock.cache import ResponseCache, request_key
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -57,13 +58,23 @@ class Transport(Protocol):
 
 
 class BedrockClient:
-    def __init__(self, transport: Transport | None = None) -> None:
+    def __init__(
+        self,
+        transport: Transport | None = None,
+        *,
+        cache: ResponseCache | None = None,
+    ) -> None:
         # Credentials come from the standard AWS chain, never from code. The
         # cast is needed because the real client's `messages.create` is a set of
         # overloads rather than the **kwargs shape this wrapper calls it with.
         self._transport: Transport = transport or cast(
             Transport, AnthropicBedrock(aws_region=settings.aws_region)
         )
+        # When set, the first successful response for a given request is stored
+        # and replayed on later identical requests, so a rehearsal is repeatable
+        # despite temperature=0 not being reproducible on Bedrock. Left None (the
+        # golden suite and unit tests) means every call hits the transport.
+        self._cache = cache
 
     def extract(
         self,
@@ -84,11 +95,29 @@ class BedrockClient:
         blocks: list[dict[str, Any]] = (
             [{"type": "text", "text": content}] if isinstance(content, str) else content
         )
+        input_schema = content_schema.model_json_schema()
         tool = {
             "name": tool_name,
             "description": f"Record the structured {tool_name} for this turn.",
-            "input_schema": content_schema.model_json_schema(),
+            "input_schema": input_schema,
         }
+
+        key: str | None = None
+        if self._cache is not None:
+            key = request_key(
+                method="extract",
+                model=settings.bedrock_model_id,
+                max_tokens=max_tokens,
+                content=content,
+                tool_name=tool_name,
+                schema=input_schema,
+            )
+            cached = self._cache.get(key)
+            if cached is not None:
+                # Replay: re-validate the stored tool input so the returned
+                # object is byte-identical to the first run's, without a call.
+                return content_schema.model_validate(cached["tool_input"])
+
         last: Exception | None = None
 
         for _ in range(_ATTEMPTS):
@@ -118,14 +147,33 @@ class BedrockClient:
                 continue
 
             try:
-                return content_schema.model_validate(block.input)
+                validated = content_schema.model_validate(block.input)
             except ValidationError as exc:
                 last = exc
+                continue
+
+            # Only a validated success is cached; an invalid response is never
+            # pinned, so a later retry can still land a good result.
+            if self._cache is not None and key is not None:
+                self._cache.put(key, "extract", {"tool_input": block.input})
+            return validated
 
         raise ExtractionValidationError(str(last)) from last
 
     def react(self, prompt: str, *, max_tokens: int = 1024) -> str:
         """Plain-text persona reply. Runs only after the score already exists."""
+        key: str | None = None
+        if self._cache is not None:
+            key = request_key(
+                method="react",
+                model=settings.bedrock_model_id,
+                max_tokens=max_tokens,
+                content=prompt,
+            )
+            cached = self._cache.get(key)
+            if cached is not None:
+                return cast(str, cached["text"])
+
         response = self._transport.messages.create(
             model=settings.bedrock_model_id,
             max_tokens=max_tokens,
@@ -139,4 +187,8 @@ class BedrockClient:
             raise ExtractionValidationError(
                 f"reaction returned no text (stop_reason={getattr(response, 'stop_reason', None)})"
             )
+
+        # Cache only the non-empty success, mirroring extract.
+        if self._cache is not None and key is not None:
+            self._cache.put(key, "react", {"text": text})
         return text

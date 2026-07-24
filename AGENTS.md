@@ -126,13 +126,18 @@ airtight/
 │  ├─ tsconfig.node.json
 │  └─ vite.config.ts
 ├─ scripts/
+│  ├─ replay/
+│  │  ├─ README.md
+│  │  └─ scenario-mixed.json
+│  ├─ replay_session.py
 │  ├─ smoke_bedrock.py
 │  └─ update_structure.py
 ├─ server/                       # FastAPI + Pydantic v2 + SQLAlchemy + Alembic
 │  ├─ alembic/
 │  │  ├─ versions/
 │  │  │  ├─ 0001_init.py
-│  │  │  └─ 0002_clarifications.py
+│  │  │  ├─ 0002_clarifications.py
+│  │  │  └─ 0003_model_response_cache.py
 │  │  ├─ env.py
 │  │  └─ script.py.mako
 │  ├─ app/
@@ -143,6 +148,7 @@ airtight/
 │  │  │  └─ sessions.py
 │  │  ├─ bedrock/
 │  │  │  ├─ __init__.py
+│  │  │  ├─ cache.py
 │  │  │  └─ client.py
 │  │  ├─ content/
 │  │  │  ├─ store/
@@ -197,6 +203,7 @@ airtight/
 │  │  ├─ test_reaction.py
 │  │  ├─ test_repo.py
 │  │  ├─ test_report.py
+│  │  ├─ test_response_cache.py
 │  │  └─ test_scoring.py
 │  ├─ .dockerignore
 │  ├─ alembic.ini

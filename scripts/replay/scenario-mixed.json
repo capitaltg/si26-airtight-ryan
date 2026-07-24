@@ -1,0 +1,43 @@
+{
+  "name": "Mixed realistic run",
+  "notes": [
+    "A believable full rehearsal across all 8 agenda concerns: a clarify, clean passes, a coverage-gap follow-up that recovers, an over-claim, and a past_performance answer that keeps dodging and closes failed.",
+    "Answer text is drawn from docs/examples/example-sessions.md, keyed to each concern. operational_impact is authored from the fixed scenario facts because the doc has no clean satisfying example for it.",
+    "The exact classification/meter for a turn is decided live by the engine, not by this file. The live model is stricter than the doc's hand-authored labels: e.g. key_personnel's '18 years vs the proposal's 12' and risk's 'no real risks' tend to score red_line (terminal, caps the persona at 25), not the milder false_fact/dodge the doc shows. That is the engine owning the number; a scenario shapes inputs, never outcomes."
+  ],
+  "concerns": {
+    "technical_approach": {
+      "clarify": [
+        "Are you most interested in the hosting environment or the integration approach for the three downstream systems?"
+      ],
+      "answer": "We run on AWS GovCloud at FedRAMP Moderate. The Payments Engine, Benefits Portal, and data warehouse read case status over a versioned REST API, and under the hood it is microservices, PostgreSQL, and an event bus, the same architecture we shipped on the 1.8 million case Veterans Claims Office contract.",
+      "followup": "Under the hood it is containerized microservices with PostgreSQL as the system of record and an internal event bus between services, fronted by a React UI, the same architecture we shipped on the 1.8 million case Veterans Claims Office contract."
+    },
+    "key_personnel": {
+      "answer": "Karen Holloway has eighteen years of federal delivery and holds a PMP.",
+      "followup": "My mistake on the tenure earlier: twelve years, PMP since 2015, and she led the 1.8 million case Veterans Claims Office modernization full time. She is full time on this base period as well."
+    },
+    "transition": {
+      "answer": "Transition-in completes well within the 90 calendar days, with the Transition-In Plan inside 10 business days of award, and we'll make sure the handover goes smoothly and everyone stays productive.",
+      "followup": "A 60-day parallel run keeps every case live in both systems and reconciled daily, Meridian stays on for structured knowledge transfer through the first 30 days, and no adjudicator loses access at any point in the cutover."
+    },
+    "risk": {
+      "answer": "Honestly there aren't any real risks, the team has done this before and it will be fine, so there's nothing to mitigate.",
+      "followup": "Fair. Our top risk is migration data integrity across 42 million records, mitigated with three oldest-first waves, reconciliation after each wave, and a 60-day parallel run, the same pipeline that hit zero data loss on the 1.8 million case Veterans Claims Office contract."
+    },
+    "compliance_security": {
+      "answer": "We build to the NIST SP 800-53 moderate baseline on FedRAMP Moderate GovCloud, and we follow standard federal security practice throughout.",
+      "followup": "Yes. No production data enters the system until the ATO is granted; the roughly 120-day review runs on synthetic data only."
+    },
+    "cost_realism": {
+      "answer": "We staff 40 FTE at steady state, sized to the scope, and the price is firm-fixed across the base and both option years."
+    },
+    "past_performance": {
+      "answer": "We have a long track record of successful federal delivery at all scales, our clients are consistently satisfied, and quality is in our DNA.",
+      "followup": "We are confident our experience speaks for itself and that we are the right partner for this mission."
+    },
+    "operational_impact": {
+      "answer": "On cutover day adjudicators keep working without interruption: the legacy system stays live through the 60-day parallel run with daily reconciliation, so no one loses access to an in-flight case. Support is a staffed service desk with tiered incident response and on-call coverage through the first 30 days of cutover, with Meridian retained for knowledge transfer."
+    }
+  }
+}
