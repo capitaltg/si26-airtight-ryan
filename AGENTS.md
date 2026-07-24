@@ -132,7 +132,8 @@ airtight/
 │  ├─ alembic/
 │  │  ├─ versions/
 │  │  │  ├─ 0001_init.py
-│  │  │  └─ 0002_clarifications.py
+│  │  │  ├─ 0002_clarifications.py
+│  │  │  └─ 0003_model_response_cache.py
 │  │  ├─ env.py
 │  │  └─ script.py.mako
 │  ├─ app/
@@ -143,6 +144,7 @@ airtight/
 │  │  │  └─ sessions.py
 │  │  ├─ bedrock/
 │  │  │  ├─ __init__.py
+│  │  │  ├─ cache.py
 │  │  │  └─ client.py
 │  │  ├─ content/
 │  │  │  ├─ store/
@@ -197,6 +199,7 @@ airtight/
 │  │  ├─ test_reaction.py
 │  │  ├─ test_repo.py
 │  │  ├─ test_report.py
+│  │  ├─ test_response_cache.py
 │  │  └─ test_scoring.py
 │  ├─ .dockerignore
 │  ├─ alembic.ini

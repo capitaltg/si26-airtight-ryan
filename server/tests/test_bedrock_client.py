@@ -128,3 +128,93 @@ def test_react_raises_on_empty_text() -> None:
     transport = FakeTransport(_text_response(stop_reason="refusal"))
     with pytest.raises(ExtractionValidationError):
         BedrockClient(transport=transport).react("prompt")
+
+
+class DictCache:
+    """In-memory ``ResponseCache`` with first-write-wins ``put``, matching the
+    DB-backed cache's contract without a database."""
+
+    def __init__(self) -> None:
+        self.store: dict[str, dict] = {}
+
+    def get(self, key: str) -> dict | None:
+        return self.store.get(key)
+
+    def put(self, key: str, method: str, value: dict) -> None:
+        self.store.setdefault(key, value)
+
+
+def _other_valid_input() -> dict:
+    """A second, distinct valid extraction — stands in for the model returning
+    different output on an identical request (the bug this cache fixes)."""
+    return {
+        "claims": [
+            {
+                "text": "The team has run three prior federal case-management systems.",
+                "type": "commitment",
+                "backing": "backed",
+                "span": "we have delivered three federal case systems",
+            }
+        ]
+    }
+
+
+def test_extract_replays_first_response_for_identical_request() -> None:
+    # Transport is scripted to return DIFFERENT valid output on the two calls;
+    # with a cache the second identical request must replay the first and not
+    # touch the transport at all.
+    transport = FakeTransport(
+        _tool_response(_valid_input()), _tool_response(_other_valid_input())
+    )
+    client = BedrockClient(transport=transport, cache=DictCache())
+
+    first = _extract(client)
+    second = _extract(client)
+
+    assert first == second
+    assert len(transport.calls) == 1  # second answer came from the cache
+
+
+def test_extract_does_not_cache_an_invalid_response() -> None:
+    # First response is invalid (retry saves it); only the validated success is
+    # stored, so a fresh identical request replays the good one in one call.
+    bad = {"claims": [{"text": "x", "type": "not_a_claim_type", "span": "x"}]}
+    cache = DictCache()
+    transport = FakeTransport(_tool_response(bad), _tool_response(_valid_input()))
+    first = _extract(BedrockClient(transport=transport, cache=cache))
+    assert len(transport.calls) == 2  # burned the retry on the invalid one
+
+    replay_transport = FakeTransport()  # would raise if called
+    second = _extract(BedrockClient(transport=replay_transport, cache=cache))
+    assert second == first
+    assert len(replay_transport.calls) == 0
+
+
+def test_react_replays_first_response_for_identical_request() -> None:
+    transport = FakeTransport(_text_response("First reply."), _text_response("Different."))
+    client = BedrockClient(transport=transport, cache=DictCache())
+
+    first = client.react("prompt")
+    second = client.react("prompt")
+
+    assert first == second == "First reply."
+    assert len(transport.calls) == 1
+
+
+def test_react_does_not_cache_empty_text() -> None:
+    cache = DictCache()
+    empty = FakeTransport(_text_response(stop_reason="refusal"))
+    with pytest.raises(ExtractionValidationError):
+        BedrockClient(transport=empty, cache=cache).react("prompt")
+
+    good = FakeTransport(_text_response("Now a real reply."))
+    reply = BedrockClient(transport=good, cache=cache).react("prompt")
+    assert reply == "Now a real reply."
+
+
+def test_cache_keys_differ_by_prompt() -> None:
+    transport = FakeTransport(_text_response("A reply."), _text_response("B reply."))
+    client = BedrockClient(transport=transport, cache=DictCache())
+    assert client.react("prompt A") == "A reply."
+    assert client.react("prompt B") == "B reply."
+    assert len(transport.calls) == 2  # distinct prompts, no false cache hit

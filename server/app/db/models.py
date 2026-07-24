@@ -157,3 +157,36 @@ class ConcernStatus(Base):
     )
     concern_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     status: Mapped[str] = mapped_column(String(32), default="open")
+
+
+class ModelResponseCache(Base):
+    """Replay store that pins one model output per exact request (bug: rehearsals
+    were non-deterministic).
+
+    ``temperature=0`` does not make Bedrock reproducible: greedy decoding still
+    varies with backend batching, floating-point order, and endpoint routing. So
+    the first successful response for a given request is stored here keyed by a
+    hash of the full request (model id, max_tokens, prompt/blocks, and — for a
+    tool call — the tool name and schema), and every later identical request
+    replays it instead of calling the model again.
+
+    Deliberately NOT scoped to a session and NOT FK'd to ``sessions``: two
+    rehearsal runs are two sessions, and the whole point is that identical input
+    across runs yields identical output, so the key is the request content alone.
+    The key is prompt-derived, so a content/version bump changes the bytes and
+    self-invalidates the entry without a manual purge. Only validated successes
+    are stored (see :mod:`app.bedrock.cache`); a failed/invalid response is never
+    cached, so a retry can still fix it.
+    """
+
+    __tablename__ = "model_response_cache"
+
+    # sha256 hex digest of the canonical request payload.
+    request_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # "extract" | "react" — recorded for observability/debugging only.
+    method: Mapped[str] = mapped_column(String(16))
+    # {"tool_input": {...}} for extract, {"text": "..."} for react.
+    response_json: Mapped[dict[str, Any]] = mapped_column(JSON_)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
