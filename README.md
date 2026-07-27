@@ -67,6 +67,20 @@ cd server && .venv/bin/python ../scripts/smoke_bedrock.py
 It prints a short reply containing `READY` and exits non-zero on failure. The
 pytest suite never touches the network, so it passes without any of this.
 
+## Voice mode (optional)
+
+The `/answer` endpoint supports optional audio input via the `/api/sessions/{session_id}/answer_audio` route. To enable voice transcription and synthesis locally:
+
+1. Install `ffmpeg`:
+   ```bash
+   brew install ffmpeg
+   ```
+   (Docker includes it automatically via the `server/Dockerfile`.)
+
+2. Your AWS credentials need two additional IAM permissions beyond Bedrock:
+   - `transcribe:StartStreamTranscription` — speech-to-text
+   - `polly:SynthesizeSpeech` — text-to-speech
+
 ## Frontend only (local)
 
 ```bash
