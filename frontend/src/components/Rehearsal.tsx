@@ -5,7 +5,13 @@
 
 import { useEffect, useRef, useState } from "react"
 
-import { useAskClarification, useCreateSession, useSubmitAnswer } from "../api/client"
+import {
+  useAskClarification,
+  useCreateSession,
+  useSubmitAnswer,
+  useSubmitAnswerAudio,
+} from "../api/client"
+import { playSequence, useRecorder } from "../audio"
 import { prettify } from "../lib"
 import type { Meter, Prompt, Stage, TranscriptTurn } from "../types"
 import { AfterActionReport } from "./AfterActionReport"
@@ -35,15 +41,58 @@ export function Rehearsal() {
   // Clarifications left on the current concern. null = not yet asked (full
   // allowance); reset whenever the active concern changes.
   const [clarifyRemaining, setClarifyRemaining] = useState<number | null>(null)
+  // Text is the default and the only path with server tests; the toggle must
+  // not change any behavior while left on "text".
+  const [mode, setMode] = useState<"text" | "voice">("text")
+  // Surfaces a getUserMedia rejection (mic permission denied, no device, etc.)
+  // after voice mode auto-falls-back to text — see the recorder.error effect below.
+  const [voiceError, setVoiceError] = useState<string | null>(null)
 
   const create = useCreateSession()
   const submit = useSubmitAnswer(sessionId)
   const clarify = useAskClarification(sessionId)
+  const recorder = useRecorder()
+  const submitAudio = useSubmitAnswerAudio(sessionId)
+  // Guards the hold-to-talk button's pointerup/pointercancel/blur handlers
+  // (any of which can fire for a single press-and-release) against submitting
+  // more than once per recording, independent of React's state-update timing.
+  const recordingActiveRef = useRef(false)
+  // `recorder.start()` awaits getUserMedia, so a very quick tap-and-release can
+  // fire stopRecording before recording actually begins. Stashing the in-flight
+  // start promise lets stopRecording wait for it before deciding whether there's
+  // anything to stop.
+  const startPromiseRef = useRef<Promise<void> | null>(null)
 
   const transcriptEndRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [transcript, done, pending, stage])
+
+  // getUserMedia was denied (or failed): voice mode can't work this session,
+  // so drop back to text and surface why.
+  useEffect(() => {
+    if (recorder.error) {
+      recordingActiveRef.current = false
+      setMode("text")
+      setVoiceError(recorder.error)
+    }
+  }, [recorder.error])
+
+  // Revoke the recorded-answer object URLs on unmount only (not on every
+  // transcript change — the turns still reference them for playback until
+  // then). A ref tracks the latest transcript so the cleanup closure sees
+  // every turn accumulated by the time the presenter navigates away.
+  const transcriptRef = useRef<TranscriptTurn[]>(transcript)
+  useEffect(() => {
+    transcriptRef.current = transcript
+  }, [transcript])
+  useEffect(() => {
+    return () => {
+      for (const turn of transcriptRef.current) {
+        if (turn.audioUrl) URL.revokeObjectURL(turn.audioUrl)
+      }
+    }
+  }, [])
 
   // A new concern gets a fresh clarification allowance; drop the stale counter
   // when the active prompt moves to a different concern.
@@ -70,6 +119,8 @@ export function Rehearsal() {
         setTranscript([])
         setShowReport(false)
         setDraft("")
+        setMode("text")
+        setVoiceError(null)
       },
     })
   }
@@ -161,6 +212,78 @@ export function Rehearsal() {
       // Clear the placeholder; clarify.isError red text surfaces the message and
       // the draft stays intact for a retry.
       onError: () => setPending(null),
+    })
+  }
+
+  // Hold-to-talk press: prime a muted `Audio` element inside this same pointer
+  // gesture so the persona's spoken reply (played back after an async
+  // record → upload → score → synthesize round trip, well outside any user
+  // gesture) isn't blocked by the browser's autoplay policy.
+  function startRecording() {
+    if (recordingActiveRef.current || submitAudio.isPending) return
+    recordingActiveRef.current = true
+    const primer = new Audio()
+    primer.muted = true
+    void primer.play().catch(() => {
+      // Priming is best-effort; a rejected muted play() just means the later
+      // reply falls back to the manual <audio controls> in the transcript.
+    })
+    startPromiseRef.current = recorder.start()
+  }
+
+  // Hold-to-talk release. Bound to pointerup/pointercancel/blur so a pointer
+  // dragged off the button can't leave the mic open (see audio.ts's useRecorder
+  // doc comment). Waits for the in-flight start() first (see startPromiseRef)
+  // so a fast tap-and-release doesn't race ahead of getUserMedia resolving.
+  function stopRecording() {
+    if (!recordingActiveRef.current) return
+    recordingActiveRef.current = false
+    const asked = prompt // capture the prompt this answer responds to
+    const started = startPromiseRef.current ?? Promise.resolve()
+    started.then(() => {
+      if (!recorder.recording || !asked) return
+      recorder.stop().then((blob) => {
+        // Same optimistic-pending flow as a typed answer, but there's no
+        // transcript yet to show, so the placeholder answer is blank.
+        setPending({ prompt: asked, answer: "", kind: "answer" })
+        setStage("extracting")
+        submitAudio.mutate(blob, {
+          onSuccess: (res) => {
+            setTranscript((prev) => [
+              ...prev,
+              {
+                key: prev.length,
+                personaId: res.persona_id,
+                concernId: res.concern_id,
+                isFollowUp: asked.is_follow_up,
+                prompt: asked.prompt,
+                answer: res.transcript,
+                reply: res.reply,
+                rationale: res.rationale,
+                supportDelta: res.support_delta,
+                matchedRows: res.matched_rows,
+                capped: res.capped,
+                transcript: res.transcript,
+                audioUrl: URL.createObjectURL(blob),
+              },
+            ])
+            setMeters(res.meters)
+            setPrompt(res.next_prompt)
+            setDone(res.done)
+            setPending(null)
+            // Play the persona's spoken reply, then the next prompt's spoken
+            // read-aloud, back to back. A rejected/blocked clip is swallowed by
+            // playSequence itself; the transcript's <audio controls> is the
+            // fallback for that case.
+            void playSequence(
+              [res.reply_audio, res.next_prompt_audio].filter((s): s is string => s != null),
+            )
+          },
+          // Clear the placeholder; submitAudio.isError red text surfaces the
+          // message the same way submit.isError does for the text path.
+          onError: () => setPending(null),
+        })
+      })
     })
   }
 
@@ -276,67 +399,133 @@ export function Rehearsal() {
             // input box would only duplicate the wait.
             prompt &&
             !submit.isPending &&
-            !clarify.isPending && (
+            !clarify.isPending &&
+            !submitAudio.isPending && (
               <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="font-semibold text-slate-800">
-                    {prettify(prompt.persona_id)}
-                  </span>
-                  <span className="text-slate-400">·</span>
-                  <span className="text-slate-500">{prettify(prompt.concern_id)}</span>
-                  {prompt.is_follow_up && (
-                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700">
-                      Follow-up
-                    </span>
-                  )}
-                </div>
-                <p className="text-slate-800">{prompt.prompt}</p>
-                <textarea
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) sendAnswer()
-                  }}
-                  rows={4}
-                  placeholder="Your answer… (⌘/Ctrl+Enter to submit)"
-                  className="w-full resize-y rounded-md border border-slate-300 p-3 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
-                  disabled={submit.isPending || clarify.isPending}
-                />
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm">
-                    {submit.isError ? (
-                      <span className="text-red-700">{(submit.error as Error).message}</span>
-                    ) : clarify.isError ? (
-                      <span className="text-red-700">{(clarify.error as Error).message}</span>
-                    ) : clarifyRemaining === 0 ? (
-                      <span className="text-slate-400">
-                        No clarifications left on this concern.
-                      </span>
-                    ) : null}
-                  </span>
+                <div className="flex items-center justify-between gap-2 text-sm">
                   <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-800">
+                      {prettify(prompt.persona_id)}
+                    </span>
+                    <span className="text-slate-400">·</span>
+                    <span className="text-slate-500">{prettify(prompt.concern_id)}</span>
+                    {prompt.is_follow_up && (
+                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700">
+                        Follow-up
+                      </span>
+                    )}
+                  </div>
+                  {/* Text/voice segmented toggle. Text is the default and the
+                      only path with server tests; switching to voice never
+                      changes text-mode behavior. */}
+                  <div className="flex overflow-hidden rounded-md border border-slate-300 text-xs font-semibold">
                     <button
-                      onClick={sendClarification}
-                      disabled={
-                        submit.isPending ||
-                        clarify.isPending ||
-                        clarifyRemaining === 0 ||
-                        !draft.trim()
-                      }
-                      title="Ask the evaluator what they mean, without being scored"
-                      className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                      type="button"
+                      onClick={() => setMode("text")}
+                      className={`px-2.5 py-1 transition ${
+                        mode === "text"
+                          ? "bg-slate-900 text-white"
+                          : "bg-white text-slate-600 hover:bg-slate-50"
+                      }`}
                     >
-                      {clarify.isPending ? "Asking…" : "Ask a clarifying question"}
+                      Text
                     </button>
                     <button
-                      onClick={sendAnswer}
-                      disabled={submit.isPending || clarify.isPending || !draft.trim()}
-                      className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:opacity-50"
+                      type="button"
+                      onClick={() => {
+                        setVoiceError(null)
+                        setMode("voice")
+                      }}
+                      className={`px-2.5 py-1 transition ${
+                        mode === "voice"
+                          ? "bg-slate-900 text-white"
+                          : "bg-white text-slate-600 hover:bg-slate-50"
+                      }`}
                     >
-                      {submit.isPending ? "Scoring…" : "Submit"}
+                      Voice
                     </button>
                   </div>
                 </div>
+                <p className="text-slate-800">{prompt.prompt}</p>
+                {voiceError && <p className="text-sm text-red-700">{voiceError}</p>}
+                {mode === "text" ? (
+                  <>
+                    <textarea
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) sendAnswer()
+                      }}
+                      rows={4}
+                      placeholder="Your answer… (⌘/Ctrl+Enter to submit)"
+                      className="w-full resize-y rounded-md border border-slate-300 p-3 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                      disabled={submit.isPending || clarify.isPending}
+                    />
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm">
+                        {submit.isError ? (
+                          <span className="text-red-700">{(submit.error as Error).message}</span>
+                        ) : clarify.isError ? (
+                          <span className="text-red-700">{(clarify.error as Error).message}</span>
+                        ) : clarifyRemaining === 0 ? (
+                          <span className="text-slate-400">
+                            No clarifications left on this concern.
+                          </span>
+                        ) : null}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={sendClarification}
+                          disabled={
+                            submit.isPending ||
+                            clarify.isPending ||
+                            clarifyRemaining === 0 ||
+                            !draft.trim()
+                          }
+                          title="Ask the evaluator what they mean, without being scored"
+                          className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          {clarify.isPending ? "Asking…" : "Ask a clarifying question"}
+                        </button>
+                        <button
+                          onClick={sendAnswer}
+                          disabled={submit.isPending || clarify.isPending || !draft.trim()}
+                          className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:opacity-50"
+                        >
+                          {submit.isPending ? "Scoring…" : "Submit"}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  // Voice mode: hold-to-talk replaces the textarea and both
+                  // buttons. "Ask a clarifying question" stays text-only for
+                  // now, so it simply isn't offered here.
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onPointerDown={startRecording}
+                      onPointerUp={stopRecording}
+                      onPointerCancel={stopRecording}
+                      onBlur={stopRecording}
+                      disabled={submitAudio.isPending}
+                      className={`w-full select-none touch-none rounded-lg px-5 py-6 text-sm font-semibold shadow-sm transition disabled:opacity-50 ${
+                        recorder.recording
+                          ? "bg-red-600 text-white"
+                          : "bg-slate-900 text-white hover:bg-slate-700"
+                      }`}
+                    >
+                      {submitAudio.isPending
+                        ? "Scoring…"
+                        : recorder.recording
+                          ? "Recording… release to send"
+                          : "Hold to talk"}
+                    </button>
+                    {submitAudio.isError && (
+                      <p className="text-sm text-red-700">{(submitAudio.error as Error).message}</p>
+                    )}
+                  </div>
+                )}
               </div>
             )
           )}

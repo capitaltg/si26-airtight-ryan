@@ -109,6 +109,7 @@ airtight/
 │  │  │  ├─ RubricPanel.tsx
 │  │  │  └─ StageStepper.tsx
 │  │  ├─ App.tsx
+│  │  ├─ audio.ts
 │  │  ├─ index.css
 │  │  ├─ lib.ts
 │  │  ├─ main.tsx

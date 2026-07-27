@@ -45,6 +45,14 @@ export interface AnswerResponse {
   done: boolean
 }
 
+// Voice mode's answer response: everything AnswerResponse carries, plus what
+// the presenter's recording produced.
+export interface VoiceAnswerResponse extends AnswerResponse {
+  transcript: string
+  reply_audio: string | null
+  next_prompt_audio: string | null
+}
+
 // A clarification is a non-scored turn: the evaluator answers a clarifying
 // question, the meter does not move, and the same prompt stays active.
 export interface ClarifyResponse {
@@ -156,4 +164,9 @@ export interface TranscriptTurn {
   // A clarification turn is not scored: ChatTurn branches on this to suppress the
   // delta badge and rubric chips. Absent/true means a normal scored turn.
   scored?: boolean
+  // Voice mode only: the transcript the recording produced (the scorer's actual
+  // input) and a playable URL for the presenter's own recorded answer. Absent
+  // for text-mode turns, which render exactly as before.
+  transcript?: string
+  audioUrl?: string
 }
