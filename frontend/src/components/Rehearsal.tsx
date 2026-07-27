@@ -4,6 +4,7 @@
 // the backend's — this component only renders what the API returns.
 
 import { useEffect, useRef, useState } from "react"
+import type { PointerEvent } from "react"
 
 import {
   useAskClarification,
@@ -112,6 +113,14 @@ export function Rehearsal() {
   function startSession() {
     create.mutate(undefined, {
       onSuccess: (s) => {
+        // Revoke the previous session's recorded-answer object URLs before
+        // dropping the transcript that referenced them — the unmount cleanup
+        // effect above only fires when the whole component unmounts, so a
+        // mid-app "Start a new rehearsal" click needs its own revoke or every
+        // restarted session leaks that session's blobs for the tab's life.
+        for (const turn of transcriptRef.current) {
+          if (turn.audioUrl) URL.revokeObjectURL(turn.audioUrl)
+        }
         setSessionId(s.id)
         setMeters(s.meters)
         setPrompt(s.prompt)
@@ -218,10 +227,14 @@ export function Rehearsal() {
   // Hold-to-talk press: prime a muted `Audio` element inside this same pointer
   // gesture so the persona's spoken reply (played back after an async
   // record → upload → score → synthesize round trip, well outside any user
-  // gesture) isn't blocked by the browser's autoplay policy.
-  function startRecording() {
+  // gesture) isn't blocked by the browser's autoplay policy. Also captures the
+  // pointer on the button itself so a mouse drag off the button before release
+  // still delivers pointerup/pointercancel here (touch gets this for free via
+  // implicit capture; a plain mouse doesn't).
+  function startRecording(e: PointerEvent<HTMLButtonElement>) {
     if (recordingActiveRef.current || submitAudio.isPending) return
     recordingActiveRef.current = true
+    e.currentTarget.setPointerCapture(e.pointerId)
     const primer = new Audio()
     primer.muted = true
     void primer.play().catch(() => {
@@ -235,14 +248,28 @@ export function Rehearsal() {
   // dragged off the button can't leave the mic open (see audio.ts's useRecorder
   // doc comment). Waits for the in-flight start() first (see startPromiseRef)
   // so a fast tap-and-release doesn't race ahead of getUserMedia resolving.
+  //
+  // Deliberately doesn't gate on `recorder.recording`: that boolean is read
+  // from this render's closure over `recorder`, which is frozen at whatever
+  // value it had when this particular `stopRecording` instance was created —
+  // for a fast tap-and-release it can still read `false` here even after
+  // `start()` has finished setting up the recorder, since the state update
+  // that would flip it lands in a *later* render's closure, not this one.
+  // `recorder.stop()` itself checks a live ref (see audio.ts), so it's the
+  // right source of truth for whether there's anything to stop; it resolves
+  // with an empty blob when there wasn't, which the size check below catches.
   function stopRecording() {
     if (!recordingActiveRef.current) return
     recordingActiveRef.current = false
     const asked = prompt // capture the prompt this answer responds to
     const started = startPromiseRef.current ?? Promise.resolve()
     started.then(() => {
-      if (!recorder.recording || !asked) return
+      if (!asked) return
       recorder.stop().then((blob) => {
+        // Nothing was actually recording (e.g. getUserMedia failed, or was
+        // still pending, when this press ended) — audio.ts's stop() resolves
+        // with an empty blob in that case instead of throwing.
+        if (blob.size === 0) return
         // Same optimistic-pending flow as a typed answer, but there's no
         // transcript yet to show, so the placeholder answer is blank.
         setPending({ prompt: asked, answer: "", kind: "answer" })
