@@ -215,6 +215,74 @@ def test_red_line_caps_and_stays_capped_across_next_good_answer(
     assert second.capped is True
 
 
+def test_submit_answer_with_audio_persists_it_on_the_turn(db: Session, content: Content) -> None:
+    session = orchestrator.start_session(db, content)
+    client = ScriptedClient()
+    client.next_extraction = _full(content.concerns["technical_approach"])
+    audio = orchestrator.AnswerAudio(
+        data=b"\x00\x01fake-audio-bytes",
+        content_type="audio/webm",
+        transcript="Here is the architecture...",
+    )
+
+    result = orchestrator.submit_answer(
+        db, content, client, session, "Here is the architecture...", audio
+    )
+
+    turn = repo.get_turns(db, session.id)[0]
+    assert turn.answer_audio == b"\x00\x01fake-audio-bytes"
+    assert turn.answer_audio_content_type == "audio/webm"
+    assert turn.transcript == "Here is the architecture..."
+    # scoring/agenda behavior is unaffected by the presence of audio
+    assert result.support_delta == 2
+    assert result.concern_status == "satisfied"
+
+
+def test_submit_answer_without_audio_leaves_turn_audio_columns_null(
+    db: Session, content: Content
+) -> None:
+    session = orchestrator.start_session(db, content)
+    client = ScriptedClient()
+    client.next_extraction = _full(content.concerns["technical_approach"])
+
+    orchestrator.submit_answer(db, content, client, session, "Here is the architecture...")
+
+    turn = repo.get_turns(db, session.id)[0]
+    assert turn.answer_audio is None
+    assert turn.answer_audio_content_type is None
+    assert turn.transcript is None
+
+
+def test_typed_and_voice_paths_yield_equivalent_scoring(db: Session, content: Content) -> None:
+    """The same words, submitted typed vs. as a transcribed voice answer, must
+    produce the same score — audio only changes what gets persisted."""
+    concern = content.concerns["technical_approach"]
+    answer_text = "Here is the architecture..."
+
+    typed_session = orchestrator.start_session(db, content)
+    typed_client = ScriptedClient()
+    typed_client.next_extraction = _full(concern)
+    typed_result = orchestrator.submit_answer(
+        db, content, typed_client, typed_session, answer_text
+    )
+
+    voice_session = orchestrator.start_session(db, content)
+    voice_client = ScriptedClient()
+    voice_client.next_extraction = _full(concern)
+    audio = orchestrator.AnswerAudio(
+        data=b"\x00\x01fake-audio-bytes", content_type="audio/mp4", transcript=answer_text
+    )
+    voice_result = orchestrator.submit_answer(
+        db, content, voice_client, voice_session, answer_text, audio
+    )
+
+    assert typed_result.support_delta == voice_result.support_delta
+    assert typed_result.matched_rows == voice_result.matched_rows
+    assert typed_result.meter == voice_result.meter
+    assert typed_result.capped == voice_result.capped
+    assert typed_result.concern_status == voice_result.concern_status
+
+
 def test_clarification_does_not_score_advance_or_count_as_attempt(
     db: Session, content: Content
 ) -> None:
