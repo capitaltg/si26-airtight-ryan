@@ -140,7 +140,13 @@ class DictCache:
     def get(self, key: str) -> dict | None:
         return self.store.get(key)
 
-    def put(self, key: str, method: str, value: dict) -> None:
+    def put(
+        self,
+        key: str,
+        method: str,
+        value: dict,
+        normalized_answer: str | None = None,
+    ) -> None:
         self.store.setdefault(key, value)
 
 

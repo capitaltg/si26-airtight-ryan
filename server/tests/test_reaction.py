@@ -6,13 +6,17 @@ already-computed ``support_delta`` and ``matched_rows`` so the reply describes
 the number, never sets it. These tests use a fake BedrockClient — no network.
 """
 
+from types import SimpleNamespace
 from typing import Any
 
 from pydantic import BaseModel
 
+from app.bedrock.cache import CacheKeyInput
+from app.bedrock.client import BedrockClient
 from app.content.loader import load_content
 from app.pipeline.reaction import (
     build_reaction_prompt,
+    run_clarification,
     run_reaction,
 )
 from app.schemas.extraction import (
@@ -41,12 +45,14 @@ class FakeBedrockClient:
         content_schema: type[BaseModel],
         tool_name: str,
         max_tokens: int = 4096,
+        cache_key: CacheKeyInput | None = None,
     ) -> BaseModel:
         self.calls.append(
             {
                 "content": content,
                 "content_schema": content_schema,
                 "tool_name": tool_name,
+                "cache_key": cache_key,
             }
         )
         return self._result
@@ -209,3 +215,75 @@ def test_run_reaction_returns_validated_persona_reaction() -> None:
     call = client.calls[0]
     assert call["content_schema"] is PersonaReaction
     assert call["tool_name"] == "emit_reaction"
+
+
+# --- normalized cache-key acceptance for run_clarification (uses the real
+# BedrockClient.react over a DictCache, mirroring test_bedrock_client.py) ---
+
+
+def _text_response(text: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        content=[SimpleNamespace(type="text", text=text)], stop_reason="end_turn"
+    )
+
+
+class _ScriptedMessages:
+    def __init__(self, responses: list[Any]) -> None:
+        self._responses = list(responses)
+        self.calls: list[dict[str, Any]] = []
+
+    def create(self, **kwargs: Any) -> Any:
+        self.calls.append(kwargs)
+        return self._responses.pop(0)
+
+
+class _ScriptedTransport:
+    def __init__(self, *responses: Any) -> None:
+        self.messages = _ScriptedMessages(list(responses))
+
+    @property
+    def calls(self) -> list[dict[str, Any]]:
+        return self.messages.calls
+
+
+class DictCache:
+    """In-memory ``ResponseCache`` matching ``test_bedrock_client.py``'s."""
+
+    def __init__(self) -> None:
+        self.store: dict[str, dict] = {}
+
+    def get(self, key: str) -> dict | None:
+        return self.store.get(key)
+
+    def put(
+        self,
+        key: str,
+        method: str,
+        value: dict,
+        normalized_answer: str | None = None,
+    ) -> None:
+        self.store.setdefault(key, value)
+
+
+def test_clarification_variant_hits_the_same_cache_entry() -> None:
+    persona, concern = _fixture()
+    transport = _ScriptedTransport(
+        _text_response("First reply."), _text_response("Different reply.")
+    )
+    client = BedrockClient(transport=transport, cache=DictCache())
+
+    first = run_clarification(
+        persona=persona,
+        concern=concern,
+        question="What counts as evidence here?",
+        client=client,
+    )
+    second = run_clarification(
+        persona=persona,
+        concern=concern,
+        question="  WHAT counts   as evidence here?  ",
+        client=client,
+    )
+
+    assert first == second == "First reply."
+    assert len(transport.calls) == 1

@@ -12,7 +12,7 @@ from typing import Any, Protocol, TypeVar, cast
 from anthropic import AnthropicBedrock
 from pydantic import BaseModel, ValidationError
 
-from app.bedrock.cache import ResponseCache, request_key
+from app.bedrock.cache import CacheKeyInput, ResponseCache, request_key
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -83,6 +83,7 @@ class BedrockClient:
         content_schema: type[ModelT],
         tool_name: str,
         max_tokens: int = 4096,
+        cache_key: CacheKeyInput | None = None,
     ) -> ModelT:
         """Force `tool_name`, validate its input, retry once, then raise.
 
@@ -91,6 +92,12 @@ class BedrockClient:
         ``cache_control`` breakpoint on the static prefix so Bedrock reuses it
         across turns; the block list is re-sent verbatim on retry, so the cache
         still applies.
+
+        ``cache_key``, when given, supplies content to hash instead of
+        ``content`` (and the normalized text to record on the row). The
+        transport call below always sends ``content``/``blocks`` verbatim, so
+        the model sees exactly what the caller built regardless of what gets
+        hashed.
         """
         blocks: list[dict[str, Any]] = (
             [{"type": "text", "text": content}] if isinstance(content, str) else content
@@ -104,11 +111,12 @@ class BedrockClient:
 
         key: str | None = None
         if self._cache is not None:
+            hashed = cache_key.content if cache_key is not None else content
             key = request_key(
                 method="extract",
                 model=settings.bedrock_model_id,
                 max_tokens=max_tokens,
-                content=content,
+                content=hashed,
                 tool_name=tool_name,
                 schema=input_schema,
             )
@@ -155,20 +163,36 @@ class BedrockClient:
             # Only a validated success is cached; an invalid response is never
             # pinned, so a later retry can still land a good result.
             if self._cache is not None and key is not None:
-                self._cache.put(key, "extract", {"tool_input": block.input})
+                self._cache.put(
+                    key,
+                    "extract",
+                    {"tool_input": block.input},
+                    normalized_answer=cache_key.normalized_answer if cache_key else None,
+                )
             return validated
 
         raise ExtractionValidationError(str(last)) from last
 
-    def react(self, prompt: str, *, max_tokens: int = 1024) -> str:
-        """Plain-text persona reply. Runs only after the score already exists."""
+    def react(
+        self,
+        prompt: str,
+        *,
+        max_tokens: int = 1024,
+        cache_key: CacheKeyInput | None = None,
+    ) -> str:
+        """Plain-text persona reply. Runs only after the score already exists.
+
+        ``cache_key`` behaves as in :meth:`extract`: it changes only what gets
+        hashed and recorded, never what gets sent to the model.
+        """
         key: str | None = None
         if self._cache is not None:
+            hashed = cache_key.content if cache_key is not None else prompt
             key = request_key(
                 method="react",
                 model=settings.bedrock_model_id,
                 max_tokens=max_tokens,
-                content=prompt,
+                content=hashed,
             )
             cached = self._cache.get(key)
             if cached is not None:
@@ -190,5 +214,10 @@ class BedrockClient:
 
         # Cache only the non-empty success, mirroring extract.
         if self._cache is not None and key is not None:
-            self._cache.put(key, "react", {"text": text})
+            self._cache.put(
+                key,
+                "react",
+                {"text": text},
+                normalized_answer=cache_key.normalized_answer if cache_key else None,
+            )
         return text
