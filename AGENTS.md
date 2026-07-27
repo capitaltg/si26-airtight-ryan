@@ -211,7 +211,8 @@ airtight/
 │  │  ├─ test_report.py
 │  │  ├─ test_response_cache.py
 │  │  ├─ test_scoring.py
-│  │  └─ test_span_anchor.py
+│  │  ├─ test_span_anchor.py
+│  │  └─ test_tier0_flags.py
 │  ├─ .dockerignore
 │  ├─ alembic.ini
 │  ├─ Dockerfile
