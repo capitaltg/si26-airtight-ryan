@@ -174,7 +174,8 @@ airtight/
 │  │  │  ├─ extraction.py
 │  │  │  ├─ orchestrator.py
 │  │  │  ├─ reaction.py
-│  │  │  └─ scoring.py
+│  │  │  ├─ scoring.py
+│  │  │  └─ span_anchor.py
 │  │  ├─ report/
 │  │  │  ├─ __init__.py
 │  │  │  └─ builder.py
@@ -205,7 +206,8 @@ airtight/
 │  │  ├─ test_repo.py
 │  │  ├─ test_report.py
 │  │  ├─ test_response_cache.py
-│  │  └─ test_scoring.py
+│  │  ├─ test_scoring.py
+│  │  └─ test_span_anchor.py
 │  ├─ .dockerignore
 │  ├─ alembic.ini
 │  ├─ Dockerfile

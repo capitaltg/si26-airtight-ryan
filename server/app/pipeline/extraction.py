@@ -24,6 +24,7 @@ from app.bedrock.client import BedrockClient
 from app.content.loader import Content
 from app.db.models import ClaimLedger
 from app.pipeline.conciseness import compute_conciseness
+from app.pipeline.span_anchor import reanchor_spans
 from app.schemas.content import Concern, PersonaDefinition
 from app.schemas.extraction import Conciseness, Extraction
 
@@ -208,7 +209,9 @@ def run_extraction(
     extraction — and therefore the score — is unchanged. The cache key is hashed
     from the same blocks rebuilt with the normalized answer, so whitespace- and
     case-only variants of one answer replay the same cached extraction while the
-    model still sees the raw, verbatim answer.
+    model still sees the raw, verbatim answer. A replayed extraction quoted the
+    first phrasing, so its spans are re-anchored onto this answer before anything
+    persists them (see ``pipeline.span_anchor``); on a cold call that is a no-op.
     """
     content_blocks = _blocks(
         persona=persona,
@@ -233,5 +236,6 @@ def run_extraction(
             normalized_answer=normalized,
         ),
     )
-    conciseness = compute_conciseness(answer, extraction)
-    return ExtractionResult(extraction=extraction, conciseness=conciseness)
+    anchored = reanchor_spans(extraction, answer)
+    conciseness = compute_conciseness(answer, anchored)
+    return ExtractionResult(extraction=anchored, conciseness=conciseness)

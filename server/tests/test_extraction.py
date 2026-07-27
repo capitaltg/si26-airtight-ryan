@@ -368,6 +368,23 @@ def test_reworded_answer_misses_the_cache() -> None:
     assert len(transport.calls) == 2
 
 
+def test_accidentally_joined_words_miss_the_cache() -> None:
+    """Collapsing whitespace runs never deletes a word boundary, so a typo that
+    runs two words together is a different token stream and keys apart. That is
+    the safe outcome: a fresh model call reads the text as typed instead of
+    replaying an extraction of the spaced phrasing."""
+    transport = _ScriptedTransport(
+        _cache_tool_response(_distinct_extraction_a()),
+        _cache_tool_response(_distinct_extraction_b()),
+    )
+    client = BedrockClient(transport=transport, cache=DictCache())
+
+    _run(client, "We follow a phased approach with a named PM.")
+    _run(client, "We follow a phased approach with a namedPM.")
+
+    assert len(transport.calls) == 2
+
+
 def test_persona_change_still_misses_the_cache() -> None:
     """Same normalized answer, different persona: proves normalization did not
     leak past the answer into the cacheable prefix."""
@@ -401,3 +418,72 @@ def test_prior_claims_change_still_misses_the_cache() -> None:
     _run(client, answer, prior_claims=_prior_claims())
 
     assert len(transport.calls) == 2
+
+
+# --- a replayed extraction must still quote the answer on screen
+# (server/app/pipeline/span_anchor.py) ---
+
+_ANCHOR_ANSWER = "We follow a phased approach. Our PM has 12 years of federal work."
+
+
+def _quoting_extraction() -> dict:
+    """An extraction whose span is quoted verbatim out of ``_ANCHOR_ANSWER``, the
+    way the model is instructed to quote."""
+    return {
+        "claims": [
+            {
+                "text": "PM has 12 years of federal experience.",
+                "type": "commitment",
+                "backing": "backed",
+                "span": "Our PM has 12 years of federal work",
+            }
+        ]
+    }
+
+
+def test_replayed_span_is_reanchored_to_the_answer_actually_typed() -> None:
+    """The cache hit is the point, but the replayed span was quoted out of the
+    first phrasing. Without re-anchoring the transcript shows one text and the
+    report quotes another."""
+    transport = _ScriptedTransport(
+        _cache_tool_response(_quoting_extraction()),
+        _cache_tool_response(_distinct_extraction_b()),
+    )
+    client = BedrockClient(transport=transport, cache=DictCache())
+    variant = "  we follow a phased   approach.\tour pm HAS 12 years of federal work. "
+
+    first = _run(client, _ANCHOR_ANSWER)
+    second = _run(client, variant)
+
+    assert len(transport.calls) == 1  # still a cache hit
+    assert first.extraction.claims[0].span == "Our PM has 12 years of federal work"
+    assert second.extraction.claims[0].span == "our pm HAS 12 years of federal work"
+    assert second.extraction.claims[0].span in variant
+
+
+def test_reanchoring_does_not_move_the_scored_signals() -> None:
+    """Re-anchoring rewrites quote text only, so the fields the scorer reads come
+    through identical and the two runs score the same."""
+    transport = _ScriptedTransport(
+        _cache_tool_response(_quoting_extraction()),
+        _cache_tool_response(_distinct_extraction_b()),
+    )
+    client = BedrockClient(transport=transport, cache=DictCache())
+
+    first = _run(client, _ANCHOR_ANSWER)
+    second = _run(client, _ANCHOR_ANSWER.upper())
+
+    assert len(transport.calls) == 1  # the same cached extraction backs both
+    for a, b in zip(first.extraction.claims, second.extraction.claims, strict=True):
+        assert (a.text, a.type, a.backing) == (b.text, b.type, b.backing)
+
+
+def test_cold_call_leaves_the_models_own_span_untouched() -> None:
+    """No cache involved: the span the model just quoted is already a substring of
+    the answer, so re-anchoring must not rewrite it."""
+    client = FakeBedrockClient(
+        Extraction.model_validate(_quoting_extraction())
+    )
+    result = _run(client, _ANCHOR_ANSWER)  # type: ignore[arg-type]
+
+    assert result.extraction.claims[0].span == "Our PM has 12 years of federal work"
