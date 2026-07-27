@@ -35,6 +35,7 @@ class PersonaDefinition(BaseModel):
     priorities: list[str] = Field(default_factory=list)
     non_negotiables: list[str] = Field(default_factory=list)
     rubric_version: int
+    polly_voice_id: str
     exemplars: list[Exemplar] = Field(default_factory=list)
 
 

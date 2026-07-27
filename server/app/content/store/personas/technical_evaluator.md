@@ -25,6 +25,7 @@ non_negotiables:
   - do not propose staff who fail the labor-category qualifications
   - do not claim a capability the team cannot substantiate
 rubric_version: 1
+polly_voice_id: Ruth
 ---
 
 # Dana, Technical Evaluator

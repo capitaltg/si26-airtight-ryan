@@ -87,3 +87,21 @@ def test_missing_file_raises(tmp_path: Path) -> None:
     (store / "rubric.yaml").unlink()
     with pytest.raises(FileNotFoundError):
         load_content(store)
+
+
+def test_all_personas_have_polly_voice_id() -> None:
+    content = load_content()
+    for persona in content.personas.values():
+        assert persona.polly_voice_id
+        assert persona.polly_voice_id.strip()
+
+
+def test_persona_missing_polly_voice_id_raises(tmp_path: Path) -> None:
+    store = tmp_path / "store"
+    shutil.copytree(STORE, store)
+    persona = store / "personas" / "technical_evaluator.md"
+    text = persona.read_text()
+    # drop the required polly_voice_id field from the frontmatter
+    persona.write_text(text.replace("polly_voice_id: Ruth\n", ""))
+    with pytest.raises(ValidationError):
+        load_content(store)
