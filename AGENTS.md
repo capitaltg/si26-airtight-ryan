@@ -189,6 +189,11 @@ airtight/
 │  │  │  ├─ reaction.py
 │  │  │  ├─ report.py
 │  │  │  └─ scoring.py
+│  │  ├─ voice/
+│  │  │  ├─ __init__.py
+│  │  │  ├─ audio.py
+│  │  │  ├─ polly.py
+│  │  │  └─ transcribe.py
 │  │  ├─ __init__.py
 │  │  ├─ config.py               # pydantic-settings
 │  │  └─ main.py                 # FastAPI app + /health
@@ -213,7 +218,10 @@ airtight/
 │  │  ├─ test_response_cache.py
 │  │  ├─ test_scoring.py
 │  │  ├─ test_span_anchor.py
-│  │  └─ test_tier0_flags.py
+│  │  ├─ test_tier0_flags.py
+│  │  ├─ test_voice_audio.py
+│  │  ├─ test_voice_polly.py
+│  │  └─ test_voice_transcribe.py
 │  ├─ .dockerignore
 │  ├─ alembic.ini
 │  ├─ Dockerfile
