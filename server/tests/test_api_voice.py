@@ -4,13 +4,15 @@ the voice path must score byte-identically to the text path, proving tasks
 1-4 only added a new front door onto the untouched orchestrator/scoring core.
 """
 
+import uuid
 from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.deps import get_synthesizer, get_transcriber
+from app.api.deps import get_session_factory, get_synthesizer, get_transcriber
 from app.config import settings
+from app.db import repo
 from app.voice import SynthesisError, TranscriptionError
 from tests.test_api import client  # noqa: F401  (reused fixture)
 
@@ -93,6 +95,20 @@ def test_answer_audio_scores_identically_to_text_answer(voice_client: TestClient
     assert voice_body["transcript"] == transcript
     assert voice_body["reply_audio"] is not None
     assert voice_body["next_prompt_audio"] is not None
+
+    # The DTO equality above only proves the responses match — `_FakeClient.extract`
+    # (tests/test_api.py) routes purely on `content_schema` and ignores its
+    # `content` argument, so it would return the same canned extraction even if
+    # `submit_answer_audio` fed the pipeline an empty string or the raw upload
+    # bytes instead of the transcript. Assert directly against what got persisted
+    # for session_b's turn: `user_answer` is what `orchestrator.submit_answer`
+    # actually scored, and `transcript` is what's kept alongside the audio for
+    # replay/audit.
+    session_factory = voice_client.app.dependency_overrides[get_session_factory]()
+    with session_factory() as db:
+        turn = repo.get_turns(db, uuid.UUID(session_b))[0]
+        assert turn.user_answer == transcript
+        assert turn.transcript == transcript
 
 
 def test_failed_transcription_returns_422_and_leaves_session_untouched(
@@ -247,3 +263,23 @@ def test_answer_audio_defaults_content_type_when_missing(voice_client: TestClien
     replay = voice_client.get(f"/sessions/{session_id}/turns/0/audio")
     assert replay.status_code == 200
     assert replay.headers["content-type"] == "audio/webm"
+
+
+def test_answer_audio_rejects_unsafe_content_type(voice_client: TestClient) -> None:
+    """An attacker-controlled `Content-Type` (e.g. `text/html` with HTML/script
+    bytes as the body) must never be echoed back verbatim by the replay
+    endpoint — that would let `GET .../turns/{i}/audio` serve stored XSS on the
+    app's own origin. A non-allowlisted content type falls back to a safe,
+    generic one; the upload itself still succeeds (ffmpeg sniffs the real
+    container from the bytes regardless of the claimed type)."""
+    session_id = voice_client.post("/sessions").json()["id"]
+
+    r = voice_client.post(
+        f"/sessions/{session_id}/answer_audio",
+        files={"audio": ("recording.html", b"<script>alert(1)</script>", "text/html")},
+    )
+    assert r.status_code == 200
+
+    replay = voice_client.get(f"/sessions/{session_id}/turns/0/audio")
+    assert replay.status_code == 200
+    assert replay.headers["content-type"] == "application/octet-stream"

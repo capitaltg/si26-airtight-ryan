@@ -88,7 +88,12 @@ class Turn(Base):
     score_json: Mapped[dict[str, Any]] = mapped_column(JSON_)
     reaction_json: Mapped[dict[str, Any] | None] = mapped_column(JSON_, nullable=True)
     # Populated only on the voice path (POST /answer_audio); null for a typed turn.
-    answer_audio: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    # `deferred=True`: this blob (up to `settings.max_answer_audio_bytes`, 10 MiB)
+    # is only ever read by the replay endpoint (`GET .../turns/{i}/audio`), but
+    # `repo.get_turns` is called on nearly every request (next_concern, session
+    # state, build_report); deferring keeps those reads from pulling every turn's
+    # full audio blob into memory when nothing asked for it.
+    answer_audio: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
     answer_audio_content_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

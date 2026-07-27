@@ -282,6 +282,16 @@ def test_typed_and_voice_paths_yield_equivalent_scoring(db: Session, content: Co
     assert typed_result.capped == voice_result.capped
     assert typed_result.concern_status == voice_result.concern_status
 
+    # `ScriptedClient.extract` routes only on `content_schema`, ignoring the
+    # `content` it's handed — so the equality above would hold even if the
+    # voice path fed the pipeline something other than the real transcript.
+    # Assert directly against what was persisted: the transcript must be what
+    # both `submit_answer` scored (`user_answer`) and what's kept for replay
+    # (`transcript`).
+    voice_turn = repo.get_turns(db, voice_session.id)[0]
+    assert voice_turn.user_answer == answer_text
+    assert voice_turn.transcript == answer_text
+
 
 def test_clarification_does_not_score_advance_or_count_as_attempt(
     db: Session, content: Content

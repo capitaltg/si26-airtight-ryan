@@ -67,12 +67,14 @@ class _FakeStreamingClient:
     def __init__(self, region: str, events: list[SimpleNamespace] | None = None) -> None:
         self.region = region
         self.start_kwargs: dict[str, Any] | None = None
+        self.last_stream: _FakeStream | None = None
         self._events = events if events is not None else []
         _FakeStreamingClient.last_instance = self
 
     async def start_stream_transcription(self, **kwargs: Any) -> _FakeStream:
         self.start_kwargs = kwargs
-        return _FakeStream(self._events)
+        self.last_stream = _FakeStream(self._events)
+        return self.last_stream
 
 
 def _events_two_partial_two_final() -> list[SimpleNamespace]:
@@ -95,6 +97,20 @@ def test_transcribe_audio_joins_only_final_results(monkeypatch: pytest.MonkeyPat
     text = transcribe_audio(b"raw-audio", "audio/webm")
 
     assert text == "hello there, how are you"
+
+    # The SDK call was wired up with the configured language/sample rate and a
+    # fixed PCM encoding, and the input stream was properly closed — an
+    # unclosed stream would hang a real AWS connection while this test stayed
+    # green if nothing here asserted on it.
+    client = _FakeStreamingClient.last_instance
+    assert client is not None
+    assert client.start_kwargs == {
+        "language_code": transcribe_module.settings.transcribe_language_code,
+        "media_sample_rate_hz": transcribe_module.settings.transcribe_sample_rate,
+        "media_encoding": "pcm",
+    }
+    assert client.last_stream is not None
+    assert client.last_stream.input_stream.ended is True
 
 
 def test_transcribe_audio_wraps_sdk_error(monkeypatch: pytest.MonkeyPatch) -> None:

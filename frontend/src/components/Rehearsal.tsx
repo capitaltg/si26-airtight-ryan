@@ -4,7 +4,7 @@
 // the backend's — this component only renders what the API returns.
 
 import { useEffect, useRef, useState } from "react"
-import type { PointerEvent } from "react"
+import type { KeyboardEvent, PointerEvent } from "react"
 
 import {
   useAskClarification,
@@ -12,7 +12,7 @@ import {
   useSubmitAnswer,
   useSubmitAnswerAudio,
 } from "../api/client"
-import { playSequence, useRecorder } from "../audio"
+import { playSequence, primePlayback, useRecorder } from "../audio"
 import { prettify } from "../lib"
 import type { Meter, Prompt, Stage, TranscriptTurn } from "../types"
 import { AfterActionReport } from "./AfterActionReport"
@@ -224,30 +224,63 @@ export function Rehearsal() {
     })
   }
 
-  // Hold-to-talk press: prime a muted `Audio` element inside this same pointer
-  // gesture so the persona's spoken reply (played back after an async
-  // record → upload → score → synthesize round trip, well outside any user
-  // gesture) isn't blocked by the browser's autoplay policy. Also captures the
-  // pointer on the button itself so a mouse drag off the button before release
-  // still delivers pointerup/pointercancel here (touch gets this for free via
-  // implicit capture; a plain mouse doesn't).
-  function startRecording(e: PointerEvent<HTMLButtonElement>) {
+  // Shared hold-to-talk "press" logic, used by both the pointer and keyboard
+  // entry points below. Primes the shared playback element (see audio.ts's
+  // `primePlayback`) inside this same user gesture so the persona's spoken
+  // reply (played back after an async record → upload → score → synthesize
+  // round trip, well outside any user gesture) isn't blocked by the browser's
+  // autoplay policy.
+  function beginRecording() {
     if (recordingActiveRef.current || submitAudio.isPending) return
     recordingActiveRef.current = true
-    e.currentTarget.setPointerCapture(e.pointerId)
-    const primer = new Audio()
-    primer.muted = true
-    void primer.play().catch(() => {
-      // Priming is best-effort; a rejected muted play() just means the later
-      // reply falls back to the manual <audio controls> in the transcript.
-    })
+    primePlayback()
     startPromiseRef.current = recorder.start()
   }
 
-  // Hold-to-talk release. Bound to pointerup/pointercancel/blur so a pointer
-  // dragged off the button can't leave the mic open (see audio.ts's useRecorder
-  // doc comment). Waits for the in-flight start() first (see startPromiseRef)
-  // so a fast tap-and-release doesn't race ahead of getUserMedia resolving.
+  // Hold-to-talk press (pointer). Also captures the pointer on the button
+  // itself so a mouse drag off the button before release still delivers
+  // pointerup/pointercancel here (touch gets this for free via implicit
+  // capture; a plain mouse doesn't).
+  function startRecording(e: PointerEvent<HTMLButtonElement>) {
+    if (recordingActiveRef.current || submitAudio.isPending) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    beginRecording()
+  }
+
+  // Hold-to-talk press (keyboard) — Space/Enter while the button is focused.
+  // Without this, a keyboard user tabbing to the button and pressing Space or
+  // Enter gets an inert `click` event and nothing happens (WCAG 2.1.1).
+  // `e.repeat` guards against the OS repeating keydown while the key is held,
+  // which would otherwise restart the recording on every repeat event.
+  function handleTalkKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
+    if (e.key !== " " && e.key !== "Enter") return
+    if (e.key === " ") e.preventDefault() // stop the page from scrolling
+    if (e.repeat) return
+    beginRecording()
+  }
+
+  function handleTalkKeyUp(e: KeyboardEvent<HTMLButtonElement>) {
+    if (e.key !== " " && e.key !== "Enter") return
+    if (e.key === " ") e.preventDefault()
+    stopRecording()
+  }
+
+  // Hold-to-talk release. Bound to pointerup/pointercancel/blur (and, for
+  // keyboard use, keyup) so a pointer dragged off the button — or a mic left
+  // open by an early return — can't leave the mic running (see audio.ts's
+  // useRecorder doc comment). Waits for the in-flight start() first (see
+  // startPromiseRef) so a fast tap-and-release doesn't race ahead of
+  // getUserMedia resolving. `recorder.stop()` runs unconditionally once
+  // there's something to stop (guarded only by `recordingActiveRef.current`
+  // above); a missing `prompt` only skips building/submitting the turn, since
+  // returning early *before* stopping would leave the mic open.
+  //
+  // `recordingActiveRef.current` is reset only once `recorder.stop()` has
+  // resolved and the blob has been handed off (`.finally`, not synchronously
+  // at the top): resetting it early would let a second press-and-release
+  // landing in that window pass the guard in `beginRecording`, call
+  // `recorder.start()` again, and clobber this recording's still-in-flight
+  // buffered chunks (audio.ts's `chunksRef` reset) out from under it.
   //
   // Deliberately doesn't gate on `recorder.recording`: that boolean is read
   // from this render's closure over `recorder`, which is frozen at whatever
@@ -260,16 +293,18 @@ export function Rehearsal() {
   // with an empty blob when there wasn't, which the size check below catches.
   function stopRecording() {
     if (!recordingActiveRef.current) return
-    recordingActiveRef.current = false
     const asked = prompt // capture the prompt this answer responds to
     const started = startPromiseRef.current ?? Promise.resolve()
-    started.then(() => {
-      if (!asked) return
-      recorder.stop().then((blob) => {
+    started
+      .then(() => recorder.stop())
+      .then((blob) => {
         // Nothing was actually recording (e.g. getUserMedia failed, or was
         // still pending, when this press ended) — audio.ts's stop() resolves
-        // with an empty blob in that case instead of throwing.
-        if (blob.size === 0) return
+        // with an empty blob in that case instead of throwing. Likewise, if
+        // there's no active prompt to attach this answer to there's nothing
+        // to submit — but the recorder above has already been stopped and the
+        // mic released either way.
+        if (blob.size === 0 || !asked) return
         // Same optimistic-pending flow as a typed answer, but there's no
         // transcript yet to show, so the placeholder answer is blank.
         setPending({ prompt: asked, answer: "", kind: "answer" })
@@ -311,7 +346,9 @@ export function Rehearsal() {
           onError: () => setPending(null),
         })
       })
-    })
+      .finally(() => {
+        recordingActiveRef.current = false
+      })
   }
 
   // Not started yet: a single call to action.
@@ -535,6 +572,13 @@ export function Rehearsal() {
                       onPointerUp={stopRecording}
                       onPointerCancel={stopRecording}
                       onBlur={stopRecording}
+                      onKeyDown={handleTalkKeyDown}
+                      onKeyUp={handleTalkKeyUp}
+                      aria-label={
+                        recorder.recording
+                          ? "Recording your answer — release to send"
+                          : "Hold to record your answer"
+                      }
                       disabled={submitAudio.isPending}
                       className={`w-full select-none touch-none rounded-lg px-5 py-6 text-sm font-semibold shadow-sm transition disabled:opacity-50 ${
                         recorder.recording

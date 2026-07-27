@@ -83,6 +83,40 @@ export function useRecorder(): {
   return { recording, start, stop, error }
 }
 
+// A single reusable `Audio` element, shared between `primePlayback` (called
+// synchronously inside the hold-to-talk pointer gesture) and `playSequence`
+// (called later, well outside any user gesture, once the record → upload →
+// score → synthesize round trip resolves). Browsers key "has a real user
+// gesture unlocked autoplay here" to the specific element/context that was
+// played during the gesture, not to autoplay having been used anywhere —
+// so priming a *different* `Audio` instance (or one with no `src`) than the
+// one `playSequence` later plays does nothing for Safari's autoplay policy.
+const playbackEl = new Audio()
+
+// The shortest valid silent audio clip: a 1-sample, 8kHz mono WAV. Used only
+// to give the shared element a real `src` to play during the priming call —
+// its content is irrelevant, only that `.play()` runs inside the gesture.
+const SILENT_CLIP_DATA_URL =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="
+
+// Call synchronously from inside a real user-gesture handler (e.g.
+// `pointerdown`) to unlock `playbackEl` for the browser's autoplay policy
+// before `playSequence` reuses it later, outside any gesture, to play the
+// persona's spoken reply.
+export function primePlayback(): void {
+  playbackEl.muted = true
+  playbackEl.src = SILENT_CLIP_DATA_URL
+  playbackEl
+    .play()
+    .catch(() => {
+      // Priming is best-effort; a rejected muted play() just means the later
+      // reply falls back to the manual <audio controls> in the transcript.
+    })
+    .finally(() => {
+      playbackEl.muted = false
+    })
+}
+
 // Plays a list of base64-encoded mp3 clips back to back, waiting for each
 // clip's `ended` event before starting the next. Callers (Rehearsal.tsx) pass
 // raw base64 straight from the API response (`reply_audio`/`next_prompt_audio`
@@ -90,16 +124,33 @@ export function useRecorder(): {
 // clip that fails to play (e.g. the browser blocking autoplay outside a user
 // gesture) is skipped rather than rejecting the whole sequence — the caller
 // falls back to a manual `<audio controls>` in the transcript for that case.
+// Reuses `playbackEl` (rather than constructing a new `Audio` per clip) so
+// the gesture-unlocked state from `primePlayback` actually carries over.
 export function playSequence(sources: string[]): Promise<void> {
   return sources.reduce<Promise<void>>(
     (chain, source) =>
       chain.then(
         () =>
           new Promise<void>((resolve) => {
-            const audio = new Audio(`data:audio/mp3;base64,${source}`)
-            audio.addEventListener("ended", () => resolve(), { once: true })
-            audio.addEventListener("error", () => resolve(), { once: true })
-            audio.play().catch(() => resolve())
+            const onEnded = () => {
+              cleanup()
+              resolve()
+            }
+            const onError = () => {
+              cleanup()
+              resolve()
+            }
+            function cleanup() {
+              playbackEl.removeEventListener("ended", onEnded)
+              playbackEl.removeEventListener("error", onError)
+            }
+            playbackEl.addEventListener("ended", onEnded, { once: true })
+            playbackEl.addEventListener("error", onError, { once: true })
+            playbackEl.src = `data:audio/mp3;base64,${source}`
+            playbackEl.play().catch(() => {
+              cleanup()
+              resolve()
+            })
           }),
       ),
     Promise.resolve(),

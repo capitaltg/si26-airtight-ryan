@@ -45,6 +45,27 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
+# The browser-recorded container types this app ever expects (see
+# `frontend/src/audio.ts`'s `MIME_CANDIDATES`, plus the codec-parameter
+# variants browsers actually send, e.g. "audio/webm;codecs=opus"). Anything
+# else is client-controlled and untrusted: `content_type` is persisted and
+# later echoed back verbatim as the `media_type` on `GET .../turns/{i}/audio`,
+# so an unvalidated value is a stored-XSS vector (e.g. "text/html") and can
+# also exceed the `answer_audio_content_type` column's `String(64)` limit.
+_ALLOWED_AUDIO_CONTENT_TYPE_PREFIXES = ("audio/webm", "audio/mp4", "audio/ogg")
+_SAFE_DEFAULT_AUDIO_CONTENT_TYPE = "application/octet-stream"
+
+
+def _safe_audio_content_type(content_type: str) -> str:
+    """Pass through only an allowlisted container type; anything else falls
+    back to a safe, generic type. This is purely a replay-header safeguard —
+    ffmpeg sniffs the real container from the bytes regardless of what's
+    claimed here (see `app/voice/audio.py`), so the upload is never rejected
+    for a mismatched-but-unrecognized content type."""
+    if content_type.lower().startswith(_ALLOWED_AUDIO_CONTENT_TYPE_PREFIXES):
+        return content_type
+    return _SAFE_DEFAULT_AUDIO_CONTENT_TYPE
+
 
 class MeterDTO(BaseModel):
     persona_id: str
@@ -239,7 +260,7 @@ def submit_answer_audio(
     if len(data) > settings.max_answer_audio_bytes:
         raise HTTPException(status_code=413, detail="audio upload too large")
 
-    content_type = audio.content_type or "audio/webm"
+    content_type = _safe_audio_content_type(audio.content_type or "audio/webm")
     try:
         transcript = transcriber(data, content_type)
     except TranscriptionError:
