@@ -41,8 +41,16 @@ def _render_extraction_summary(extraction: Extraction) -> str:
 
     The number is already locked and passed via ``_render_score``, so the reply
     only needs the qualitative shape of the answer — not the full ``Extraction``
-    JSON (sub-question coverage, fact checks, consistency flags, per-field
-    scaffolding), which only padded the second Bedrock call.
+    JSON (sub-question coverage, fact checks, per-field scaffolding), which only
+    padded the second Bedrock call.
+
+    Consistency flags are the exception to that trimming. ``matched_rows`` tells
+    the persona a contradiction was scored but not what it contradicted, and a
+    persona told to react to an invisible penalty invents a source for it — in
+    one observed run, an "org chart" and a "technical volume" that never existed
+    in the session. The flag detail already names the earlier turn and what it
+    said, so passing it through is what keeps the reply tied to the presenter's
+    own words. Same reason ``red_line_hits`` passes ``why``.
     """
     lines: list[str] = []
     if extraction.claims:
@@ -51,6 +59,12 @@ def _render_extraction_summary(extraction: Extraction) -> str:
     if extraction.dodges:
         lines.append("Dodges:")
         lines.extend(f"  - {dodge.type.value}" for dodge in extraction.dodges)
+    if extraction.consistency_flags:
+        lines.append("Contradicts an earlier answer:")
+        lines.extend(
+            f"  - (conflicts with turn {flag.conflicts_with_turn}) {flag.detail}"
+            for flag in extraction.consistency_flags
+        )
     if extraction.red_line_hits:
         lines.append("Red lines crossed:")
         lines.extend(f"  - {hit.why}" for hit in extraction.red_line_hits)

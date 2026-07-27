@@ -10,7 +10,8 @@ ignores every other row. Otherwise the matching rows are summed and clamped to
 [-2, +2]:
 
 - ``dodge`` (-2)          — any dodge present
-- ``false_fact`` (-1)     — once per refuted fact_check (accumulates before clamp)
+- ``false_fact`` (-1)     — once per refuted tier-1+ fact_check (accumulates before
+  clamp); tier-0 refutations are contradictions, not false facts
 - ``contradiction`` (-1)  — any consistency flag (Tier-0 conflict)
 - ``evidence_backed`` (+2) — any commitment claim with ``backing == backed``
 - ``approach_cited`` (+1) — coverage full/partial, and not already evidence_backed
@@ -60,7 +61,13 @@ def score_turn(extraction: Extraction, rubric: Rubric) -> ScoreOutput:
         matched.add("dodge")
         delta += values["dodge"]
 
-    refuted = sum(1 for fc in extraction.fact_checks if fc.verdict is Verdict.refuted)
+    # Tier 0 is a conflict with an earlier answer, which the `contradiction` row
+    # already charges. The model mirrors such a conflict into fact_checks as well
+    # as consistency_flags, so counting tier 0 here bills one statement twice.
+    # Only a document refutation (tier 1+) is a false fact.
+    refuted = sum(
+        1 for fc in extraction.fact_checks if fc.verdict is Verdict.refuted and fc.tier >= 1
+    )
     if refuted:
         matched.add("false_fact")
         delta += values["false_fact"] * refuted

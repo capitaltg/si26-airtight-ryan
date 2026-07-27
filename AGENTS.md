@@ -203,6 +203,7 @@ airtight/
 │  │  ├─ test_conciseness.py
 │  │  ├─ test_consistency_check.py
 │  │  ├─ test_content_loader.py
+│  │  ├─ test_contradiction_grounding.py
 │  │  ├─ test_extraction.py
 │  │  ├─ test_extraction_schema.py
 │  │  ├─ test_orchestrator.py
