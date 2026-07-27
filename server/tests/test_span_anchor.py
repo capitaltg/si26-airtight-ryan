@@ -6,6 +6,8 @@ quoted out of that first text. These tests pin the guarantee that after
 re-anchoring, every span is a real substring of the answer the presenter typed.
 """
 
+from itertools import combinations
+
 from app.bedrock.cache import normalize_answer
 from app.pipeline.span_anchor import reanchor_spans
 from app.schemas.extraction import (
@@ -150,6 +152,56 @@ def test_any_span_from_a_normalized_equal_answer_can_be_anchored() -> None:
             extraction = Extraction(claims=[_claim(quote)])
             anchored = reanchor_spans(extraction, variant).claims[0].span
             assert anchored in variant, (variant, quote, anchored)
+
+
+def test_whitespace_and_case_retypes_compose_freely() -> None:
+    """Folding is closed over whitespace and case, so the safe retypes can be mixed
+    in any combination and still land on one key. Every subset of the eight is
+    checked, and each one must also yield a span that really occurs in it.
+    """
+    noise = [
+        lambda s: f"   {s}  ",
+        lambda s: s + "\n",
+        lambda s: s.replace(" ", "  "),
+        lambda s: s.replace(" ", "\t"),
+        lambda s: s.replace(". ", ".\n"),
+        lambda s: s.replace(". ", ".\n\n"),
+        lambda s: s.upper(),
+        lambda s: s.replace(" ", "\xa0"),
+    ]
+    quote = "Our PM has 12 years of federal work"
+    for size in range(len(noise) + 1):
+        for subset in combinations(noise, size):
+            variant = RAW
+            for edit in subset:
+                variant = edit(variant)
+            assert normalize_answer(variant) == normalize_answer(RAW), variant
+            anchored = reanchor_spans(Extraction(claims=[_claim(quote)]), variant)
+            assert anchored.claims[0].span in variant, variant
+
+
+def test_one_content_change_poisons_any_amount_of_formatting_noise() -> None:
+    """The other half of the property: formatting noise piled on top of a content
+    edit must not fold back onto the original key."""
+    noise = [
+        lambda s: f"   {s}  ",
+        lambda s: s.replace(" ", "  "),
+        lambda s: s.replace(" ", "\t"),
+        lambda s: s.upper(),
+    ]
+    edits = [
+        lambda s: s.replace("phased approach", "phasedapproach"),
+        lambda s: s.replace(". ", "."),
+        lambda s: s.replace("phased", "phasd"),
+        lambda s: s.replace("phased", "staged"),
+    ]
+    for edit in edits:
+        for size in range(len(noise) + 1):
+            for subset in combinations(noise, size):
+                variant = edit(RAW)  # the content change goes first, so noise cannot erase it
+                for add in subset:
+                    variant = add(variant)
+                assert normalize_answer(variant) != normalize_answer(RAW), variant
 
 
 def test_words_run_together_cannot_be_anchored_and_are_left_alone() -> None:
