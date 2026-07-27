@@ -19,10 +19,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from app.bedrock.cache import CacheKeyInput, normalize_answer
 from app.bedrock.client import BedrockClient
 from app.content.loader import Content
 from app.db.models import ClaimLedger
 from app.pipeline.conciseness import compute_conciseness
+from app.pipeline.span_anchor import reanchor_spans
 from app.schemas.content import Concern, PersonaDefinition
 from app.schemas.extraction import Conciseness, Extraction
 
@@ -160,6 +162,35 @@ def build_extraction_prompt(
     )
 
 
+def _blocks(
+    *,
+    persona: PersonaDefinition,
+    content: Content,
+    answer: str,
+    concern: Concern,
+    prior_claims: Sequence[ClaimLedger],
+) -> list[dict[str, Any]]:
+    """The two content blocks sent to Bedrock: a cached static prefix (persona +
+    RFP + proposal) and an uncached dynamic suffix (concern + ledger + answer).
+
+    Factored out so the sent blocks and the hashed blocks (built from the
+    normalized answer) cannot drift apart — both go through this one helper.
+    """
+    return [
+        {
+            "type": "text",
+            "text": build_extraction_static_prefix(persona=persona, content=content),
+            "cache_control": {"type": "ephemeral"},
+        },
+        {
+            "type": "text",
+            "text": build_extraction_dynamic_suffix(
+                answer=answer, concern=concern, prior_claims=prior_claims
+            ),
+        },
+    ]
+
+
 def run_extraction(
     *,
     answer: str,
@@ -175,23 +206,36 @@ def run_extraction(
     The prompt goes out as two content blocks: a cached static prefix (persona +
     RFP + proposal) and an uncached dynamic suffix (concern + ledger + answer).
     The model sees the exact same text as a single string would produce, so the
-    extraction — and therefore the score — is unchanged.
+    extraction — and therefore the score — is unchanged. The cache key is hashed
+    from the same blocks rebuilt with the normalized answer, so whitespace- and
+    case-only variants of one answer replay the same cached extraction while the
+    model still sees the raw, verbatim answer. A replayed extraction quoted the
+    first phrasing, so its spans are re-anchored onto this answer before anything
+    persists them (see ``pipeline.span_anchor``); on a cold call that is a no-op.
     """
-    content_blocks: list[dict[str, Any]] = [
-        {
-            "type": "text",
-            "text": build_extraction_static_prefix(persona=persona, content=content),
-            "cache_control": {"type": "ephemeral"},
-        },
-        {
-            "type": "text",
-            "text": build_extraction_dynamic_suffix(
-                answer=answer, concern=concern, prior_claims=prior_claims
-            ),
-        },
-    ]
-    extraction = client.extract(
-        content_blocks, content_schema=Extraction, tool_name=TOOL_NAME
+    content_blocks = _blocks(
+        persona=persona,
+        content=content,
+        answer=answer,
+        concern=concern,
+        prior_claims=prior_claims,
     )
-    conciseness = compute_conciseness(answer, extraction)
-    return ExtractionResult(extraction=extraction, conciseness=conciseness)
+    normalized = normalize_answer(answer)
+    extraction = client.extract(
+        content_blocks,
+        content_schema=Extraction,
+        tool_name=TOOL_NAME,
+        cache_key=CacheKeyInput(
+            content=_blocks(
+                persona=persona,
+                content=content,
+                answer=normalized,
+                concern=concern,
+                prior_claims=prior_claims,
+            ),
+            normalized_answer=normalized,
+        ),
+    )
+    anchored = reanchor_spans(extraction, answer)
+    conciseness = compute_conciseness(answer, anchored)
+    return ExtractionResult(extraction=anchored, conciseness=conciseness)

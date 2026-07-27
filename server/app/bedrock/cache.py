@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from sqlalchemy.exc import IntegrityError
@@ -55,6 +56,26 @@ def request_key(
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
+def normalize_answer(text: str) -> str:
+    """Whitespace- and case-insensitive form of presenter-typed text, for hashing only.
+
+    ``str.split()`` with no argument drops leading/trailing whitespace and
+    collapses every internal run (spaces, tabs, newlines) to one gap. Pure and
+    deterministic on purpose: no stemming, no punctuation stripping, no fuzzy or
+    semantic matching. Two answers that differ in wording must still key apart.
+    """
+    return " ".join(text.split()).lower()
+
+
+@dataclass(frozen=True)
+class CacheKeyInput:
+    """Hash ``content`` instead of what was actually sent, and record
+    ``normalized_answer`` on the row so a surprising hit is easy to trace."""
+
+    content: str | list[dict[str, Any]]
+    normalized_answer: str
+
+
 class ResponseCache(Protocol):
     """The slice of behaviour the client needs: look up a stored response, or
     store one. ``put`` is first-write-wins so the first response for a request is
@@ -62,7 +83,13 @@ class ResponseCache(Protocol):
 
     def get(self, key: str) -> dict[str, Any] | None: ...
 
-    def put(self, key: str, method: str, value: dict[str, Any]) -> None: ...
+    def put(
+        self,
+        key: str,
+        method: str,
+        value: dict[str, Any],
+        normalized_answer: str | None = None,
+    ) -> None: ...
 
 
 class DbResponseCache:
@@ -84,13 +111,22 @@ class DbResponseCache:
             row = db.get(ModelResponseCache, key)
             return dict(row.response_json) if row is not None else None
 
-    def put(self, key: str, method: str, value: dict[str, Any]) -> None:
+    def put(
+        self,
+        key: str,
+        method: str,
+        value: dict[str, Any],
+        normalized_answer: str | None = None,
+    ) -> None:
         with self._session_factory() as db:
             if db.get(ModelResponseCache, key) is not None:
                 return
             db.add(
                 ModelResponseCache(
-                    request_hash=key, method=method, response_json=value
+                    request_hash=key,
+                    method=method,
+                    response_json=value,
+                    normalized_answer=normalized_answer,
                 )
             )
             try:

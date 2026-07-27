@@ -137,7 +137,8 @@ airtight/
 │  │  ├─ versions/
 │  │  │  ├─ 0001_init.py
 │  │  │  ├─ 0002_clarifications.py
-│  │  │  └─ 0003_model_response_cache.py
+│  │  │  ├─ 0003_model_response_cache.py
+│  │  │  └─ 0004_cache_normalized_answer.py
 │  │  ├─ env.py
 │  │  └─ script.py.mako
 │  ├─ app/
@@ -173,7 +174,8 @@ airtight/
 │  │  │  ├─ extraction.py
 │  │  │  ├─ orchestrator.py
 │  │  │  ├─ reaction.py
-│  │  │  └─ scoring.py
+│  │  │  ├─ scoring.py
+│  │  │  └─ span_anchor.py
 │  │  ├─ report/
 │  │  │  ├─ __init__.py
 │  │  │  └─ builder.py
@@ -204,7 +206,8 @@ airtight/
 │  │  ├─ test_repo.py
 │  │  ├─ test_report.py
 │  │  ├─ test_response_cache.py
-│  │  └─ test_scoring.py
+│  │  ├─ test_scoring.py
+│  │  └─ test_span_anchor.py
 │  ├─ .dockerignore
 │  ├─ alembic.ini
 │  ├─ Dockerfile

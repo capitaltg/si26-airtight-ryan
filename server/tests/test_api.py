@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api.deps import get_bedrock_client, get_db, get_session_factory
+from app.bedrock.cache import CacheKeyInput
 from app.content.loader import Content
 from app.db.models import Base
 from app.main import app
@@ -51,6 +52,7 @@ class _FakeClient:
         content_schema: type[BaseModel],
         tool_name: str,
         max_tokens: int = 4096,
+        cache_key: CacheKeyInput | None = None,
     ) -> BaseModel:
         if content_schema is Extraction:
             return Extraction(
@@ -70,7 +72,13 @@ class _FakeClient:
             )
         return PersonaReaction(in_character_reply="Concrete. Good.", rationale="+2 backed.")
 
-    def react(self, prompt: str, *, max_tokens: int = 1024) -> str:
+    def react(
+        self,
+        prompt: str,
+        *,
+        max_tokens: int = 1024,
+        cache_key: CacheKeyInput | None = None,
+    ) -> str:
         return "Strong on the technical approach; keep drilling staffing specifics."
 
 

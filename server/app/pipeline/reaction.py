@@ -13,6 +13,7 @@ as free text that would need parsing.
 
 from __future__ import annotations
 
+from app.bedrock.cache import CacheKeyInput, normalize_answer
 from app.bedrock.client import BedrockClient
 from app.schemas.content import Concern, PersonaDefinition
 from app.schemas.extraction import Extraction
@@ -154,9 +155,21 @@ def run_clarification(
 ) -> str:
     """Plain-text clarification reply. No tool-use, no ``PersonaReaction``, no
     scoring artifacts — just the ``react`` path, so nothing here can move a
-    number."""
+    number.
+
+    The question is presenter-typed text like an answer, so it gets the same
+    normalized-cache-key treatment: the model sees the raw question, but a
+    whitespace- or case-only variant of one question replays the same reply.
+    """
+    normalized = normalize_answer(question)
     return client.react(
-        build_clarification_prompt(persona=persona, concern=concern, question=question)
+        build_clarification_prompt(persona=persona, concern=concern, question=question),
+        cache_key=CacheKeyInput(
+            content=build_clarification_prompt(
+                persona=persona, concern=concern, question=normalized
+            ),
+            normalized_answer=normalized,
+        ),
     )
 
 

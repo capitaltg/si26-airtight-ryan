@@ -37,6 +37,10 @@ e2e/playwright/.cache/
 # --- Local agent artifacts ---
 docs/
 
+# --- Docker (local-only compose overrides) ---
+docker-compose.override.yml
+docker-compose.override.yaml
+
 # --- OS / editors ---
 .DS_Store
 .idea/

@@ -14,7 +14,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.bedrock.cache import DbResponseCache, request_key
+from app.bedrock.cache import DbResponseCache, normalize_answer, request_key
 from app.bedrock.client import BedrockClient
 from app.db.models import Base, ModelResponseCache
 from app.schemas.extraction import Extraction
@@ -64,6 +64,41 @@ def test_request_key_is_order_independent_but_content_sensitive() -> None:
     c = request_key(method="react", model="m", max_tokens=10, content="different")
     assert a == b
     assert a != c
+
+
+def test_normalize_trims_and_collapses_whitespace() -> None:
+    assert normalize_answer("  hello   world  ") == "hello world"
+    assert normalize_answer("hello\tworld") == "hello world"
+    assert normalize_answer("hello\n\nworld") == "hello world"
+    assert normalize_answer("\nhello world\t") == "hello world"
+
+
+def test_normalize_lowercases() -> None:
+    assert normalize_answer("Hello WORLD") == "hello world"
+
+
+def test_normalize_keeps_different_wording_distinct() -> None:
+    assert normalize_answer("we ship weekly") != normalize_answer("we ship monthly")
+
+
+def test_put_records_normalized_answer() -> None:
+    factory = _factory()
+    cache = DbResponseCache(factory)
+    cache.put("k1", "extract", {"tool_input": {"claims": []}}, normalized_answer="we ship weekly")
+    with factory() as db:
+        row = db.get(ModelResponseCache, "k1")
+    assert row is not None
+    assert row.normalized_answer == "we ship weekly"
+
+
+def test_put_without_normalized_answer_leaves_column_none() -> None:
+    factory = _factory()
+    cache = DbResponseCache(factory)
+    cache.put("k1", "react", {"text": "hi"})
+    with factory() as db:
+        row = db.get(ModelResponseCache, "k1")
+    assert row is not None
+    assert row.normalized_answer is None
 
 
 # --- end-to-end replay through the real client over a DB-backed cache ---

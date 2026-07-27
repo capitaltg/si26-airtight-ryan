@@ -14,6 +14,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.bedrock.cache import CacheKeyInput
 from app.content.loader import Content, load_content
 from app.db import repo
 from app.db.models import Base
@@ -68,6 +69,7 @@ class ScriptedClient:
         content_schema: type[BaseModel],
         tool_name: str,
         max_tokens: int = 4096,
+        cache_key: CacheKeyInput | None = None,
     ) -> BaseModel:
         if content_schema is Extraction:
             assert self.next_extraction is not None, "test did not script an extraction"
@@ -76,7 +78,13 @@ class ScriptedClient:
             return self.reaction
         raise AssertionError(f"unexpected schema {content_schema!r}")
 
-    def react(self, prompt: str, *, max_tokens: int = 1024) -> str:
+    def react(
+        self,
+        prompt: str,
+        *,
+        max_tokens: int = 1024,
+        cache_key: CacheKeyInput | None = None,
+    ) -> str:
         return "Here's what I'm looking for. I still need a real answer."
 
 

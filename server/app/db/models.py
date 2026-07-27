@@ -187,6 +187,9 @@ class ModelResponseCache(Base):
     method: Mapped[str] = mapped_column(String(16))
     # {"tool_input": {...}} for extract, {"text": "..."} for react.
     response_json: Mapped[dict[str, Any]] = mapped_column(JSON_)
+    # Normalized presenter text that fed this key ("extract" and clarification
+    # "react" rows only); NULL where no presenter text is part of the request.
+    normalized_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

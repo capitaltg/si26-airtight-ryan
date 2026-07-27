@@ -6,10 +6,13 @@ running claim ledger with its verbatim spans so Tier-0 contradictions can be
 detected. These tests use a fake BedrockClient — no network.
 """
 
+from types import SimpleNamespace
 from typing import Any
 
 from pydantic import BaseModel
 
+from app.bedrock.cache import CacheKeyInput
+from app.bedrock.client import BedrockClient
 from app.content.loader import load_content
 from app.db.models import ClaimLedger
 from app.pipeline.extraction import (
@@ -34,12 +37,14 @@ class FakeBedrockClient:
         content_schema: type[BaseModel],
         tool_name: str,
         max_tokens: int = 4096,
+        cache_key: CacheKeyInput | None = None,
     ) -> BaseModel:
         self.calls.append(
             {
                 "content": content,
                 "content_schema": content_schema,
                 "tool_name": tool_name,
+                "cache_key": cache_key,
             }
         )
         return self._result
@@ -217,3 +222,268 @@ def test_run_extraction_returns_extraction_plus_computed_conciseness() -> None:
     call = client.calls[0]
     assert call["content_schema"] is Extraction
     assert call["tool_name"] == "record_extraction"
+
+
+# --- normalized cache-key acceptance: whitespace/case variants replay, wording
+# and context changes still miss (server/app/bedrock/cache.py normalize_answer) ---
+
+
+def _cache_block(**fields: Any) -> SimpleNamespace:
+    return SimpleNamespace(**fields)
+
+
+def _cache_tool_response(tool_input: dict) -> SimpleNamespace:
+    return SimpleNamespace(
+        content=[_cache_block(type="tool_use", name="record_extraction", input=tool_input)],
+        stop_reason="tool_use",
+    )
+
+
+class _ScriptedMessages:
+    def __init__(self, responses: list[Any]) -> None:
+        self._responses = list(responses)
+        self.calls: list[dict[str, Any]] = []
+
+    def create(self, **kwargs: Any) -> Any:
+        self.calls.append(kwargs)
+        return self._responses.pop(0)
+
+
+class _ScriptedTransport:
+    def __init__(self, *responses: Any) -> None:
+        self.messages = _ScriptedMessages(list(responses))
+
+    @property
+    def calls(self) -> list[dict[str, Any]]:
+        return self.messages.calls
+
+
+class DictCache:
+    """In-memory ``ResponseCache`` with first-write-wins ``put``, matching the
+    DB-backed cache's contract without a database (mirrors
+    ``test_bedrock_client.py``'s ``DictCache``)."""
+
+    def __init__(self) -> None:
+        self.store: dict[str, dict] = {}
+
+    def get(self, key: str) -> dict | None:
+        return self.store.get(key)
+
+    def put(
+        self,
+        key: str,
+        method: str,
+        value: dict,
+        normalized_answer: str | None = None,
+    ) -> None:
+        self.store.setdefault(key, value)
+
+
+def _distinct_extraction_a() -> dict:
+    return {
+        "claims": [
+            {
+                "text": "PM has 12 years of federal experience.",
+                "type": "commitment",
+                "backing": "backed",
+                "span": "our PM brings 12 years",
+            }
+        ]
+    }
+
+
+def _distinct_extraction_b() -> dict:
+    return {
+        "claims": [
+            {
+                "text": "Team delivered three prior systems.",
+                "type": "commitment",
+                "backing": "backed",
+                "span": "three prior systems",
+            }
+        ]
+    }
+
+
+def _run(
+    client: BedrockClient,
+    answer: str,
+    *,
+    persona: Any = None,
+    prior_claims: list[ClaimLedger] | None = None,
+) -> ExtractionResult:
+    content, default_persona, concern = _fixture()
+    return run_extraction(
+        answer=answer,
+        concern=concern,
+        persona=persona if persona is not None else default_persona,
+        content=content,
+        prior_claims=prior_claims if prior_claims is not None else [],
+        client=client,
+    )
+
+
+def test_whitespace_variant_answer_hits_the_same_cache_entry() -> None:
+    transport = _ScriptedTransport(
+        _cache_tool_response(_distinct_extraction_a()),
+        _cache_tool_response(_distinct_extraction_b()),
+    )
+    client = BedrockClient(transport=transport, cache=DictCache())
+    answer = "We follow a phased approach with a named PM."
+    whitespace_variant = "  We follow a phased  approach\twith a named   PM.  \n"
+
+    first = _run(client, answer)
+    second = _run(client, whitespace_variant)
+
+    assert first.extraction == second.extraction
+    assert len(transport.calls) == 1
+
+
+def test_case_variant_answer_hits_the_same_cache_entry() -> None:
+    transport = _ScriptedTransport(
+        _cache_tool_response(_distinct_extraction_a()),
+        _cache_tool_response(_distinct_extraction_b()),
+    )
+    client = BedrockClient(transport=transport, cache=DictCache())
+    answer = "We follow a phased approach with a named PM."
+    case_variant = "WE FOLLOW A PHASED APPROACH WITH A NAMED PM."
+
+    first = _run(client, answer)
+    second = _run(client, case_variant)
+
+    assert first.extraction == second.extraction
+    assert len(transport.calls) == 1
+
+
+def test_reworded_answer_misses_the_cache() -> None:
+    transport = _ScriptedTransport(
+        _cache_tool_response(_distinct_extraction_a()),
+        _cache_tool_response(_distinct_extraction_b()),
+    )
+    client = BedrockClient(transport=transport, cache=DictCache())
+
+    _run(client, "We follow a phased approach with a named PM.")
+    _run(client, "We follow a staged approach with a named PM.")
+
+    assert len(transport.calls) == 2
+
+
+def test_accidentally_joined_words_miss_the_cache() -> None:
+    """Collapsing whitespace runs never deletes a word boundary, so a typo that
+    runs two words together is a different token stream and keys apart. That is
+    the safe outcome: a fresh model call reads the text as typed instead of
+    replaying an extraction of the spaced phrasing."""
+    transport = _ScriptedTransport(
+        _cache_tool_response(_distinct_extraction_a()),
+        _cache_tool_response(_distinct_extraction_b()),
+    )
+    client = BedrockClient(transport=transport, cache=DictCache())
+
+    _run(client, "We follow a phased approach with a named PM.")
+    _run(client, "We follow a phased approach with a namedPM.")
+
+    assert len(transport.calls) == 2
+
+
+def test_persona_change_still_misses_the_cache() -> None:
+    """Same normalized answer, different persona: proves normalization did not
+    leak past the answer into the cacheable prefix."""
+    content = load_content()
+    persona_a = content.personas["technical_evaluator"]
+    persona_b = content.personas["contracting_officer"]
+    transport = _ScriptedTransport(
+        _cache_tool_response(_distinct_extraction_a()),
+        _cache_tool_response(_distinct_extraction_b()),
+    )
+    client = BedrockClient(transport=transport, cache=DictCache())
+    answer = "We follow a phased approach with a named PM."
+
+    _run(client, answer, persona=persona_a)
+    _run(client, answer, persona=persona_b)
+
+    assert len(transport.calls) == 2
+
+
+def test_prior_claims_change_still_misses_the_cache() -> None:
+    """Same normalized answer, different claim ledger: the ledger stays
+    byte-exact in the key, so a changed ledger still misses."""
+    transport = _ScriptedTransport(
+        _cache_tool_response(_distinct_extraction_a()),
+        _cache_tool_response(_distinct_extraction_b()),
+    )
+    client = BedrockClient(transport=transport, cache=DictCache())
+    answer = "We follow a phased approach with a named PM."
+
+    _run(client, answer, prior_claims=[])
+    _run(client, answer, prior_claims=_prior_claims())
+
+    assert len(transport.calls) == 2
+
+
+# --- a replayed extraction must still quote the answer on screen
+# (server/app/pipeline/span_anchor.py) ---
+
+_ANCHOR_ANSWER = "We follow a phased approach. Our PM has 12 years of federal work."
+
+
+def _quoting_extraction() -> dict:
+    """An extraction whose span is quoted verbatim out of ``_ANCHOR_ANSWER``, the
+    way the model is instructed to quote."""
+    return {
+        "claims": [
+            {
+                "text": "PM has 12 years of federal experience.",
+                "type": "commitment",
+                "backing": "backed",
+                "span": "Our PM has 12 years of federal work",
+            }
+        ]
+    }
+
+
+def test_replayed_span_is_reanchored_to_the_answer_actually_typed() -> None:
+    """The cache hit is the point, but the replayed span was quoted out of the
+    first phrasing. Without re-anchoring the transcript shows one text and the
+    report quotes another."""
+    transport = _ScriptedTransport(
+        _cache_tool_response(_quoting_extraction()),
+        _cache_tool_response(_distinct_extraction_b()),
+    )
+    client = BedrockClient(transport=transport, cache=DictCache())
+    variant = "  we follow a phased   approach.\tour pm HAS 12 years of federal work. "
+
+    first = _run(client, _ANCHOR_ANSWER)
+    second = _run(client, variant)
+
+    assert len(transport.calls) == 1  # still a cache hit
+    assert first.extraction.claims[0].span == "Our PM has 12 years of federal work"
+    assert second.extraction.claims[0].span == "our pm HAS 12 years of federal work"
+    assert second.extraction.claims[0].span in variant
+
+
+def test_reanchoring_does_not_move_the_scored_signals() -> None:
+    """Re-anchoring rewrites quote text only, so the fields the scorer reads come
+    through identical and the two runs score the same."""
+    transport = _ScriptedTransport(
+        _cache_tool_response(_quoting_extraction()),
+        _cache_tool_response(_distinct_extraction_b()),
+    )
+    client = BedrockClient(transport=transport, cache=DictCache())
+
+    first = _run(client, _ANCHOR_ANSWER)
+    second = _run(client, _ANCHOR_ANSWER.upper())
+
+    assert len(transport.calls) == 1  # the same cached extraction backs both
+    for a, b in zip(first.extraction.claims, second.extraction.claims, strict=True):
+        assert (a.text, a.type, a.backing) == (b.text, b.type, b.backing)
+
+
+def test_cold_call_leaves_the_models_own_span_untouched() -> None:
+    """No cache involved: the span the model just quoted is already a substring of
+    the answer, so re-anchoring must not rewrite it."""
+    client = FakeBedrockClient(
+        Extraction.model_validate(_quoting_extraction())
+    )
+    result = _run(client, _ANCHOR_ANSWER)  # type: ignore[arg-type]
+
+    assert result.extraction.claims[0].span == "Our PM has 12 years of federal work"
