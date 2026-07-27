@@ -32,7 +32,9 @@ dev = [
 include = ["app*"]
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+# ../scripts so the replay harness (a stdlib-only HTTP client that lives
+# outside the app package) can be unit-tested from here.
+pythonpath = [".", "../scripts"]
 testpaths = ["tests"]
 markers = [
     "golden: live-Bedrock golden-set regression (skips without AWS credentials)",

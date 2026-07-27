@@ -1,0 +1,46 @@
+{
+  "name": "Tier-1 false-fact run",
+  "expect_rows": ["false_fact"],
+  "notes": [
+    "Every planted error is refutable against the RFP or the written proposal (Tier-1), and the presenter never contradicts themselves, so `contradiction` should stay quiet and `false_fact` should fire.",
+    "Planted errors: (1) technical_approach says roughly 25 million records in five waves, newest-first; PWS 3.1 says ~42 million and the proposal says three waves oldest-first. (2) transition promises the Transition-In Plan in 20 business days; PWS 3.3 and the proposal both say 10. (3) compliance_security estimates a 60-day ATO review; PWS 3.4 says the government estimates 120. (4) cost_realism says three option periods; the RFP has two. (5) operational_impact claims a 99.9% availability target; PWS 3.5 says 99.5%.",
+    "Wrong facts were chosen to stay off the authored red lines: no on-prem hosting, no unqualified PM, no transition past 90 days, no skipped parallel run, no production data before ATO, no denied risk. Understating record count or review time is an error of fact, not a crossed hard limit. key_personnel is answered faithfully on purpose — every fact in that concern is an experience claim, and getting one wrong lands on the 'claims experience the written proposal does not support' red line, which caps the persona and drowns out the rest of the run.",
+    "`contradiction` fires on every turn that fires `false_fact`, including the first turn of the session when the claim ledger is empty. That is the engine mislabeling a Tier-1 document conflict as a Tier-0 self-contradiction, not a second planted error; see the run notes in the consistency-check output.",
+    "Observed when this file was authored: `false_fact` fires on technical_approach (plant 1), compliance_security (plant 3), cost_realism (plant 4), and operational_impact (plant 5). key_personnel and transition land on `red_line` and cap the technical evaluator at 25, so plant 2 never gets read as a false fact.",
+    "The exact classification and meter for a turn are decided live by the engine, not by this file."
+  ],
+  "concerns": {
+    "technical_approach": {
+      "answer": "Cloud-native on AWS GovCloud at FedRAMP Moderate: containerized microservices, PostgreSQL as the system of record, an event-driven ingestion pipeline, and a versioned REST API for the Payments Engine, the Benefits Portal, and the data warehouse. We move the roughly 25 million case records out of LCS in five waves, newest-first, with an automated reconciliation report after each wave.",
+      "followup": "Each wave has a rollback point, and the reconciliation report is signed off by the government before the next wave starts."
+    },
+    "key_personnel": {
+      "answer": "Karen Holloway is our PM: twelve years managing federal software programs, PMP since 2015, and the 1.8 million case modernization at the Veterans Claims Office. Samuel Ortiz is Lead Solutions Architect with nine years in cloud-native design, and he led the legacy-mainframe migration for the State of Ohio tax system.",
+      "followup": "Anil Kapoor is Migration Lead with seven years on large-scale data migration, including a 50 million record financial-services migration. All three are committed full-time for the base period."
+    },
+    "transition": {
+      "answer": "We deliver the Transition-In Plan within 20 business days of award and complete transition-in inside the 90 calendar days, including knowledge transfer from Meridian Systems Group and shadowing of adjudication workflows.",
+      "followup": "The 60-day parallel run with reconciled outputs runs before LCS is retired, and Meridian stays available for structured knowledge transfer throughout."
+    },
+    "risk": {
+      "answer": "Top risk is migration data integrity across the case records. Mitigation is waved migration with an automated reconciliation report after each wave and a rollback point before every wave.",
+      "followup": "Second risk is incumbent knowledge loss, mitigated by the shadowing period with Meridian and written runbooks for every adjudication workflow before cutover."
+    },
+    "compliance_security": {
+      "answer": "We meet the NIST SP 800-53 moderate baseline and host in AWS GovCloud, which holds FedRAMP Moderate. No production case data is processed before the ATO is granted, and the government estimates about 60 days to review the ATO package, so the schedule absorbs that review comfortably.",
+      "followup": "Until the ATO is granted the environment runs on synthetic data only, and the package covers the full control set for CUI and PII."
+    },
+    "cost_realism": {
+      "answer": "28 full-time equivalents at steady state, sized against the 1.2 million cases a year the Bureau adjudicates. Pricing is firm-fixed for the base period and for each of the three option periods, with no assumptions of price adjustment.",
+      "followup": "The staffing basis is the adjudication volume plus the migration load in the base period, and the steady-state number holds flat across every option period."
+    },
+    "past_performance": {
+      "answer": "The Veterans Claims Office case modernization from 2021 to 2024 is the closest comparable: a 1.8 million case system moved to a cloud-native platform, on schedule, zero data loss, CPARS Exceptional. The State of Ohio tax-system migration from 2019 to 2021 re-platformed a COBOL mainframe to a web application serving 900 users.",
+      "followup": "Both were legacy systems of record with live users throughout, which is the part that maps onto LCS."
+    },
+    "operational_impact": {
+      "answer": "Adjudicators keep working through cutover because LCS stays live through the 60-day parallel run with daily reconciliation. After go-live we hold a 99.9% monthly availability target during the 6am to 8pm Eastern core hours, all 2,400 adjudicators are trained before cutover, and the help desk answers Severity-1 incidents within 30 minutes.",
+      "followup": "Severity-1 incidents are resolved within 4 hours, and the training covers every adjudication workflow that changes at cutover."
+    }
+  }
+}

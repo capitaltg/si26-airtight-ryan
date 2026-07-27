@@ -22,6 +22,51 @@ python3 scripts/replay_session.py scripts/replay/scenario-mixed.json --report
 
 Point at a non-default API with `--base-url` or `AIRTIGHT_API_URL`.
 
+## Scenarios
+
+| file | what it exercises |
+|---|---|
+| `scenario-mixed.json` | a believable full rehearsal: a clarify, clean passes, a coverage-gap follow-up that recovers, an over-claim, a concern that closes failed |
+| `scenario-contradiction.json` | Tier-0 `contradiction`: four conflicts between two things the presenter said, on facts absent from the RFP and proposal so nothing else can fire |
+| `scenario-false-fact.json` | Tier-1 `false_fact`: six claims refutable against the RFP or written proposal, chosen to stay off the authored red lines |
+
+A scenario may declare `"expect_rows": ["contradiction"]` — the rubric rows that
+must fire somewhere in the run. `consistency_check.py` treats an expected row
+that never fires as a failure, so a scenario that drifts into testing nothing
+says so instead of passing quietly.
+
+## Consistency check
+
+`../consistency_check.py` replays a scenario N times and diffs the runs turn by
+turn — prompt, answer sent, matched rows, delta, meter, capped, concern status,
+reply, rationale — plus the final meters. Session ids and timestamps are
+excluded; they are supposed to differ.
+
+```sh
+python3 scripts/consistency_check.py scripts/replay/scenario-contradiction.json
+python3 scripts/consistency_check.py --all --runs 3 --quiet
+python3 scripts/consistency_check.py scripts/replay/scenario-false-fact.json --no-cache
+```
+
+Two modes testing two different things:
+
+- **default (cache on).** Run 1 populates `model_response_cache`; later runs
+  replay it. A pass means the request bytes hash identically across separate
+  sessions — the guarantee [`app/bedrock/cache.py`](../../server/app/bedrock/cache.py)
+  actually makes. A failure means the prompt drifted and the cache stopped
+  hitting. This does **not** test the model; every call after run 1 is a replay.
+  Free after the first run.
+- **`--no-cache`.** Truncates `model_response_cache` between runs, so every run
+  makes real Bedrock calls. This is the temperature-0 stability test from
+  [docs/ideation/2-scoring-and-drift.md](../../docs/ideation/2-scoring-and-drift.md):
+  a turn that swings is an unanchored case wanting an exemplar. Costs a full
+  session of Sonnet calls per run. Override the truncate with `--reset-cmd` if
+  your Postgres isn't the compose one.
+
+Exit code is 0 only if every run agreed and every expected row fired. The pure
+comparison logic is unit-tested in
+[`server/tests/test_consistency_check.py`](../../server/tests/test_consistency_check.py).
+
 ## Why scenarios are keyed by concern
 
 The engine walks a **fixed agenda**, one owner per concern:

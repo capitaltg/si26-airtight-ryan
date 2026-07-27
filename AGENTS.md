@@ -128,7 +128,10 @@ airtight/
 ├─ scripts/
 │  ├─ replay/
 │  │  ├─ README.md
+│  │  ├─ scenario-contradiction.json
+│  │  ├─ scenario-false-fact.json
 │  │  └─ scenario-mixed.json
+│  ├─ consistency_check.py
 │  ├─ replay_session.py
 │  ├─ smoke_bedrock.py
 │  └─ update_structure.py
@@ -198,6 +201,7 @@ airtight/
 │  │  ├─ test_api.py
 │  │  ├─ test_bedrock_client.py
 │  │  ├─ test_conciseness.py
+│  │  ├─ test_consistency_check.py
 │  │  ├─ test_content_loader.py
 │  │  ├─ test_extraction.py
 │  │  ├─ test_extraction_schema.py

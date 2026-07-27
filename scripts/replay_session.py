@@ -100,6 +100,30 @@ def _fmt_result(r: dict) -> str:
     )
 
 
+def _turn_record(prompt: dict, sent: str, res: dict) -> dict:
+    """Everything the engine decided about one scored turn, in comparable form.
+
+    ``matched_rows`` is sorted because the row set is a set — two runs that
+    matched the same rows in a different order agree, and an unsorted list
+    would report that as a divergence.
+    """
+    return {
+        "kind": "answer",
+        "persona_id": res["persona_id"],
+        "concern_id": res["concern_id"],
+        "is_follow_up": prompt["is_follow_up"],
+        "prompt": prompt["prompt"],
+        "sent": sent,
+        "matched_rows": sorted(res["matched_rows"]),
+        "support_delta": res["support_delta"],
+        "meter": res["meter"],
+        "capped": res["capped"],
+        "concern_status": res["concern_status"],
+        "reply": res["reply"],
+        "rationale": res["rationale"],
+    }
+
+
 def _answer_for(spec: dict, is_follow_up: bool, cid: str) -> str:
     if is_follow_up:
         if spec.get("followup"):
@@ -109,7 +133,14 @@ def _answer_for(spec: dict, is_follow_up: bool, cid: str) -> str:
 
 
 def replay(base_url: str, scenario: dict, quiet: bool, want_report: bool) -> dict:
-    """Run one scenario end to end. Returns final meters keyed by persona."""
+    """Run one scenario end to end.
+
+    Returns a run record: the scenario name, every turn in order, the final
+    meters keyed by persona, and the closing concern statuses. The per-turn
+    list is what ``consistency_check.py`` diffs across repeated runs, so it
+    carries everything the engine decided (rows, delta, meter, reply) and
+    nothing that is expected to differ between sessions (no ids, no clocks).
+    """
     name = scenario.get("name", "(unnamed)")
     concerns = scenario["concerns"]
     print(c(f"\n=== {name} ===", "1;35"))
@@ -120,6 +151,7 @@ def replay(base_url: str, scenario: dict, quiet: bool, want_report: bool) -> dic
     session_id = state["id"]
     prompt = state["prompt"]
     clarified: set[str] = set()  # concerns whose clarifications were already asked
+    turns: list[dict] = []
 
     for _ in range(MAX_TURNS):
         if prompt is None:
@@ -133,7 +165,9 @@ def replay(base_url: str, scenario: dict, quiet: bool, want_report: bool) -> dic
 
         if spec is None:
             print(c(f"    ! scenario has no entry for `{cid}`; sending a neutral answer to advance", "31"))
-            res = _post(base_url, f"/sessions/{session_id}/answer", {"answer": "No further detail at this time."})
+            filler = "No further detail at this time."
+            res = _post(base_url, f"/sessions/{session_id}/answer", {"answer": filler})
+            turns.append(_turn_record(prompt, filler, res))
             prompt = res["next_prompt"]
             if res["done"]:
                 break
@@ -152,6 +186,16 @@ def replay(base_url: str, scenario: dict, quiet: bool, want_report: bool) -> dic
                 if not quiet:
                     print(f"    <- {res['reply']}")
                     print(c(f"    (clarifications remaining: {res['remaining']})", "2"))
+                turns.append(
+                    {
+                        "kind": "clarify",
+                        "persona_id": res["persona_id"],
+                        "concern_id": res["concern_id"],
+                        "sent": q,
+                        "reply": res["reply"],
+                        "remaining": res["remaining"],
+                    }
+                )
                 prompt = res["prompt"]  # active prompt is unchanged
             clarified.add(cid)
 
@@ -162,6 +206,7 @@ def replay(base_url: str, scenario: dict, quiet: bool, want_report: bool) -> dic
         if not quiet:
             print(_fmt_result(res))
             print(f"    <- {res['reply']}")
+        turns.append(_turn_record(prompt, text, res))
         prompt = res["next_prompt"]
         if res["done"]:
             break
@@ -185,7 +230,12 @@ def replay(base_url: str, scenario: dict, quiet: bool, want_report: bool) -> dic
         path = _save_report(name, session_id, report)
         print(c(f"  report saved: {path}", "2"))
 
-    return final
+    return {
+        "name": name,
+        "turns": turns,
+        "final_meters": final,
+        "concern_status": final_state["concern_status"],
+    }
 
 
 def _slug(text: str) -> str:

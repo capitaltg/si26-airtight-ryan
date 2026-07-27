@@ -1,0 +1,46 @@
+{
+  "name": "Tier-0 contradiction run",
+  "expect_rows": ["contradiction"],
+  "notes": [
+    "Every planted conflict is between two things the PRESENTER said, never between an answer and the RFP or proposal. The facts involved (migration-squad size, who leads which wave, when the parallel run starts, whether the help desk sits inside the 28 FTE) are absent from both documents on purpose, so a Tier-1 fact check has nothing to refute and the only row that can fire is `contradiction`.",
+    "Planted conflicts: (1) technical_approach says a 14-person migration squad, risk says 6. (2) key_personnel says Anil Kapoor personally leads all three waves, its follow-up hands waves two and three to a deputy. (3) transition keeps Meridian on for the full 90 days, operational_impact rolls them off after 30. (4) cost_realism puts the help desk inside the 28 FTE, operational_impact puts it outside.",
+    "compliance_security and past_performance are answered faithfully to the proposal so they add no noise.",
+    "`contradiction` is not the only row that fires. The model treats a specific number the proposal never states (the squad size) as a claim it can refute, so `false_fact` shows up alongside the Tier-0 flag. That is the engine's call, not a scenario bug; the assertion here is only that `contradiction` fires and that both runs agree.",
+    "Observed when this file was authored: `contradiction` fires on the key_personnel follow-up (plant 2), on risk (plant 1), and on cost_realism (plant 4). operational_impact lands on `red_line` and caps program_rep at 25, so plant 3 never gets read as a contradiction — the hard limit fires first and ends that concern.",
+    "The exact classification and meter for a turn are decided live by the engine, not by this file."
+  ],
+  "concerns": {
+    "technical_approach": {
+      "answer": "Cloud-native on AWS GovCloud at FedRAMP Moderate, containerized microservices with PostgreSQL as the system of record and a versioned REST API for the Payments Engine, the Benefits Portal, and the data warehouse. The LCS migration runs on an event-driven ingestion pipeline, and we have a dedicated 14-person migration squad standing behind that pipeline for the whole base period.",
+      "followup": "The 14-person squad splits into ingestion, reconciliation, and cutover support. Records move in three waves, oldest-first, with an automated reconciliation report after each wave."
+    },
+    "key_personnel": {
+      "answer": "Karen Holloway is our PM: twelve years managing federal software programs, PMP since 2015, and she ran the 1.8 million case modernization at the Veterans Claims Office. Anil Kapoor is Migration Lead with seven years in large-scale data migration, and he personally leads all three migration waves.",
+      "followup": "To be precise about the wave assignments: Anil leads wave one, and waves two and three are led by our deputy migration lead while Anil moves to reconciliation oversight."
+    },
+    "transition": {
+      "answer": "Transition-In Plan inside 10 business days of award, transition-in complete within the 90 calendar days, and the 60-day parallel run with reconciled outputs finishes before LCS is retired. Meridian stays on for structured knowledge transfer through the entire 90 days of transition-in, shadowing adjudication workflows the whole way.",
+      "followup": "Both systems reconcile daily during the parallel run, and every adjudication workflow has a written runbook before Meridian's people leave."
+    },
+    "risk": {
+      "answer": "Our top risk is migration data integrity across the 42 million records. Mitigation is three oldest-first waves with an automated reconciliation report after each, plus a rollback point before every wave. The migration squad is 6 people, which is what that reconciliation workload is sized for.",
+      "followup": "Second risk is incumbent knowledge loss. Mitigation is the shadowing period with Meridian and written runbooks for every adjudication workflow before cutover."
+    },
+    "compliance_security": {
+      "answer": "We build to the NIST SP 800-53 moderate baseline and host in AWS GovCloud, which holds FedRAMP Moderate. No production case data enters the system before the ATO is granted; the government's 120-day package review runs against synthetic data only.",
+      "followup": "The ATO package covers the full control set for CUI and PII, and we deliver it for government review rather than self-attesting."
+    },
+    "cost_realism": {
+      "answer": "28 full-time equivalents at steady state, firm-fixed across the base and both option periods, with no assumptions of price adjustment. That 28 includes the help desk, so the operations cost is inside the same steady-state number.",
+      "followup": "The 28 is sized against the 1.2 million cases a year the Bureau adjudicates today, not against a growth assumption."
+    },
+    "past_performance": {
+      "answer": "The Veterans Claims Office case modernization from 2021 to 2024 is the closest comparable: a 1.8 million case system moved to a cloud-native platform, on schedule, zero data loss, CPARS Exceptional. The State of Ohio tax-system migration from 2019 to 2021 re-platformed a COBOL mainframe to a web application serving 900 users.",
+      "followup": "Both were legacy systems of record with live users throughout, which is the part that maps onto LCS."
+    },
+    "operational_impact": {
+      "answer": "Adjudicators keep working through cutover because LCS stays live and reconciled alongside the CMS for the 60-day parallel run, and we plan for a slower first week while people learn the new screens. All 2,400 adjudicators are trained before cutover. Meridian rolls off after the first 30 days of transition-in, so from day 31 our own team carries adjudication support, and the help desk sits outside the 28 FTE delivery team with a 30-minute Severity-1 response.",
+      "followup": "During the parallel run adjudicators work in the CMS and we reconcile back to LCS nightly, so we can fall back to the legacy system if a wave goes wrong."
+    }
+  }
+}
