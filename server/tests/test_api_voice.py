@@ -283,3 +283,24 @@ def test_answer_audio_rejects_unsafe_content_type(voice_client: TestClient) -> N
     replay = voice_client.get(f"/sessions/{session_id}/turns/0/audio")
     assert replay.status_code == 200
     assert replay.headers["content-type"] == "application/octet-stream"
+
+
+def test_answer_audio_rejects_over_long_content_type(voice_client: TestClient) -> None:
+    """A `Content-Type` that matches an allowlisted prefix (so it isn't caught
+    by the unsafe-type check above) but is longer than the
+    `answer_audio_content_type` column's `String(64)` limit must still fall
+    back to the safe default — otherwise it gets persisted as-is and blows up
+    with a truncation error on commit (e.g. on Postgres), after the transcriber
+    has already run."""
+    session_id = voice_client.post("/sessions").json()["id"]
+    over_long_content_type = "audio/webm;codecs=" + "a" * 200
+
+    r = voice_client.post(
+        f"/sessions/{session_id}/answer_audio",
+        files={"audio": ("recording.webm", b"fake-audio-bytes", over_long_content_type)},
+    )
+    assert r.status_code == 200
+
+    replay = voice_client.get(f"/sessions/{session_id}/turns/0/audio")
+    assert replay.status_code == 200
+    assert replay.headers["content-type"] == "application/octet-stream"

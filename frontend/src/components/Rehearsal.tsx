@@ -63,6 +63,14 @@ export function Rehearsal() {
   // start promise lets stopRecording wait for it before deciding whether there's
   // anything to stop.
   const startPromiseRef = useRef<Promise<void> | null>(null)
+  // Guards re-entry into `stopRecording` itself: pointerup/pointercancel/blur/
+  // keyup can all fire for a single press-and-release, and `recordingActiveRef`
+  // alone no longer catches a second one landing while the first `stop()` call
+  // is still in flight (that ref is now reset only in the `.finally` below, to
+  // fix a separate double-press-into-`recorder.start()` race — see the comment
+  // above `stopRecording`). Set synchronously at the top of `stopRecording` and
+  // cleared in the same `.finally` once that one call's chain settles.
+  const stopInFlightRef = useRef(false)
 
   const transcriptEndRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -292,7 +300,8 @@ export function Rehearsal() {
   // right source of truth for whether there's anything to stop; it resolves
   // with an empty blob when there wasn't, which the size check below catches.
   function stopRecording() {
-    if (!recordingActiveRef.current) return
+    if (!recordingActiveRef.current || stopInFlightRef.current) return
+    stopInFlightRef.current = true
     const asked = prompt // capture the prompt this answer responds to
     const started = startPromiseRef.current ?? Promise.resolve()
     started
@@ -346,8 +355,14 @@ export function Rehearsal() {
           onError: () => setPending(null),
         })
       })
+      .catch(() => {
+        // Swallow — a throw here would otherwise become an unhandled promise
+        // rejection; the mutate `onError` callbacks above already surface any
+        // real failure to the presenter.
+      })
       .finally(() => {
         recordingActiveRef.current = false
+        stopInFlightRef.current = false
       })
   }
 

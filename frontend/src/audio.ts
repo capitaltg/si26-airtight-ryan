@@ -93,6 +93,18 @@ export function useRecorder(): {
 // one `playSequence` later plays does nothing for Safari's autoplay policy.
 const playbackEl = new Audio()
 
+// Bumped every time `primePlayback` or `playSequence` (re)claims `playbackEl`
+// for its own use. `playSequence` captures the value at call time and each
+// iteration checks it's still current before advancing to the next clip — if
+// something else has since reassigned `playbackEl.src` (another priming call,
+// or an overlapping `playSequence`), the current chain's `ended`/`error`
+// listeners can still fire on whatever now plays on the shared element (a
+// reassigned `.src` aborts playback without ever firing `ended`/`error` on the
+// abandoned clip), so without this check a stale iteration would wrongly
+// advance and play its next queued clip unmuted over whatever claimed the
+// element after it.
+let playbackGeneration = 0
+
 // The shortest valid silent audio clip: a 1-sample, 8kHz mono WAV. Used only
 // to give the shared element a real `src` to play during the priming call —
 // its content is irrelevant, only that `.play()` runs inside the gesture.
@@ -104,6 +116,7 @@ const SILENT_CLIP_DATA_URL =
 // before `playSequence` reuses it later, outside any gesture, to play the
 // persona's spoken reply.
 export function primePlayback(): void {
+  playbackGeneration += 1
   playbackEl.muted = true
   playbackEl.src = SILENT_CLIP_DATA_URL
   playbackEl
@@ -127,11 +140,22 @@ export function primePlayback(): void {
 // Reuses `playbackEl` (rather than constructing a new `Audio` per clip) so
 // the gesture-unlocked state from `primePlayback` actually carries over.
 export function playSequence(sources: string[]): Promise<void> {
+  // Claim the element for this call. An overlapping `playSequence` call (or a
+  // `primePlayback` in between clips) bumps this again, which the check below
+  // uses to detect that this chain's turn is over.
+  const generation = ++playbackGeneration
   return sources.reduce<Promise<void>>(
     (chain, source) =>
       chain.then(
         () =>
           new Promise<void>((resolve) => {
+            // Something else has since claimed `playbackEl` (superseded this
+            // call entirely) — bail without touching `.src` so we don't step
+            // on whatever's now playing.
+            if (generation !== playbackGeneration) {
+              resolve()
+              return
+            }
             const onEnded = () => {
               cleanup()
               resolve()

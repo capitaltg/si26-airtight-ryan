@@ -54,15 +54,23 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 # also exceed the `answer_audio_content_type` column's `String(64)` limit.
 _ALLOWED_AUDIO_CONTENT_TYPE_PREFIXES = ("audio/webm", "audio/mp4", "audio/ogg")
 _SAFE_DEFAULT_AUDIO_CONTENT_TYPE = "application/octet-stream"
+# Matches `answer_audio_content_type`'s `String(64)` column (app/db/models.py) —
+# an allowlisted-prefix value that's still too long to store falls back to the
+# safe default rather than blowing up at commit time on a DB that enforces the
+# column length (e.g. Postgres), after the (paid) transcription call already ran.
+_MAX_AUDIO_CONTENT_TYPE_LENGTH = 64
 
 
 def _safe_audio_content_type(content_type: str) -> str:
-    """Pass through only an allowlisted container type; anything else falls
-    back to a safe, generic type. This is purely a replay-header safeguard —
-    ffmpeg sniffs the real container from the bytes regardless of what's
-    claimed here (see `app/voice/audio.py`), so the upload is never rejected
-    for a mismatched-but-unrecognized content type."""
-    if content_type.lower().startswith(_ALLOWED_AUDIO_CONTENT_TYPE_PREFIXES):
+    """Pass through only an allowlisted container type that also fits the DB
+    column; anything else falls back to a safe, generic type. This is purely a
+    replay-header safeguard — ffmpeg sniffs the real container from the bytes
+    regardless of what's claimed here (see `app/voice/audio.py`), so the
+    upload is never rejected for a mismatched-but-unrecognized content type."""
+    if (
+        content_type.lower().startswith(_ALLOWED_AUDIO_CONTENT_TYPE_PREFIXES)
+        and len(content_type) <= _MAX_AUDIO_CONTENT_TYPE_LENGTH
+    ):
         return content_type
     return _SAFE_DEFAULT_AUDIO_CONTENT_TYPE
 
