@@ -274,10 +274,10 @@ def submit_answer_audio(
     except TranscriptionError:
         logger.exception("transcription failed for session %s", session_id)
         raise HTTPException(
-            status_code=422, detail="could not transcribe the recording"
+            status_code=422, detail="Could not transcribe the recording"
         ) from None
     if not transcript.strip():
-        raise HTTPException(status_code=422, detail="could not transcribe the recording")
+        raise HTTPException(status_code=422, detail="Could not transcribe the recording")
 
     try:
         result = orchestrator.submit_answer(

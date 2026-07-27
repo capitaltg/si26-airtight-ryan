@@ -4,7 +4,9 @@
 // the backend's — this component only renders what the API returns.
 
 import { useEffect, useRef, useState } from "react"
-import type { KeyboardEvent, PointerEvent } from "react"
+// Aliased because the window-level push-to-talk listener below needs the DOM
+// `KeyboardEvent`, which an unaliased React import would shadow.
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent } from "react"
 
 import {
   useAskClarification,
@@ -260,14 +262,14 @@ export function Rehearsal() {
   // Enter gets an inert `click` event and nothing happens (WCAG 2.1.1).
   // `e.repeat` guards against the OS repeating keydown while the key is held,
   // which would otherwise restart the recording on every repeat event.
-  function handleTalkKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
+  function handleTalkKeyDown(e: ReactKeyboardEvent<HTMLButtonElement>) {
     if (e.key !== " " && e.key !== "Enter") return
     if (e.key === " ") e.preventDefault() // stop the page from scrolling
     if (e.repeat) return
     beginRecording()
   }
 
-  function handleTalkKeyUp(e: KeyboardEvent<HTMLButtonElement>) {
+  function handleTalkKeyUp(e: ReactKeyboardEvent<HTMLButtonElement>) {
     if (e.key !== " " && e.key !== "Enter") return
     if (e.key === " ") e.preventDefault()
     stopRecording()
@@ -365,6 +367,64 @@ export function Rehearsal() {
         stopInFlightRef.current = false
       })
   }
+
+  // Global push-to-talk: holding Space anywhere in voice mode records, so the
+  // presenter can keep their eyes on the prompt instead of keeping the button
+  // focused. The window listener is registered once per enable/disable rather
+  // than on every render, so it reaches the current `beginRecording` /
+  // `stopRecording` through refs refreshed each render — without those it would
+  // close over a stale `prompt` and attach this answer to the wrong question.
+  const beginRecordingRef = useRef(beginRecording)
+  const stopRecordingRef = useRef(stopRecording)
+  useEffect(() => {
+    beginRecordingRef.current = beginRecording
+    stopRecordingRef.current = stopRecording
+  })
+
+  // Only while voice mode is actually offering a prompt to answer. Both
+  // handlers below are still no-ops if a submission is in flight — that's
+  // `beginRecording`'s own guard, read live through the ref.
+  const pushToTalkEnabled = mode === "voice" && !done && prompt !== null
+  useEffect(() => {
+    if (!pushToTalkEnabled) return
+    // Space is a normal character in a text field; never steal it from one.
+    // (Voice mode hides the textarea, but the rubric drawer and any future
+    // input on this screen would still be typable while it's open.)
+    function isTypingTarget(target: EventTarget | null) {
+      const el = target as HTMLElement | null
+      if (!el || typeof el.tagName !== "string") return false
+      return (
+        el.tagName === "INPUT" ||
+        el.tagName === "TEXTAREA" ||
+        el.tagName === "SELECT" ||
+        el.isContentEditable
+      )
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      // `code`, not `key`: this is a physical key hold, and `key` is " ".
+      if (e.code !== "Space" || e.repeat) return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (isTypingTarget(e.target)) return
+      e.preventDefault() // stop the page from scrolling, and Space from
+      // "clicking" whatever button happens to be focused
+      beginRecordingRef.current()
+    }
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.code !== "Space") return
+      if (isTypingTarget(e.target)) return
+      e.preventDefault()
+      stopRecordingRef.current()
+    }
+    window.addEventListener("keydown", onKeyDown)
+    window.addEventListener("keyup", onKeyUp)
+    return () => {
+      window.removeEventListener("keydown", onKeyDown)
+      window.removeEventListener("keyup", onKeyUp)
+      // Switching back to text (or unmounting) mid-hold would otherwise leave
+      // the mic open with no listener left to release it.
+      stopRecordingRef.current()
+    }
+  }, [pushToTalkEnabled])
 
   // Not started yet: a single call to action.
   if (!sessionId) {
@@ -592,7 +652,7 @@ export function Rehearsal() {
                       aria-label={
                         recorder.recording
                           ? "Recording your answer — release to send"
-                          : "Hold to record your answer"
+                          : "Hold this button, or hold the space bar, to record your answer"
                       }
                       disabled={submitAudio.isPending}
                       className={`w-full select-none touch-none rounded-lg px-5 py-6 text-sm font-semibold shadow-sm transition disabled:opacity-50 ${
@@ -605,7 +665,7 @@ export function Rehearsal() {
                         ? "Scoring…"
                         : recorder.recording
                           ? "Recording… release to send"
-                          : "Hold to talk"}
+                          : "Hold to talk (or hold Space)"}
                     </button>
                     {submitAudio.isError && (
                       <p className="text-sm text-red-700">{(submitAudio.error as Error).message}</p>
