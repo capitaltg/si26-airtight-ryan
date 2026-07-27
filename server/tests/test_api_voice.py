@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.deps import get_synthesizer, get_transcriber
+from app.config import settings
 from app.voice import SynthesisError, TranscriptionError
 from tests.test_api import client  # noqa: F401  (reused fixture)
 
@@ -196,3 +197,53 @@ def test_next_prompt_audio_is_null_on_final_concern(voice_client: TestClient) ->
     assert body is not None
     assert body["done"] is True
     assert body["next_prompt_audio"] is None
+
+
+def test_answer_audio_too_large_returns_413(
+    voice_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "max_answer_audio_bytes", 10)
+
+    session_id = voice_client.post("/sessions").json()["id"]
+    r = voice_client.post(
+        f"/sessions/{session_id}/answer_audio",
+        files={"audio": ("recording.webm", b"this payload is well over ten bytes", "audio/webm")},
+    )
+    assert r.status_code == 413
+
+
+def test_answer_audio_after_session_complete_returns_409(voice_client: TestClient) -> None:
+    session_id = voice_client.post("/sessions").json()["id"]
+
+    # Drive the session to completion via /answer_audio (same loop pattern as
+    # test_next_prompt_audio_is_null_on_final_concern).
+    for _ in range(20):
+        state = voice_client.get(f"/sessions/{session_id}").json()
+        if state["done"]:
+            break
+        voice_client.post(
+            f"/sessions/{session_id}/answer_audio",
+            files={"audio": ("recording.webm", b"fake-audio-bytes", "audio/webm")},
+        )
+
+    assert voice_client.get(f"/sessions/{session_id}").json()["done"] is True
+
+    r = voice_client.post(
+        f"/sessions/{session_id}/answer_audio",
+        files={"audio": ("recording.webm", b"fake-audio-bytes", "audio/webm")},
+    )
+    assert r.status_code == 409
+
+
+def test_answer_audio_defaults_content_type_when_missing(voice_client: TestClient) -> None:
+    session_id = voice_client.post("/sessions").json()["id"]
+
+    r = voice_client.post(
+        f"/sessions/{session_id}/answer_audio",
+        files={"audio": ("recording.webm", b"fake-audio-bytes", "")},
+    )
+    assert r.status_code == 200
+
+    replay = voice_client.get(f"/sessions/{session_id}/turns/0/audio")
+    assert replay.status_code == 200
+    assert replay.headers["content-type"] == "audio/webm"
