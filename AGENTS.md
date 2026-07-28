@@ -105,6 +105,7 @@ airtight/
 │  │  │  ├─ ChatTurn.tsx
 │  │  │  ├─ MeterBar.tsx
 │  │  │  ├─ PendingTurn.tsx
+│  │  │  ├─ PromptIntro.tsx
 │  │  │  ├─ Rehearsal.tsx
 │  │  │  ├─ RubricPanel.tsx
 │  │  │  └─ StageStepper.tsx

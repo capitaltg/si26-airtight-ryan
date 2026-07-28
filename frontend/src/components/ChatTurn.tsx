@@ -5,6 +5,7 @@
 
 import type { TranscriptTurn } from "../types"
 import { PRESENTER_BUBBLE, REPLY_BUBBLE, prettify } from "../lib"
+import { PromptIntro } from "./PromptIntro"
 
 function DeltaBadge({ delta, capped }: { delta: number; capped: boolean }) {
   const sign = delta > 0 ? `+${delta}` : `${delta}`
@@ -38,6 +39,7 @@ export function ChatTurn({ turn }: { turn: TranscriptTurn }) {
             </span>
           )}
         </div>
+        <PromptIntro intro={turn.intro} />
         <p className="text-sm text-slate-800">{turn.prompt}</p>
       </div>
 

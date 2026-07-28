@@ -6,6 +6,7 @@
 
 import type { Prompt, Stage } from "../types"
 import { PRESENTER_BUBBLE, REPLY_BUBBLE, prettify } from "../lib"
+import { PromptIntro } from "./PromptIntro"
 import { StageStepper } from "./StageStepper"
 
 function Spinner() {
@@ -44,6 +45,7 @@ export function PendingTurn({
             </span>
           )}
         </div>
+        <PromptIntro intro={prompt.intro} />
         <p className="text-sm text-slate-800">{prompt.prompt}</p>
       </div>
 
