@@ -217,6 +217,7 @@ airtight/
 │  │  ├─ test_contradiction_grounding.py
 │  │  ├─ test_extraction.py
 │  │  ├─ test_extraction_schema.py
+│  │  ├─ test_images_install_ffmpeg.py
 │  │  ├─ test_orchestrator.py
 │  │  ├─ test_reaction.py
 │  │  ├─ test_repo.py

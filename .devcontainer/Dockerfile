@@ -8,9 +8,11 @@ ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
 # System deps: git + curl + ca-certs (for nodesource), build tooling for any
-# packages that need to compile, and libpq for psycopg if it falls back.
+# packages that need to compile, libpq for psycopg if it falls back, and ffmpeg
+# because the voice path shells out to it to decode browser recordings (see
+# `server/app/voice/audio.py`) — without it every spoken answer 422s.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        git curl ca-certificates gnupg build-essential libpq-dev sudo zsh \
+        git curl ca-certificates gnupg build-essential libpq-dev sudo zsh ffmpeg \
     && curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
