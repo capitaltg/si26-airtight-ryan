@@ -86,6 +86,10 @@ class PromptDTO(BaseModel):
     concern_id: str
     prompt: str
     is_follow_up: bool
+    # The persona's self-introduction, non-null only on the first prompt they
+    # ask in this session. Its own field rather than part of `prompt`, so the
+    # stored turn and the report keep showing only the question.
+    intro: str | None = None
 
 
 class SessionStateDTO(BaseModel):
@@ -150,6 +154,7 @@ def _prompt_dto(asg: orchestrator.Assignment | None) -> PromptDTO | None:
         concern_id=asg.concern.concern_id,
         prompt=asg.prompt,
         is_follow_up=asg.is_follow_up,
+        intro=asg.intro,
     )
 
 
