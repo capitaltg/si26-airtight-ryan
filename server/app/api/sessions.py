@@ -139,6 +139,10 @@ class ClarifyResponse(BaseModel):
     prompt: PromptDTO  # unchanged active prompt
 
 
+class PromptAudioDTO(BaseModel):
+    audio: str | None  # base64 mp3, null if synthesis failed
+
+
 def _meters(db: Session, session_id: uuid.UUID) -> list[MeterDTO]:
     return [
         MeterDTO(persona_id=m.persona_id, support=m.support, capped=m.capped)
@@ -342,6 +346,34 @@ def get_turn_audio(
     if turn is None or turn.answer_audio is None:
         raise HTTPException(status_code=404, detail="no audio for this turn")
     return Response(content=turn.answer_audio, media_type=turn.answer_audio_content_type)
+
+
+@router.get("/{session_id}/prompt_audio", response_model=PromptAudioDTO)
+def get_prompt_audio(
+    session_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    content: Content = Depends(get_content),
+    synthesizer: Synthesizer = Depends(get_synthesizer),
+) -> PromptAudioDTO:
+    """Speak the active prompt on demand, intro and question in one clip.
+
+    Called when the presenter switches to voice mode. The toggle click is the
+    user gesture the browser's autoplay policy needs, which `POST /sessions`
+    never has — that is why the opening prompt can be spoken here and not at
+    session start.
+
+    Read-only by design: it resolves the active assignment through the same
+    `next_concern` call `_state` uses (so the intro is present here exactly when
+    it is present on the `PromptDTO` the presenter is looking at) and writes
+    nothing. Re-toggling costs a Polly call and no session state.
+    """
+    session = _require_session(db, session_id)
+    asg = orchestrator.next_concern(db, content, session)
+    if asg is None:
+        raise HTTPException(status_code=409, detail="session is already complete")
+    return PromptAudioDTO(
+        audio=_speak(synthesizer, _spoken_prompt_text(asg), asg.persona.polly_voice_id)
+    )
 
 
 @router.post("/{session_id}/clarify", response_model=ClarifyResponse)
