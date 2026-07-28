@@ -336,6 +336,8 @@ def submit_answer_events(
         answer_audio=audio.data if audio is not None else None,
         answer_audio_content_type=audio.content_type if audio is not None else None,
         transcript=audio.transcript if audio is not None else None,
+        prompt=current.prompt,
+        prompt_intro=current.intro,
     )
     repo.append_claims(
         db, session_id=session.id, turn_index=turn_index, claims=extraction.claims
@@ -444,6 +446,7 @@ def ask_clarification(
         seq=used,
         question=question,
         reply=reply,
+        prompt=current.prompt,
     )
     db.flush()
 

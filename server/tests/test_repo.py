@@ -238,3 +238,77 @@ def test_meter_upsert_and_concern_status(db: Session) -> None:
 
     statuses = repo.get_concern_statuses(db, session.id)
     assert statuses["cost_realism"] == "satisfied"
+
+
+def test_append_turn_stores_the_prompt_it_asked(db: Session) -> None:
+    """The prompt is frozen on the row: re-deriving it later from content would
+    let a content bump rewrite an archived transcript."""
+    session = repo.create_session(
+        db, scenario_version="poc-v1", rubric_version=1, persona_ids=["technical_evaluator"]
+    )
+    turn = repo.append_turn(
+        db,
+        session_id=session.id,
+        turn_index=0,
+        persona_id="technical_evaluator",
+        concern_id="technical_approach",
+        user_answer="Here is the architecture.",
+        extraction=Extraction(),
+        score=ScoreOutput(support_delta=0),
+        reaction=PersonaReaction(in_character_reply="Noted.", rationale="Noted."),
+        prompt="Walk me through the architecture.",
+        prompt_intro="I'm Dana, the senior technical evaluator.",
+    )
+    db.expire_all()
+    stored = repo.get_turns(db, session.id)[0]
+    assert stored.id == turn.id
+    assert stored.prompt == "Walk me through the architecture."
+    assert stored.prompt_intro == "I'm Dana, the senior technical evaluator."
+
+
+def test_append_turn_prompt_columns_default_to_null(db: Session) -> None:
+    session = repo.create_session(
+        db, scenario_version="poc-v1", rubric_version=1, persona_ids=["technical_evaluator"]
+    )
+    repo.append_turn(
+        db,
+        session_id=session.id,
+        turn_index=0,
+        persona_id="technical_evaluator",
+        concern_id="technical_approach",
+        user_answer="Here is the architecture.",
+        extraction=Extraction(),
+        score=ScoreOutput(support_delta=0),
+        reaction=None,
+    )
+    db.expire_all()
+    stored = repo.get_turns(db, session.id)[0]
+    assert stored.prompt is None
+    assert stored.prompt_intro is None
+
+
+def test_append_clarification_stores_the_active_prompt(db: Session) -> None:
+    session = repo.create_session(
+        db, scenario_version="poc-v1", rubric_version=1, persona_ids=["technical_evaluator"]
+    )
+    repo.append_clarification(
+        db,
+        session_id=session.id,
+        concern_id="technical_approach",
+        persona_id="technical_evaluator",
+        seq=0,
+        question="Do you mean the hosting boundary?",
+        reply="I mean the whole boundary.",
+        prompt="Walk me through the architecture.",
+    )
+    db.expire_all()
+    stored = repo.get_clarifications(db, session.id)[0]
+    assert stored.prompt == "Walk me through the architecture."
+
+
+def test_new_session_columns_start_null(db: Session) -> None:
+    session = repo.create_session(
+        db, scenario_version="poc-v1", rubric_version=1, persona_ids=["technical_evaluator"]
+    )
+    assert session.archived_at is None
+    assert session.report_json is None

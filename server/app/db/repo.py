@@ -62,6 +62,8 @@ def append_turn(
     answer_audio: bytes | None = None,
     answer_audio_content_type: str | None = None,
     transcript: str | None = None,
+    prompt: str | None = None,
+    prompt_intro: str | None = None,
 ) -> Turn:
     turn = Turn(
         session_id=session_id,
@@ -75,6 +77,8 @@ def append_turn(
         answer_audio=answer_audio,
         answer_audio_content_type=answer_audio_content_type,
         transcript=transcript,
+        prompt=prompt,
+        prompt_intro=prompt_intro,
     )
     db.add(turn)
     db.flush()
@@ -164,6 +168,7 @@ def append_clarification(
     seq: int,
     question: str,
     reply: str,
+    prompt: str | None = None,
 ) -> Clarification:
     row = Clarification(
         session_id=session_id,
@@ -172,6 +177,7 @@ def append_clarification(
         seq=seq,
         question=question,
         reply=reply,
+        prompt=prompt,
     )
     db.add(row)
     db.flush()
