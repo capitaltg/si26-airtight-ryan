@@ -139,6 +139,10 @@ class ClarifyResponse(BaseModel):
     prompt: PromptDTO  # unchanged active prompt
 
 
+class PromptAudioDTO(BaseModel):
+    audio: str | None  # base64 mp3, null if synthesis failed
+
+
 def _meters(db: Session, session_id: uuid.UUID) -> list[MeterDTO]:
     return [
         MeterDTO(persona_id=m.persona_id, support=m.support, capped=m.capped)
@@ -156,6 +160,18 @@ def _prompt_dto(asg: orchestrator.Assignment | None) -> PromptDTO | None:
         is_follow_up=asg.is_follow_up,
         intro=asg.intro,
     )
+
+
+def _spoken_prompt_text(asg: orchestrator.Assignment) -> str:
+    """The prompt as it should be *heard*. On a persona's first prompt of a
+    session the intro leads and the question follows, as one line in one voice.
+    The prompt text carries a "Name: " label meant to be read on screen, never
+    spoken — strip it so the persona doesn't say their own name twice, once in
+    the intro and once in the label."""
+    if not asg.intro:
+        return asg.prompt
+    label = f"{asg.persona.display_name}: "
+    return f"{asg.intro} {asg.prompt.removeprefix(label)}"
 
 
 def _state(db: Session, content: Content, session: RehearsalSession) -> SessionStateDTO:
@@ -302,16 +318,11 @@ def submit_answer_audio(
     if result.next is not None:
         # On a handoff the incoming persona introduces themself and asks in the
         # same breath: one Polly call, one clip, one voice, so playSequence and
-        # the replay route need no change. The prompt text carries a "Name: "
-        # label meant to be read on screen, never spoken — strip it from the
-        # spoken text only so the intro doesn't say the persona's name twice.
-        next_text = result.next.prompt
-        if result.next.intro:
-            label = f"{result.next.persona.display_name}: "
-            spoken_question = next_text.removeprefix(label)
-            next_text = f"{result.next.intro} {spoken_question}"
+        # the replay route need no change.
         next_prompt_audio = _speak(
-            synthesizer, next_text, result.next.persona.polly_voice_id
+            synthesizer,
+            _spoken_prompt_text(result.next),
+            result.next.persona.polly_voice_id,
         )
 
     return VoiceAnswerResponse(
@@ -335,6 +346,34 @@ def get_turn_audio(
     if turn is None or turn.answer_audio is None:
         raise HTTPException(status_code=404, detail="no audio for this turn")
     return Response(content=turn.answer_audio, media_type=turn.answer_audio_content_type)
+
+
+@router.get("/{session_id}/prompt_audio", response_model=PromptAudioDTO)
+def get_prompt_audio(
+    session_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    content: Content = Depends(get_content),
+    synthesizer: Synthesizer = Depends(get_synthesizer),
+) -> PromptAudioDTO:
+    """Speak the active prompt on demand, intro and question in one clip.
+
+    Called when the presenter switches to voice mode. The toggle click is the
+    user gesture the browser's autoplay policy needs, which `POST /sessions`
+    never has — that is why the opening prompt can be spoken here and not at
+    session start.
+
+    Read-only by design: it resolves the active assignment through the same
+    `next_concern` call `_state` uses (so the intro is present here exactly when
+    it is present on the `PromptDTO` the presenter is looking at) and writes
+    nothing. Re-toggling costs a Polly call and no session state.
+    """
+    session = _require_session(db, session_id)
+    asg = orchestrator.next_concern(db, content, session)
+    if asg is None:
+        raise HTTPException(status_code=409, detail="session is already complete")
+    return PromptAudioDTO(
+        audio=_speak(synthesizer, _spoken_prompt_text(asg), asg.persona.polly_voice_id)
+    )
 
 
 @router.post("/{session_id}/clarify", response_model=ClarifyResponse)

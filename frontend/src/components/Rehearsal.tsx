@@ -11,6 +11,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent } from "react"
 import {
   useAskClarification,
   useCreateSession,
+  useSpeakPrompt,
   useSubmitAnswer,
   useSubmitAnswerAudio,
 } from "../api/client"
@@ -48,6 +49,14 @@ export function Rehearsal() {
   // Text is the default and the only path with server tests; the toggle must
   // not change any behavior while left on "text".
   const [mode, setMode] = useState<"text" | "voice">("text")
+  // Mirrors `mode` for the `speakPrompt.onSuccess` closure below, which is
+  // created at click time (inside `enterVoiceMode`) but fires ~1-2s later —
+  // long enough for the presenter to have switched back to text. Same pattern
+  // as `transcriptRef` below.
+  const modeRef = useRef(mode)
+  useEffect(() => {
+    modeRef.current = mode
+  }, [mode])
   // Surfaces a getUserMedia rejection (mic permission denied, no device, etc.)
   // after voice mode auto-falls-back to text — see the recorder.error effect below.
   const [voiceError, setVoiceError] = useState<string | null>(null)
@@ -57,6 +66,16 @@ export function Rehearsal() {
   const clarify = useAskClarification(sessionId)
   const recorder = useRecorder()
   const submitAudio = useSubmitAnswerAudio(sessionId)
+  const speakPrompt = useSpeakPrompt(sessionId)
+  // Mirrors `submitAudio.isPending` for the `speakPrompt.onSuccess` closure in
+  // `enterVoiceMode`: that closure is created at click time, but reading
+  // `submitAudio.isPending` directly inside it would still be whatever it was
+  // at that render — the mutation object's identity doesn't refresh inside an
+  // already-created closure — so a ref kept live via effect is needed instead.
+  const submitAudioPendingRef = useRef(submitAudio.isPending)
+  useEffect(() => {
+    submitAudioPendingRef.current = submitAudio.isPending
+  }, [submitAudio.isPending])
   // Guards the hold-to-talk button's pointerup/pointercancel/blur handlers
   // (any of which can fire for a single press-and-release) against submitting
   // more than once per recording, independent of React's state-update timing.
@@ -234,6 +253,47 @@ export function Rehearsal() {
       // Clear the placeholder; clarify.isError red text surfaces the message and
       // the draft stays intact for a retry.
       onError: () => setPending(null),
+    })
+  }
+
+  // Switching into voice mode speaks the active prompt: the persona's intro (on
+  // their first prompt of the session) then their question, one clip in one
+  // voice. `primePlayback` runs synchronously inside this click so the browser's
+  // autoplay policy lets the clip play once the round trip resolves — the toggle
+  // is the user gesture `POST /sessions` never has, which is why the opening
+  // prompt can be spoken here and not at session start.
+  //
+  // Failure is deliberately silent (no `voiceError`, no error text): the intro
+  // and question are already rendered above, and a dead clip must not stop the
+  // presenter from entering voice mode. This matches `playSequence`, which
+  // already swallows blocked and failed clips.
+  function enterVoiceMode() {
+    const wasText = mode === "text"
+    setVoiceError(null)
+    setMode("voice")
+    // Only a real text→voice transition speaks. Nothing to speak at end of
+    // session, and never talk over a reply clip that's already in flight.
+    if (!wasText || !prompt || submitAudio.isPending) return
+    primePlayback()
+    speakPrompt.mutate(undefined, {
+      // Polly latency (~1-2s) means the moment this clip was requested for
+      // can have already passed by the time it arrives: the presenter may be
+      // mid-recording, mid-submit, back in text mode, or auto-fallen-back to
+      // text. Gate on live state (refs, not state/values captured at click
+      // time) and drop the clip silently — no error, no retry — whenever any
+      // of those has happened.
+      onSuccess: (res) => {
+        if (
+          !res.audio ||
+          recordingActiveRef.current ||
+          stopInFlightRef.current ||
+          modeRef.current !== "voice" ||
+          submitAudioPendingRef.current
+        ) {
+          return
+        }
+        void playSequence([res.audio])
+      },
     })
   }
 
@@ -575,10 +635,7 @@ export function Rehearsal() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        setVoiceError(null)
-                        setMode("voice")
-                      }}
+                      onClick={enterVoiceMode}
                       className={`px-2.5 py-1 transition ${
                         mode === "voice"
                           ? "bg-slate-900 text-white"

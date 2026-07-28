@@ -7,6 +7,7 @@ import { useMutation, useQuery } from "@tanstack/react-query"
 import type {
   AnswerResponse,
   ClarifyResponse,
+  PromptAudio,
   Report,
   RubricDisclosure,
   SessionState,
@@ -118,6 +119,7 @@ export const api = {
     }),
   submitAnswerStream,
   submitAnswerAudio,
+  promptAudio: (id: string) => request<PromptAudio>(`/sessions/${id}/prompt_audio`),
   askClarification: (id: string, question: string) =>
     request<ClarifyResponse>(`/sessions/${id}/clarify`, {
       method: "POST",
@@ -152,6 +154,18 @@ export function useSubmitAnswerAudio(sessionId: string | null) {
     mutationFn: (blob: Blob) => {
       if (!sessionId) throw new Error("no active session")
       return api.submitAnswerAudio(sessionId, blob)
+    },
+  })
+}
+
+// Speak the active prompt. A mutation rather than a query: it fires from the
+// voice-toggle click, and every switch into voice should get a fresh clip
+// rather than a cached response.
+export function useSpeakPrompt(sessionId: string | null) {
+  return useMutation({
+    mutationFn: () => {
+      if (!sessionId) throw new Error("no active session")
+      return api.promptAudio(sessionId)
     },
   })
 }

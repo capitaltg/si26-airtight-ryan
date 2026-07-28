@@ -4,6 +4,7 @@ the voice path must score byte-identically to the text path, proving tasks
 1-4 only added a new front door onto the untouched orchestrator/scoring core.
 """
 
+import base64
 import uuid
 from collections.abc import Iterator
 
@@ -367,3 +368,99 @@ def test_answer_audio_rejects_over_long_content_type(voice_client: TestClient) -
     replay = voice_client.get(f"/sessions/{session_id}/turns/0/audio")
     assert replay.status_code == 200
     assert replay.headers["content-type"] == "application/octet-stream"
+
+
+def test_prompt_audio_speaks_the_intro_and_the_question(voice_client: TestClient) -> None:
+    """The opening clip is what the presenter would have heard from a real
+    panel: Dana introduces herself, then asks. One clip, her voice."""
+    spoken: list[tuple[str, str]] = []
+
+    def _recording_synthesize(text: str, voice_id: str) -> bytes:
+        spoken.append((text, voice_id))
+        return b"fake-mp3-bytes"
+
+    voice_client.app.dependency_overrides[get_synthesizer] = lambda: _recording_synthesize
+    state = voice_client.post("/sessions").json()
+    session_id = state["id"]
+    prompt = state["prompt"]
+    assert prompt["intro"] is not None
+
+    before = voice_client.get(f"/sessions/{session_id}").json()
+
+    r = voice_client.get(f"/sessions/{session_id}/prompt_audio")
+    assert r.status_code == 200
+    assert r.json()["audio"] == base64.b64encode(b"fake-mp3-bytes").decode()
+
+    persona = voice_client.app.state.content.personas[prompt["persona_id"]]
+    label = f"{persona.display_name}: "
+    assert len(spoken) == 1
+    text, voice_id = spoken[-1]
+    assert text == f"{prompt['intro']} {prompt['prompt'].removeprefix(label)}"
+    assert voice_id == persona.polly_voice_id
+
+    # Read-only: speaking a prompt must not score, persist, or advance anything
+    # (no turn, no meter movement, no session-status change) — the full session
+    # body is unchanged.
+    after = voice_client.get(f"/sessions/{session_id}").json()
+    assert after == before
+
+    session_factory = voice_client.app.dependency_overrides[get_session_factory]()
+    with session_factory() as db:
+        assert repo.get_turns(db, uuid.UUID(session_id)) == []
+
+
+def test_prompt_audio_is_just_the_question_when_the_persona_already_spoke(
+    voice_client: TestClient,
+) -> None:
+    spoken: list[str] = []
+
+    def _recording_synthesize(text: str, voice_id: str) -> bytes:
+        spoken.append(text)
+        return b"fake-mp3-bytes"
+
+    session_id = voice_client.post("/sessions").json()["id"]
+    voice_client.post(
+        f"/sessions/{session_id}/answer",
+        json={"answer": "Three named services on a FedRAMP host."},
+    )
+    state = voice_client.get(f"/sessions/{session_id}").json()
+    assert state["prompt"]["intro"] is None
+
+    voice_client.app.dependency_overrides[get_synthesizer] = lambda: _recording_synthesize
+    r = voice_client.get(f"/sessions/{session_id}/prompt_audio")
+    assert r.status_code == 200
+    assert len(spoken) == 1
+    assert spoken[-1] == state["prompt"]["prompt"]
+
+
+def test_prompt_audio_is_null_when_synthesis_fails(voice_client: TestClient) -> None:
+    """A dead Polly means no clip, not a broken toggle: the presenter still
+    enters voice mode and reads the prompt on screen."""
+    voice_client.app.dependency_overrides[get_synthesizer] = lambda: _raising_synthesize(
+        SynthesisError("polly is unavailable")
+    )
+    session_id = voice_client.post("/sessions").json()["id"]
+
+    r = voice_client.get(f"/sessions/{session_id}/prompt_audio")
+    assert r.status_code == 200
+    assert r.json()["audio"] is None
+
+
+def test_prompt_audio_after_session_complete_returns_409(voice_client: TestClient) -> None:
+    session_id = voice_client.post("/sessions").json()["id"]
+
+    # Drive the session to completion over the text path (no synthesis needed).
+    for _ in range(20):
+        if voice_client.get(f"/sessions/{session_id}").json()["done"]:
+            break
+        voice_client.post(f"/sessions/{session_id}/answer", json={"answer": "Answered."})
+
+    assert voice_client.get(f"/sessions/{session_id}").json()["done"] is True
+
+    r = voice_client.get(f"/sessions/{session_id}/prompt_audio")
+    assert r.status_code == 409
+
+
+def test_prompt_audio_404s_for_an_unknown_session(voice_client: TestClient) -> None:
+    r = voice_client.get(f"/sessions/{uuid.uuid4()}/prompt_audio")
+    assert r.status_code == 404

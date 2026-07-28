@@ -91,7 +91,8 @@ airtight/
 │  ├─ tests/
 │  │  ├─ a11y-contrast.spec.ts   # axe-core WCAG 2.1 AA color-contrast check
 │  │  ├─ health.spec.ts
-│  │  └─ persona-intro.spec.ts
+│  │  ├─ persona-intro.spec.ts
+│  │  └─ voice-prompt-audio.spec.ts
 │  ├─ .gitignore
 │  ├─ package-lock.json
 │  ├─ package.json
@@ -216,6 +217,7 @@ airtight/
 │  │  ├─ test_contradiction_grounding.py
 │  │  ├─ test_extraction.py
 │  │  ├─ test_extraction_schema.py
+│  │  ├─ test_images_install_ffmpeg.py
 │  │  ├─ test_orchestrator.py
 │  │  ├─ test_reaction.py
 │  │  ├─ test_repo.py

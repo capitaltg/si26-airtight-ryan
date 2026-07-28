@@ -19,6 +19,12 @@ export interface Prompt {
   intro: string | null
 }
 
+// The active prompt spoken aloud (GET /sessions/{id}/prompt_audio): one base64
+// mp3 of the persona's intro plus their question, null when synthesis failed.
+export interface PromptAudio {
+  audio: string | null
+}
+
 export interface SessionState {
   id: string
   status: string
