@@ -303,6 +303,16 @@ def test_create_session_prompt_carries_the_opening_intro(client: TestClient) -> 
     assert expected not in body["prompt"]["prompt"]
 
 
+def test_prompt_carries_the_persona_display_name(client: TestClient) -> None:
+    """The header renders a name next to the role label, so the DTO ships
+    `display_name` alongside `persona_id` rather than making the frontend
+    look it up some other way."""
+    body = client.post("/sessions").json()
+    persona = client.app.state.content.personas["technical_evaluator"]
+
+    assert body["prompt"]["display_name"] == persona.display_name
+
+
 def test_get_session_before_answering_still_shows_the_intro(client: TestClient) -> None:
     session_id = client.post("/sessions").json()["id"]
     reloaded = client.get(f"/sessions/{session_id}").json()

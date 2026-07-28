@@ -83,6 +83,7 @@ class MeterDTO(BaseModel):
 
 class PromptDTO(BaseModel):
     persona_id: str
+    display_name: str
     concern_id: str
     prompt: str
     is_follow_up: bool
@@ -155,6 +156,7 @@ def _prompt_dto(asg: orchestrator.Assignment | None) -> PromptDTO | None:
         return None
     return PromptDTO(
         persona_id=asg.persona.id,
+        display_name=asg.persona.display_name,
         concern_id=asg.concern.concern_id,
         prompt=asg.prompt,
         is_follow_up=asg.is_follow_up,

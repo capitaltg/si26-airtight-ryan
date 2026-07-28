@@ -30,7 +30,9 @@ export function ChatTurn({ turn }: { turn: TranscriptTurn }) {
       {/* question */}
       <div className="space-y-1">
         <div className="flex items-center gap-2 text-sm">
-          <span className="font-semibold text-slate-800">{prettify(turn.personaId)}</span>
+          <span className="font-semibold text-slate-800">
+            {turn.displayName}, {prettify(turn.personaId)}
+          </span>
           <span className="text-slate-400">·</span>
           <span className="text-slate-500">{prettify(turn.concernId)}</span>
           {turn.isFollowUp && (
@@ -71,7 +73,9 @@ export function ChatTurn({ turn }: { turn: TranscriptTurn }) {
       <div className="flex justify-start">
         <div className={REPLY_BUBBLE}>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-500">{prettify(turn.personaId)}</span>
+            <span className="text-xs font-semibold text-slate-500">
+              {turn.displayName}, {prettify(turn.personaId)}
+            </span>
             {notScored ? (
               // Clarification: no number moved. Match the report's "Not scored"
               // slate badge so the visual language is consistent.

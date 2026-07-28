@@ -191,6 +191,7 @@ export function Rehearsal() {
             {
               key: prev.length,
               personaId: res.persona_id,
+              displayName: asked.display_name,
               concernId: res.concern_id,
               isFollowUp: asked.is_follow_up,
               prompt: asked.prompt,
@@ -233,6 +234,7 @@ export function Rehearsal() {
           {
             key: prev.length,
             personaId: res.persona_id,
+            displayName: asked.display_name,
             concernId: res.concern_id,
             isFollowUp: asked.is_follow_up,
             prompt: asked.prompt,
@@ -390,6 +392,7 @@ export function Rehearsal() {
               {
                 key: prev.length,
                 personaId: res.persona_id,
+                displayName: asked.display_name,
                 concernId: res.concern_id,
                 isFollowUp: asked.is_follow_up,
                 prompt: asked.prompt,
@@ -608,7 +611,7 @@ export function Rehearsal() {
                 <div className="flex items-center justify-between gap-2 text-sm">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-slate-800">
-                      {prettify(prompt.persona_id)}
+                      {prompt.display_name}, {prettify(prompt.persona_id)}
                     </span>
                     <span className="text-slate-400">·</span>
                     <span className="text-slate-500">{prettify(prompt.concern_id)}</span>

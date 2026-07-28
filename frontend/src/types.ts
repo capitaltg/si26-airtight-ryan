@@ -11,6 +11,7 @@ export interface Meter {
 
 export interface Prompt {
   persona_id: string
+  display_name: string
   concern_id: string
   prompt: string
   is_follow_up: boolean
@@ -161,6 +162,7 @@ export interface Report {
 export interface TranscriptTurn {
   key: number // stable, append-only order key for React lists
   personaId: string
+  displayName: string
   concernId: string
   isFollowUp: boolean
   prompt: string
