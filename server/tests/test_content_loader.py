@@ -1,3 +1,4 @@
+import re
 import shutil
 from pathlib import Path
 
@@ -103,5 +104,32 @@ def test_persona_missing_polly_voice_id_raises(tmp_path: Path) -> None:
     text = persona.read_text()
     # drop the required polly_voice_id field from the frontmatter
     persona.write_text(text.replace("polly_voice_id: Ruth\n", ""))
+    with pytest.raises(ValidationError):
+        load_content(store)
+
+
+def test_all_personas_have_an_intro() -> None:
+    content = load_content()
+    for persona in content.personas.values():
+        assert persona.intro
+        assert persona.intro.strip()
+
+
+def test_intro_names_the_persona() -> None:
+    """The intro is where the person introduces themself, so it carries the
+    authored first name that the UI's role-based header never shows."""
+    content = load_content()
+    for persona in content.personas.values():
+        assert persona.display_name in persona.intro
+
+
+def test_persona_missing_intro_raises(tmp_path: Path) -> None:
+    store = tmp_path / "store"
+    shutil.copytree(STORE, store)
+    persona = store / "personas" / "technical_evaluator.md"
+    # Drop the whole folded-block `intro:` entry from the frontmatter.
+    stripped = re.sub(r"\nintro: >-\n(?:  .*\n)+", "\n", persona.read_text(), count=1)
+    assert "intro:" not in stripped, "the intro block was not removed; fix the pattern"
+    persona.write_text(stripped)
     with pytest.raises(ValidationError):
         load_content(store)

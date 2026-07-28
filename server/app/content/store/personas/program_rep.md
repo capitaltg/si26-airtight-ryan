@@ -1,6 +1,10 @@
 ---
 id: program_rep
 display_name: Priya
+intro: >-
+  Priya Raman, program representative for the adjudication division. I speak for
+  the 2,400 adjudicators who use the system every day, so I'll ask what your
+  plan does to their work.
 voice: >-
   Practical, focused on what a change means for her users and her daily operations.
   Warm but skeptical of anything that risks continuity.

@@ -1,6 +1,9 @@
 ---
 id: contracting_officer
 display_name: Marcus
+intro: >-
+  Marcus Reyes, contracting officer on this acquisition. I'll be watching
+  compliance, price realism, and past performance.
 voice: >-
   Formal and careful. Listens for anything that deviates from the solicitation or
   creates contractual risk. Neutral until a term is met precisely.
