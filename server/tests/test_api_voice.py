@@ -315,13 +315,8 @@ def test_next_prompt_clip_speaks_the_intro_on_a_handoff(voice_client: TestClient
     assert handoff["persona_id"] == "contracting_officer"
     # Reply first, next prompt second — so the last clip is the next prompt's.
     text, voice_id = spoken[-1]
-    # The on-screen prompt carries a "Name: " label for the reader's benefit;
-    # the spoken clip must not say the persona's name twice (once in the
-    # intro, once in the label), so the label is stripped before speaking.
     persona = voice_client.app.state.content.personas["contracting_officer"]
-    label = f"{persona.display_name}: "
-    spoken_question = handoff["prompt"].removeprefix(label)
-    assert text == f"{handoff['intro']} {spoken_question}"
+    assert text == f"{handoff['intro']} {handoff['prompt']}"
     assert voice_id == persona.polly_voice_id
     assert body["next_prompt_audio"] is not None
 
@@ -392,10 +387,9 @@ def test_prompt_audio_speaks_the_intro_and_the_question(voice_client: TestClient
     assert r.json()["audio"] == base64.b64encode(b"fake-mp3-bytes").decode()
 
     persona = voice_client.app.state.content.personas[prompt["persona_id"]]
-    label = f"{persona.display_name}: "
     assert len(spoken) == 1
     text, voice_id = spoken[-1]
-    assert text == f"{prompt['intro']} {prompt['prompt'].removeprefix(label)}"
+    assert text == f"{prompt['intro']} {prompt['prompt']}"
     assert voice_id == persona.polly_voice_id
 
     # Read-only: speaking a prompt must not score, persist, or advance anything
