@@ -133,3 +133,16 @@ def test_persona_missing_intro_raises(tmp_path: Path) -> None:
     persona.write_text(stripped)
     with pytest.raises(ValidationError):
         load_content(store)
+
+
+def test_persona_empty_intro_raises(tmp_path: Path) -> None:
+    """An empty `intro:` key passes the "key is present" check but must still
+    fail: a blank intro is exactly as personaless as a missing one."""
+    store = tmp_path / "store"
+    shutil.copytree(STORE, store)
+    persona = store / "personas" / "technical_evaluator.md"
+    stripped = re.sub(r"\nintro: >-\n(?:  .*\n)+", "\nintro: ''\n", persona.read_text(), count=1)
+    assert "intro: ''" in stripped, "the intro block was not replaced; fix the pattern"
+    persona.write_text(stripped)
+    with pytest.raises(ValidationError):
+        load_content(store)

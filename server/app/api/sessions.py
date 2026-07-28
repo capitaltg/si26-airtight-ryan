@@ -302,12 +302,14 @@ def submit_answer_audio(
     if result.next is not None:
         # On a handoff the incoming persona introduces themself and asks in the
         # same breath: one Polly call, one clip, one voice, so playSequence and
-        # the replay route need no change.
-        next_text = (
-            f"{result.next.intro} {result.next.prompt}"
-            if result.next.intro
-            else result.next.prompt
-        )
+        # the replay route need no change. The prompt text carries a "Name: "
+        # label meant to be read on screen, never spoken — strip it from the
+        # spoken text only so the intro doesn't say the persona's name twice.
+        next_text = result.next.prompt
+        if result.next.intro:
+            label = f"{result.next.persona.display_name}: "
+            spoken_question = next_text.removeprefix(label)
+            next_text = f"{result.next.intro} {spoken_question}"
         next_prompt_audio = _speak(
             synthesizer, next_text, result.next.persona.polly_voice_id
         )

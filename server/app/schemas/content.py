@@ -32,7 +32,7 @@ class PersonaDefinition(BaseModel):
     # speak in a session: name, role, what they watch for. Required — a persona
     # file without one must fail this load rather than ship a personaless
     # handoff to a presenter. Never part of the prompt text itself.
-    intro: str
+    intro: str = Field(min_length=1)
     voice: str
     demographics: str
     values: list[str] = Field(default_factory=list)
