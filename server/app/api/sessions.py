@@ -298,11 +298,19 @@ def submit_answer_audio(
 
     persona = content.personas[result.persona_id]
     reply_audio = _speak(synthesizer, result.reaction.in_character_reply, persona.polly_voice_id)
-    next_prompt_audio = (
-        _speak(synthesizer, result.next.prompt, result.next.persona.polly_voice_id)
-        if result.next is not None
-        else None
-    )
+    next_prompt_audio = None
+    if result.next is not None:
+        # On a handoff the incoming persona introduces themself and asks in the
+        # same breath: one Polly call, one clip, one voice, so playSequence and
+        # the replay route need no change.
+        next_text = (
+            f"{result.next.intro} {result.next.prompt}"
+            if result.next.intro
+            else result.next.prompt
+        )
+        next_prompt_audio = _speak(
+            synthesizer, next_text, result.next.persona.polly_voice_id
+        )
 
     return VoiceAnswerResponse(
         **_answer_payload(db, session.id, result).model_dump(),
