@@ -158,6 +158,18 @@ def _prompt_dto(asg: orchestrator.Assignment | None) -> PromptDTO | None:
     )
 
 
+def _spoken_prompt_text(asg: orchestrator.Assignment) -> str:
+    """The prompt as it should be *heard*. On a persona's first prompt of a
+    session the intro leads and the question follows, as one line in one voice.
+    The prompt text carries a "Name: " label meant to be read on screen, never
+    spoken — strip it so the persona doesn't say their own name twice, once in
+    the intro and once in the label."""
+    if not asg.intro:
+        return asg.prompt
+    label = f"{asg.persona.display_name}: "
+    return f"{asg.intro} {asg.prompt.removeprefix(label)}"
+
+
 def _state(db: Session, content: Content, session: RehearsalSession) -> SessionStateDTO:
     asg = orchestrator.next_concern(db, content, session)
     return SessionStateDTO(
@@ -302,16 +314,11 @@ def submit_answer_audio(
     if result.next is not None:
         # On a handoff the incoming persona introduces themself and asks in the
         # same breath: one Polly call, one clip, one voice, so playSequence and
-        # the replay route need no change. The prompt text carries a "Name: "
-        # label meant to be read on screen, never spoken — strip it from the
-        # spoken text only so the intro doesn't say the persona's name twice.
-        next_text = result.next.prompt
-        if result.next.intro:
-            label = f"{result.next.persona.display_name}: "
-            spoken_question = next_text.removeprefix(label)
-            next_text = f"{result.next.intro} {spoken_question}"
+        # the replay route need no change.
         next_prompt_audio = _speak(
-            synthesizer, next_text, result.next.persona.polly_voice_id
+            synthesizer,
+            _spoken_prompt_text(result.next),
+            result.next.persona.polly_voice_id,
         )
 
     return VoiceAnswerResponse(
