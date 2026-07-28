@@ -385,17 +385,25 @@ def test_prompt_audio_speaks_the_intro_and_the_question(voice_client: TestClient
     prompt = state["prompt"]
     assert prompt["intro"] is not None
 
+    before = voice_client.get(f"/sessions/{session_id}").json()
+
     r = voice_client.get(f"/sessions/{session_id}/prompt_audio")
     assert r.status_code == 200
     assert r.json()["audio"] == base64.b64encode(b"fake-mp3-bytes").decode()
 
     persona = voice_client.app.state.content.personas[prompt["persona_id"]]
     label = f"{persona.display_name}: "
+    assert len(spoken) == 1
     text, voice_id = spoken[-1]
     assert text == f"{prompt['intro']} {prompt['prompt'].removeprefix(label)}"
     assert voice_id == persona.polly_voice_id
 
-    # Read-only: speaking a prompt must not score, persist, or advance anything.
+    # Read-only: speaking a prompt must not score, persist, or advance anything
+    # (no turn, no meter movement, no session-status change) — the full session
+    # body is unchanged.
+    after = voice_client.get(f"/sessions/{session_id}").json()
+    assert after == before
+
     session_factory = voice_client.app.dependency_overrides[get_session_factory]()
     with session_factory() as db:
         assert repo.get_turns(db, uuid.UUID(session_id)) == []
@@ -421,6 +429,7 @@ def test_prompt_audio_is_just_the_question_when_the_persona_already_spoke(
     voice_client.app.dependency_overrides[get_synthesizer] = lambda: _recording_synthesize
     r = voice_client.get(f"/sessions/{session_id}/prompt_audio")
     assert r.status_code == 200
+    assert len(spoken) == 1
     assert spoken[-1] == state["prompt"]["prompt"]
 
 

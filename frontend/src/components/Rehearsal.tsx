@@ -49,6 +49,14 @@ export function Rehearsal() {
   // Text is the default and the only path with server tests; the toggle must
   // not change any behavior while left on "text".
   const [mode, setMode] = useState<"text" | "voice">("text")
+  // Mirrors `mode` for the `speakPrompt.onSuccess` closure below, which is
+  // created at click time (inside `enterVoiceMode`) but fires ~1-2s later —
+  // long enough for the presenter to have switched back to text. Same pattern
+  // as `transcriptRef` below.
+  const modeRef = useRef(mode)
+  useEffect(() => {
+    modeRef.current = mode
+  }, [mode])
   // Surfaces a getUserMedia rejection (mic permission denied, no device, etc.)
   // after voice mode auto-falls-back to text — see the recorder.error effect below.
   const [voiceError, setVoiceError] = useState<string | null>(null)
@@ -59,6 +67,15 @@ export function Rehearsal() {
   const recorder = useRecorder()
   const submitAudio = useSubmitAnswerAudio(sessionId)
   const speakPrompt = useSpeakPrompt(sessionId)
+  // Mirrors `submitAudio.isPending` for the `speakPrompt.onSuccess` closure in
+  // `enterVoiceMode`: that closure is created at click time, but reading
+  // `submitAudio.isPending` directly inside it would still be whatever it was
+  // at that render — the mutation object's identity doesn't refresh inside an
+  // already-created closure — so a ref kept live via effect is needed instead.
+  const submitAudioPendingRef = useRef(submitAudio.isPending)
+  useEffect(() => {
+    submitAudioPendingRef.current = submitAudio.isPending
+  }, [submitAudio.isPending])
   // Guards the hold-to-talk button's pointerup/pointercancel/blur handlers
   // (any of which can fire for a single press-and-release) against submitting
   // more than once per recording, independent of React's state-update timing.
@@ -259,8 +276,23 @@ export function Rehearsal() {
     if (!wasText || !prompt || submitAudio.isPending) return
     primePlayback()
     speakPrompt.mutate(undefined, {
+      // Polly latency (~1-2s) means the moment this clip was requested for
+      // can have already passed by the time it arrives: the presenter may be
+      // mid-recording, mid-submit, back in text mode, or auto-fallen-back to
+      // text. Gate on live state (refs, not state/values captured at click
+      // time) and drop the clip silently — no error, no retry — whenever any
+      // of those has happened.
       onSuccess: (res) => {
-        if (res.audio) void playSequence([res.audio])
+        if (
+          !res.audio ||
+          recordingActiveRef.current ||
+          stopInFlightRef.current ||
+          modeRef.current !== "voice" ||
+          submitAudioPendingRef.current
+        ) {
+          return
+        }
+        void playSequence([res.audio])
       },
     })
   }
