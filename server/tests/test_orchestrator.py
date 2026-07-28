@@ -17,7 +17,7 @@ from sqlalchemy.pool import StaticPool
 from app.bedrock.cache import CacheKeyInput
 from app.content.loader import Content, load_content
 from app.db import repo
-from app.db.models import Base
+from app.db.models import Base, RehearsalSession
 from app.pipeline import orchestrator
 from app.schemas.content import Concern
 from app.schemas.extraction import (
@@ -364,3 +364,101 @@ def test_session_ends_after_all_concerns_resolved(db: Session, content: Content)
     # every concern resolved, session marked complete
     statuses = repo.get_concern_statuses(db, session.id)
     assert all(v in ("satisfied", "dodged") for v in statuses.values())
+
+
+def _satisfy_current(
+    db: Session, content: Content, session: RehearsalSession, client: ScriptedClient
+) -> None:
+    """Answer the active concern with a fully-covering, backed answer."""
+    asg = orchestrator.next_concern(db, content, session)
+    assert asg is not None
+    client.next_extraction = _full(asg.concern)
+    orchestrator.submit_answer(db, content, client, session, "A concrete, backed answer.")
+
+
+def test_first_prompt_of_the_session_carries_the_personas_intro(
+    db: Session, content: Content
+) -> None:
+    session = orchestrator.start_session(db, content)
+    asg = orchestrator.next_concern(db, content, session)
+
+    assert asg is not None
+    assert asg.persona.id == "technical_evaluator"
+    assert asg.intro == content.personas["technical_evaluator"].intro
+
+
+def test_intro_is_none_on_the_same_personas_next_concern(
+    db: Session, content: Content
+) -> None:
+    session = orchestrator.start_session(db, content)
+    client = ScriptedClient()
+    _satisfy_current(db, content, session, client)
+
+    asg = orchestrator.next_concern(db, content, session)
+    assert asg is not None
+    assert asg.persona.id == "technical_evaluator"  # still Dana, second concern
+    assert asg.concern.concern_id == "key_personnel"
+    assert asg.intro is None
+
+
+def test_intro_survives_a_reload_before_the_first_turn_is_answered(
+    db: Session, content: Content
+) -> None:
+    """Derived from the turn log, so re-reading the state before answering
+    still shows the intro."""
+    session = orchestrator.start_session(db, content)
+    first = orchestrator.next_concern(db, content, session)
+    second = orchestrator.next_concern(db, content, session)
+
+    assert first is not None and second is not None
+    assert first.intro == second.intro == content.personas["technical_evaluator"].intro
+
+
+def test_handoff_to_the_next_persona_carries_their_intro(
+    db: Session, content: Content
+) -> None:
+    session = orchestrator.start_session(db, content)
+    client = ScriptedClient()
+    # Walk out Dana's whole slice (technical_approach, key_personnel,
+    # transition, risk) so the agenda hands off to Marcus.
+    for _ in range(10):
+        asg = orchestrator.next_concern(db, content, session)
+        assert asg is not None
+        if asg.persona.id != "technical_evaluator":
+            break
+        _satisfy_current(db, content, session, client)
+
+    asg = orchestrator.next_concern(db, content, session)
+    assert asg is not None
+    assert asg.persona.id == "contracting_officer"
+    assert asg.is_follow_up is False
+    assert asg.intro == content.personas["contracting_officer"].intro
+
+    # A dodge on Marcus's opening concern presses again on the same concern —
+    # and he has now spoken, so his follow-up carries no intro.
+    client.next_extraction = _dodge(asg.concern)
+    orchestrator.submit_answer(db, content, client, session, "We'll get you that later.")
+    follow_up = orchestrator.next_concern(db, content, session)
+    assert follow_up is not None
+    assert follow_up.persona.id == "contracting_officer"
+    assert follow_up.is_follow_up is True
+    assert follow_up.intro is None
+
+
+def test_follow_up_on_a_personas_first_concern_carries_no_intro(
+    db: Session, content: Content
+) -> None:
+    session = orchestrator.start_session(db, content)
+    client = ScriptedClient()
+    asg = orchestrator.next_concern(db, content, session)
+    assert asg is not None
+    assert asg.intro is not None  # first ask has it
+
+    client.next_extraction = _dodge(asg.concern)
+    orchestrator.submit_answer(db, content, client, session, "We're very excited about this.")
+
+    follow_up = orchestrator.next_concern(db, content, session)
+    assert follow_up is not None
+    assert follow_up.is_follow_up is True
+    assert follow_up.concern.concern_id == asg.concern.concern_id
+    assert follow_up.intro is None

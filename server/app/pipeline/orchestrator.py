@@ -92,6 +92,12 @@ class Assignment:
     concern: Concern
     prompt: str
     is_follow_up: bool
+    # The persona's authored self-introduction, set only on the first prompt
+    # they ask in a session and None on every other prompt. Derived in
+    # `next_concern` from the turn log, so it disappears the moment their first
+    # turn is persisted. Deliberately kept out of `prompt`: the stored turn and
+    # the after-action report should show only the question.
+    intro: str | None = None
 
 
 @dataclass(frozen=True)
@@ -227,11 +233,18 @@ def next_concern(
             continue
         persona = content.personas[pid]
         concern = content.concerns[cid]
+        # First time this persona speaks in the session → they introduce
+        # themselves. Reuses the turns already loaded above, so this stays a
+        # pure read with no new column and no flag to keep in sync. A follow-up
+        # necessarily comes after that persona's own preceding attempt, so this
+        # is always None there.
+        first_time = not any(t.persona_id == pid for t in turns)
+        intro = persona.intro if first_time else None
         if counts[cid] == 0:
-            return Assignment(persona, concern, _core_prompt(persona, concern), False)
+            return Assignment(persona, concern, _core_prompt(persona, concern), False, intro)
         last = _last_extraction_on(turns, cid)
         prompt = _follow_up_prompt(concern, last) if last else _core_prompt(persona, concern)
-        return Assignment(persona, concern, prompt, True)
+        return Assignment(persona, concern, prompt, True, intro)
     return None
 
 
