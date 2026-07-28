@@ -462,3 +462,38 @@ def test_follow_up_on_a_personas_first_concern_carries_no_intro(
     assert follow_up.is_follow_up is True
     assert follow_up.concern.concern_id == asg.concern.concern_id
     assert follow_up.intro is None
+
+
+def test_core_prompt_is_the_concern_core_ask_verbatim(db: Session, content: Content) -> None:
+    """The prompt text is authored content, passed through. Nothing is prepended
+    to it, so the presenter reads the question and nothing else."""
+    session = orchestrator.start_session(db, content)
+    asg = orchestrator.next_concern(db, content, session)
+
+    assert asg is not None
+    assert asg.prompt == content.concerns["technical_approach"].core_ask
+
+
+def test_neither_prompt_kind_carries_the_speaker_label(db: Session, content: Content) -> None:
+    """The reported defect was a format that changed between two consecutive
+    lines from the same evaluator: the first ask on a concern was labeled and
+    the press that followed it was not. Asserting both kinds in one test is what
+    keeps a future re-label from reintroducing the split."""
+    session = orchestrator.start_session(db, content)
+    client = ScriptedClient()
+
+    core = orchestrator.next_concern(db, content, session)
+    assert core is not None
+    label = f"{core.persona.display_name}:"
+    assert core.is_follow_up is False
+    assert not core.prompt.startswith(label)
+
+    # A dodge presses again on the same concern, which is the follow-up kind.
+    client.next_extraction = _dodge(core.concern)
+    orchestrator.submit_answer(db, content, client, session, "We're very excited about this.")
+
+    follow_up = orchestrator.next_concern(db, content, session)
+    assert follow_up is not None
+    assert follow_up.is_follow_up is True
+    assert follow_up.concern.concern_id == core.concern.concern_id
+    assert not follow_up.prompt.startswith(label)

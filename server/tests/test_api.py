@@ -321,6 +321,18 @@ def test_next_prompt_intro_is_null_once_the_persona_has_spoken(client: TestClien
     assert body["next_prompt"]["intro"] is None
 
 
+def test_prompt_text_is_the_bare_question(client: TestClient) -> None:
+    """The DTO already ships `persona_id`, and both surfaces that render a
+    question turn that into a header, so a name in the text is a duplicate the
+    presenter reads twice."""
+    body = client.post("/sessions").json()
+    content = client.app.state.content
+    persona = content.personas["technical_evaluator"]
+
+    assert body["prompt"]["prompt"] == content.concerns["technical_approach"].core_ask
+    assert not body["prompt"]["prompt"].startswith(persona.display_name)
+
+
 def test_handoff_prompt_carries_the_incoming_personas_intro(client: TestClient) -> None:
     """Both handoffs in the session — technical_evaluator -> contracting_officer
     and contracting_officer -> program_rep — carry the incoming persona's own
