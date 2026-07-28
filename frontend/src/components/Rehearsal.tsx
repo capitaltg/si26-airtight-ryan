@@ -21,6 +21,7 @@ import { AfterActionReport } from "./AfterActionReport"
 import { ChatTurn } from "./ChatTurn"
 import { MeterPanel } from "./MeterBar"
 import { PendingTurn } from "./PendingTurn"
+import { PromptIntro } from "./PromptIntro"
 import { RubricPanel } from "./RubricPanel"
 
 export function Rehearsal() {
@@ -174,6 +175,7 @@ export function Rehearsal() {
               concernId: res.concern_id,
               isFollowUp: asked.is_follow_up,
               prompt: asked.prompt,
+              intro: asked.intro,
               answer,
               reply: res.reply,
               rationale: res.rationale,
@@ -215,6 +217,7 @@ export function Rehearsal() {
             concernId: res.concern_id,
             isFollowUp: asked.is_follow_up,
             prompt: asked.prompt,
+            intro: asked.intro,
             answer: question,
             reply: res.reply,
             rationale: "",
@@ -330,6 +333,7 @@ export function Rehearsal() {
                 concernId: res.concern_id,
                 isFollowUp: asked.is_follow_up,
                 prompt: asked.prompt,
+                intro: asked.intro,
                 answer: res.transcript,
                 reply: res.reply,
                 rationale: res.rationale,
@@ -585,6 +589,7 @@ export function Rehearsal() {
                     </button>
                   </div>
                 </div>
+                <PromptIntro intro={prompt.intro} />
                 <p className="text-slate-800">{prompt.prompt}</p>
                 {voiceError && <p className="text-sm text-red-700">{voiceError}</p>}
                 {mode === "text" ? (

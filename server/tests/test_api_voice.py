@@ -285,6 +285,69 @@ def test_answer_audio_rejects_unsafe_content_type(voice_client: TestClient) -> N
     assert replay.headers["content-type"] == "application/octet-stream"
 
 
+def test_next_prompt_clip_speaks_the_intro_on_a_handoff(voice_client: TestClient) -> None:
+    """The handoff is heard as one continuous line in the incoming persona's
+    voice: their introduction, then their question, in one Polly clip."""
+    spoken: list[tuple[str, str]] = []
+
+    def _recording_synthesize(text: str, voice_id: str) -> bytes:
+        spoken.append((text, voice_id))
+        return b"fake-mp3-bytes"
+
+    voice_client.app.dependency_overrides[get_synthesizer] = lambda: _recording_synthesize
+    session_id = voice_client.post("/sessions").json()["id"]
+
+    handoff = None
+    for _ in range(30):
+        body = voice_client.post(
+            f"/sessions/{session_id}/answer_audio",
+            files={"audio": ("recording.webm", b"fake-audio-bytes", "audio/webm")},
+        ).json()
+        nxt = body["next_prompt"]
+        if body["done"] or nxt is None:
+            break
+        if nxt["intro"] is not None:
+            handoff = nxt
+            break
+
+    assert handoff is not None, "never reached a handoff carrying an intro"
+    assert handoff["persona_id"] == "contracting_officer"
+    # Reply first, next prompt second — so the last clip is the next prompt's.
+    text, voice_id = spoken[-1]
+    # The on-screen prompt carries a "Name: " label for the reader's benefit;
+    # the spoken clip must not say the persona's name twice (once in the
+    # intro, once in the label), so the label is stripped before speaking.
+    persona = voice_client.app.state.content.personas["contracting_officer"]
+    label = f"{persona.display_name}: "
+    spoken_question = handoff["prompt"].removeprefix(label)
+    assert text == f"{handoff['intro']} {spoken_question}"
+    assert voice_id == persona.polly_voice_id
+    assert body["next_prompt_audio"] is not None
+
+
+def test_next_prompt_clip_is_just_the_question_when_there_is_no_intro(
+    voice_client: TestClient,
+) -> None:
+    spoken: list[str] = []
+
+    def _recording_synthesize(text: str, voice_id: str) -> bytes:
+        spoken.append(text)
+        return b"fake-mp3-bytes"
+
+    voice_client.app.dependency_overrides[get_synthesizer] = lambda: _recording_synthesize
+    session_id = voice_client.post("/sessions").json()["id"]
+
+    body = voice_client.post(
+        f"/sessions/{session_id}/answer_audio",
+        files={"audio": ("recording.webm", b"fake-audio-bytes", "audio/webm")},
+    ).json()
+
+    # Dana has already spoken, so her next prompt carries no intro and the clip
+    # is the question verbatim.
+    assert body["next_prompt"]["intro"] is None
+    assert spoken[-1] == body["next_prompt"]["prompt"]
+
+
 def test_answer_audio_rejects_over_long_content_type(voice_client: TestClient) -> None:
     """A `Content-Type` that matches an allowlisted prefix (so it isn't caught
     by the unsafe-type check above) but is longer than the

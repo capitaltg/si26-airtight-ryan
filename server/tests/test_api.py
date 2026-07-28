@@ -168,6 +168,9 @@ def test_answer_stream_emits_stages_then_result(client: TestClient) -> None:
     assert body["meter"] == 52
     assert body["concern_status"] == "satisfied"
     assert body["next_prompt"]["concern_id"] == "key_personnel"
+    # Dana already introduced herself on the first turn, so her next prompt
+    # (still hers — key_personnel is her second priority) carries no intro.
+    assert body["next_prompt"]["intro"] is None
     assert body["done"] is False
 
     # The turn was persisted: a follow-up read reflects the advanced state.
@@ -256,6 +259,21 @@ def test_report_lists_clarifications(client: TestClient) -> None:
     assert body["clarifications"][0]["reply"]
 
 
+def test_report_never_leaks_a_persona_intro(client: TestClient) -> None:
+    """The intro is derived state shown only above a persona's first prompt —
+    never persisted, and never part of the after-action report."""
+    session_id = client.post("/sessions").json()["id"]
+    client.post(f"/sessions/{session_id}/answer", json={"answer": "Here is the architecture."})
+    client.post(
+        f"/sessions/{session_id}/answer", json={"answer": "Three named services, FedRAMP host."}
+    )
+
+    r = client.get(f"/sessions/{session_id}/report")
+    assert r.status_code == 200
+    dana_intro = client.app.state.content.personas["technical_evaluator"].intro
+    assert dana_intro not in r.text
+
+
 def test_unknown_session_is_404(client: TestClient) -> None:
     r = client.get("/sessions/00000000-0000-0000-0000-000000000000")
     assert r.status_code == 404
@@ -273,3 +291,74 @@ def test_content_rubric_is_disclosed(client: TestClient) -> None:
     assert all(row["cap"] is None for row in body["rows"] if row["id"] != "red_line")
     assert len(body["concerns"]) == 8
     assert all(c["red_lines"] for c in body["concerns"])
+
+
+def test_create_session_prompt_carries_the_opening_intro(client: TestClient) -> None:
+    body = client.post("/sessions").json()
+    expected = client.app.state.content.personas["technical_evaluator"].intro
+
+    assert body["prompt"]["persona_id"] == "technical_evaluator"
+    assert body["prompt"]["intro"] == expected
+    # The intro is its own field — it never leaks into the question text.
+    assert expected not in body["prompt"]["prompt"]
+
+
+def test_get_session_before_answering_still_shows_the_intro(client: TestClient) -> None:
+    session_id = client.post("/sessions").json()["id"]
+    reloaded = client.get(f"/sessions/{session_id}").json()
+
+    expected = client.app.state.content.personas["technical_evaluator"].intro
+    assert reloaded["prompt"]["intro"] == expected
+
+
+def test_next_prompt_intro_is_null_once_the_persona_has_spoken(client: TestClient) -> None:
+    session_id = client.post("/sessions").json()["id"]
+    body = client.post(
+        f"/sessions/{session_id}/answer", json={"answer": "Three named services, FedRAMP host."}
+    ).json()
+
+    assert body["next_prompt"]["persona_id"] == "technical_evaluator"
+    assert body["next_prompt"]["intro"] is None
+
+
+def test_handoff_prompt_carries_the_incoming_personas_intro(client: TestClient) -> None:
+    """Both handoffs in the session — technical_evaluator -> contracting_officer
+    and contracting_officer -> program_rep — carry the incoming persona's own
+    intro exactly once, on their first prompt only."""
+    session_id = client.post("/sessions").json()["id"]
+    intros = {
+        pid: persona.intro for pid, persona in client.app.state.content.personas.items()
+    }
+
+    handoffs = []
+    for _ in range(30):
+        body = client.post(
+            f"/sessions/{session_id}/answer", json={"answer": "Here is the answer."}
+        ).json()
+        nxt = body["next_prompt"]
+        if body["done"] or nxt is None:
+            break
+        if nxt["intro"] is not None:
+            handoffs.append(nxt)
+        if len(handoffs) >= 2:
+            break
+
+    assert len(handoffs) >= 2, "never reached both handoffs"
+    first_handoff, second_handoff = handoffs[0], handoffs[1]
+    assert first_handoff["persona_id"] == "contracting_officer"
+    assert first_handoff["intro"] == intros["contracting_officer"]
+    assert first_handoff["is_follow_up"] is False
+    assert second_handoff["persona_id"] == "program_rep"
+    assert second_handoff["intro"] == intros["program_rep"]
+    assert second_handoff["is_follow_up"] is False
+
+
+def test_clarify_echoes_the_active_prompt_with_its_intro(client: TestClient) -> None:
+    session_id = client.post("/sessions").json()["id"]
+    body = client.post(
+        f"/sessions/{session_id}/clarify", json={"question": "Do you mean the target state?"}
+    ).json()
+
+    expected = client.app.state.content.personas["technical_evaluator"].intro
+    # A clarification persists no turn, so the intro is still owed and still shown.
+    assert body["prompt"]["intro"] == expected

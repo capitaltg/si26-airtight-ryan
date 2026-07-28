@@ -14,6 +14,9 @@ export interface Prompt {
   concern_id: string
   prompt: string
   is_follow_up: boolean
+  // The persona's self-introduction, non-null only on the first prompt they ask
+  // in a session (their opening question, or the first question after a handoff).
+  intro: string | null
 }
 
 export interface SessionState {
@@ -155,6 +158,10 @@ export interface TranscriptTurn {
   concernId: string
   isFollowUp: boolean
   prompt: string
+  // The intro this turn was displayed with, so scrolling back shows where each
+  // evaluator entered. Copied from the prompt at submit time — the backend never
+  // persists it.
+  intro?: string | null
   answer: string
   reply: string
   rationale: string

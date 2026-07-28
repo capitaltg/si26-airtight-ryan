@@ -90,7 +90,8 @@ airtight/
 ├─ e2e/                          # Playwright e2e smoke tests (boots stack via docker compose)
 │  ├─ tests/
 │  │  ├─ a11y-contrast.spec.ts   # axe-core WCAG 2.1 AA color-contrast check
-│  │  └─ health.spec.ts
+│  │  ├─ health.spec.ts
+│  │  └─ persona-intro.spec.ts
 │  ├─ .gitignore
 │  ├─ package-lock.json
 │  ├─ package.json
@@ -105,6 +106,7 @@ airtight/
 │  │  │  ├─ ChatTurn.tsx
 │  │  │  ├─ MeterBar.tsx
 │  │  │  ├─ PendingTurn.tsx
+│  │  │  ├─ PromptIntro.tsx
 │  │  │  ├─ Rehearsal.tsx
 │  │  │  ├─ RubricPanel.tsx
 │  │  │  └─ StageStepper.tsx

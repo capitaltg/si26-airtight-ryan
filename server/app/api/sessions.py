@@ -86,6 +86,10 @@ class PromptDTO(BaseModel):
     concern_id: str
     prompt: str
     is_follow_up: bool
+    # The persona's self-introduction, non-null only on the first prompt they
+    # ask in this session. Its own field rather than part of `prompt`, so the
+    # stored turn and the report keep showing only the question.
+    intro: str | None = None
 
 
 class SessionStateDTO(BaseModel):
@@ -150,6 +154,7 @@ def _prompt_dto(asg: orchestrator.Assignment | None) -> PromptDTO | None:
         concern_id=asg.concern.concern_id,
         prompt=asg.prompt,
         is_follow_up=asg.is_follow_up,
+        intro=asg.intro,
     )
 
 
@@ -293,11 +298,21 @@ def submit_answer_audio(
 
     persona = content.personas[result.persona_id]
     reply_audio = _speak(synthesizer, result.reaction.in_character_reply, persona.polly_voice_id)
-    next_prompt_audio = (
-        _speak(synthesizer, result.next.prompt, result.next.persona.polly_voice_id)
-        if result.next is not None
-        else None
-    )
+    next_prompt_audio = None
+    if result.next is not None:
+        # On a handoff the incoming persona introduces themself and asks in the
+        # same breath: one Polly call, one clip, one voice, so playSequence and
+        # the replay route need no change. The prompt text carries a "Name: "
+        # label meant to be read on screen, never spoken — strip it from the
+        # spoken text only so the intro doesn't say the persona's name twice.
+        next_text = result.next.prompt
+        if result.next.intro:
+            label = f"{result.next.persona.display_name}: "
+            spoken_question = next_text.removeprefix(label)
+            next_text = f"{result.next.intro} {spoken_question}"
+        next_prompt_audio = _speak(
+            synthesizer, next_text, result.next.persona.polly_voice_id
+        )
 
     return VoiceAnswerResponse(
         **_answer_payload(db, session.id, result).model_dump(),

@@ -1,6 +1,9 @@
 ---
 id: technical_evaluator
 display_name: Dana
+intro: >-
+  Dana Whitfield, senior technical evaluator on the source-selection board. I'll
+  press on architecture, staffing depth, and how you sequence the migration.
 voice: >-
   Precise, probing, unimpressed by buzzwords. Asks follow-ups until an answer is
   concrete. Rewards specifics, punishes hand-waving.

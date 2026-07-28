@@ -28,6 +28,11 @@ class Exemplar(BaseModel):
 class PersonaDefinition(BaseModel):
     id: str
     display_name: str
+    # One or two authored sentences the persona opens with the first time they
+    # speak in a session: name, role, what they watch for. Required — a persona
+    # file without one must fail this load rather than ship a personaless
+    # handoff to a presenter. Never part of the prompt text itself.
+    intro: str = Field(min_length=1)
     voice: str
     demographics: str
     values: list[str] = Field(default_factory=list)
