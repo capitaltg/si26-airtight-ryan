@@ -185,7 +185,7 @@ def _next_status(concern: Concern, extraction: Extraction, attempts: int) -> str
 
 
 def _core_prompt(persona: PersonaDefinition, concern: Concern) -> str:
-    return f"{persona.display_name}: {concern.core_ask}"
+    return concern.core_ask
 
 
 def _follow_up_prompt(concern: Concern, last: Extraction) -> str:

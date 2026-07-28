@@ -83,6 +83,7 @@ class MeterDTO(BaseModel):
 
 class PromptDTO(BaseModel):
     persona_id: str
+    display_name: str
     concern_id: str
     prompt: str
     is_follow_up: bool
@@ -155,6 +156,7 @@ def _prompt_dto(asg: orchestrator.Assignment | None) -> PromptDTO | None:
         return None
     return PromptDTO(
         persona_id=asg.persona.id,
+        display_name=asg.persona.display_name,
         concern_id=asg.concern.concern_id,
         prompt=asg.prompt,
         is_follow_up=asg.is_follow_up,
@@ -164,14 +166,10 @@ def _prompt_dto(asg: orchestrator.Assignment | None) -> PromptDTO | None:
 
 def _spoken_prompt_text(asg: orchestrator.Assignment) -> str:
     """The prompt as it should be *heard*. On a persona's first prompt of a
-    session the intro leads and the question follows, as one line in one voice.
-    The prompt text carries a "Name: " label meant to be read on screen, never
-    spoken — strip it so the persona doesn't say their own name twice, once in
-    the intro and once in the label."""
+    session the intro leads and the question follows, as one line in one voice."""
     if not asg.intro:
         return asg.prompt
-    label = f"{asg.persona.display_name}: "
-    return f"{asg.intro} {asg.prompt.removeprefix(label)}"
+    return f"{asg.intro} {asg.prompt}"
 
 
 def _state(db: Session, content: Content, session: RehearsalSession) -> SessionStateDTO:

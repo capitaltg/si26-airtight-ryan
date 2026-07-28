@@ -1,8 +1,8 @@
 // Small presentation helpers shared across components.
 
-// The API exposes personas and concerns by snake_case id only. Prettify them for
-// display: "technical_evaluator" -> "Technical Evaluator". For a presenter, the
-// role label reads better than the authored first name (which the API omits).
+// Concerns (and the persona role label alongside a name) are exposed by
+// snake_case id only. Prettify them for display: "technical_evaluator" ->
+// "Technical Evaluator".
 export function prettify(id: string): string {
   return id
     .split("_")

@@ -303,6 +303,16 @@ def test_create_session_prompt_carries_the_opening_intro(client: TestClient) -> 
     assert expected not in body["prompt"]["prompt"]
 
 
+def test_prompt_carries_the_persona_display_name(client: TestClient) -> None:
+    """The header renders a name next to the role label, so the DTO ships
+    `display_name` alongside `persona_id` rather than making the frontend
+    look it up some other way."""
+    body = client.post("/sessions").json()
+    persona = client.app.state.content.personas["technical_evaluator"]
+
+    assert body["prompt"]["display_name"] == persona.display_name
+
+
 def test_get_session_before_answering_still_shows_the_intro(client: TestClient) -> None:
     session_id = client.post("/sessions").json()["id"]
     reloaded = client.get(f"/sessions/{session_id}").json()
@@ -319,6 +329,18 @@ def test_next_prompt_intro_is_null_once_the_persona_has_spoken(client: TestClien
 
     assert body["next_prompt"]["persona_id"] == "technical_evaluator"
     assert body["next_prompt"]["intro"] is None
+
+
+def test_prompt_text_is_the_bare_question(client: TestClient) -> None:
+    """The DTO already ships `persona_id`, and both surfaces that render a
+    question turn that into a header, so a name in the text is a duplicate the
+    presenter reads twice."""
+    body = client.post("/sessions").json()
+    content = client.app.state.content
+    persona = content.personas["technical_evaluator"]
+
+    assert body["prompt"]["prompt"] == content.concerns["technical_approach"].core_ask
+    assert not body["prompt"]["prompt"].startswith(persona.display_name)
 
 
 def test_handoff_prompt_carries_the_incoming_personas_intro(client: TestClient) -> None:
