@@ -17,6 +17,9 @@ dependencies = [
     "pydantic-settings>=2.5",
     "pyyaml>=6.0",
     "python-frontmatter>=1.1",
+    "amazon-transcribe>=0.6",   # streaming SDK; boto3 has no streaming transcription
+    "boto3>=1.35",              # Polly
+    "python-multipart>=0.0.9",  # FastAPI UploadFile
 ]
 
 [project.optional-dependencies]
@@ -26,6 +29,7 @@ dev = [
     "ruff>=0.7",
     "mypy>=1.11",
     "types-PyYAML>=6.0",
+    "boto3-stubs[polly]>=1.35",
 ]
 
 [tool.setuptools.packages.find]
@@ -56,3 +60,7 @@ select = ["E", "F", "I", "UP", "B"]
 python_version = "3.11"
 strict = true
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["amazon_transcribe.*"]
+ignore_missing_imports = true

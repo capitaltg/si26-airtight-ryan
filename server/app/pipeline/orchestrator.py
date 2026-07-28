@@ -71,6 +71,20 @@ class ClarificationCapReached(RuntimeError):
 
 
 @dataclass(frozen=True)
+class AnswerAudio:
+    """The voice-path payload for a turn: the uploaded recording, its content
+    type, and the transcript that was actually scored (task 5 produces this by
+    running the recording through the transcriber before calling
+    ``submit_answer``). Nothing in the pipeline reads it — it only rides along
+    to ``repo.append_turn`` so a disputed score can be checked against the
+    recording."""
+
+    data: bytes
+    content_type: str
+    transcript: str
+
+
+@dataclass(frozen=True)
 class Assignment:
     """Who asks what next, and whether it's a repeat press on the same concern."""
 
@@ -227,6 +241,7 @@ def submit_answer_events(
     client: object,
     session: RehearsalSession,
     answer: str,
+    audio: AnswerAudio | None = None,
 ) -> Iterator[dict[str, object]]:
     """Run one turn, yielding stage-progress events around the same pipeline.
 
@@ -235,6 +250,12 @@ def submit_answer_events(
     final action after persist/advance, ``{"result": TurnResult(...)}``. The
     thin ``submit_answer`` driver below drains it, so behavior is byte-identical
     to the pre-streaming pipeline; scoring and the DB writes are untouched.
+
+    ``audio`` is the voice path's optional payload (see :class:`AnswerAudio`).
+    It is never read here — not by extraction, scoring, or reaction — only
+    forwarded to ``repo.append_turn`` for persistence. When it is ``None`` (the
+    text path, i.e. ``POST /answer``), the turn row's audio columns stay null
+    and everything else runs exactly as before.
     """
     current = next_concern(db, content, session)
     if current is None:
@@ -299,6 +320,9 @@ def submit_answer_events(
         extraction=extraction,
         score=score,
         reaction=reaction,
+        answer_audio=audio.data if audio is not None else None,
+        answer_audio_content_type=audio.content_type if audio is not None else None,
+        transcript=audio.transcript if audio is not None else None,
     )
     repo.append_claims(
         db, session_id=session.id, turn_index=turn_index, claims=extraction.claims
@@ -346,6 +370,7 @@ def submit_answer(
     client: object,
     session: RehearsalSession,
     answer: str,
+    audio: AnswerAudio | None = None,
 ) -> TurnResult:
     """Run one turn: extract → score → persist → meter → react → advance.
 
@@ -353,10 +378,11 @@ def submit_answer(
     returns the terminal ``result`` event, keeping the synchronous JSON contract
     (``POST /answer``) unchanged. Concern selection is code-driven; the model is
     invoked only for extraction and reaction, and the score is locked before the
-    reaction runs.
+    reaction runs. ``audio`` passes straight through to
+    :func:`submit_answer_events`; see there for what it does.
     """
     result: TurnResult | None = None
-    for ev in submit_answer_events(db, content, client, session, answer):
+    for ev in submit_answer_events(db, content, client, session, answer, audio):
         if "result" in ev:
             result = cast(TurnResult, ev["result"])
     assert result is not None  # the generator always yields a terminal result

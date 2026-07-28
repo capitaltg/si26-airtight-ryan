@@ -24,6 +24,7 @@ non_negotiables:
   - do not commit to prices or terms not in the proposal
   - do not disparage the incumbent or competitors
 rubric_version: 1
+polly_voice_id: Matthew
 ---
 
 # Marcus, Contracting Officer

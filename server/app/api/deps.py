@@ -1,11 +1,14 @@
 """Shared FastAPI dependencies for the API layer.
 
-Both the DB session and the Bedrock client are injected so tests can override
-them (SQLite + a scripted fake) without touching the network. Content is read
-off ``app.state`` where the lifespan handler stashed it at startup.
+The DB session, the Bedrock client, and the voice adapters are all injected
+so tests can override them (SQLite + scripted fakes) without touching the
+network, AWS, or a subprocess. Content is read off ``app.state`` where the
+lifespan handler stashed it at startup.
 """
 
 from __future__ import annotations
+
+from typing import Protocol
 
 from fastapi import Request
 from sqlalchemy.orm import Session, sessionmaker
@@ -14,8 +17,17 @@ from app.bedrock.cache import DbResponseCache
 from app.bedrock.client import BedrockClient
 from app.content.loader import Content
 from app.db.session import SessionLocal, get_db  # re-exported for routers to depend on
+from app.voice.polly import synthesize_speech
+from app.voice.transcribe import transcribe_audio
 
-__all__ = ["get_db", "get_content", "get_bedrock_client", "get_session_factory"]
+__all__ = [
+    "get_db",
+    "get_content",
+    "get_bedrock_client",
+    "get_session_factory",
+    "get_transcriber",
+    "get_synthesizer",
+]
 
 
 def get_content(request: Request) -> Content:
@@ -38,3 +50,23 @@ def get_session_factory() -> sessionmaker[Session]:
     override this to point at the in-memory SQLite factory, same as ``get_db``.
     """
     return SessionLocal
+
+
+class Transcriber(Protocol):
+    def __call__(self, audio: bytes, content_type: str) -> str: ...
+
+
+class Synthesizer(Protocol):
+    def __call__(self, text: str, voice_id: str) -> bytes: ...
+
+
+def get_transcriber() -> Transcriber:
+    # ffmpeg + AWS Transcribe live behind this indirection so tests can swap
+    # in a scripted fake via `app.dependency_overrides`, same as
+    # `get_bedrock_client`.
+    return transcribe_audio
+
+
+def get_synthesizer() -> Synthesizer:
+    # AWS Polly lives behind this indirection for the same reason.
+    return synthesize_speech

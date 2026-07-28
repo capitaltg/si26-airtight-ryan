@@ -11,6 +11,7 @@ import type {
   RubricDisclosure,
   SessionState,
   Stage,
+  VoiceAnswerResponse,
 } from "../types"
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -87,6 +88,26 @@ async function submitAnswerStream(
   return result
 }
 
+// Voice mode's answer submission: a multipart recording, not JSON, so it can't
+// go through `request` (which hardcodes a JSON Content-Type and would break the
+// multipart boundary the browser needs to set itself).
+async function submitAnswerAudio(id: string, blob: Blob): Promise<VoiceAnswerResponse> {
+  const form = new FormData()
+  form.append("audio", blob, "answer.webm")
+  const res = await fetch(`/api/sessions/${id}/answer_audio`, { method: "POST", body: form })
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`
+    try {
+      const body = (await res.json()) as { detail?: string }
+      if (body.detail) detail = body.detail
+    } catch {
+      // non-JSON error body — keep the status line
+    }
+    throw new Error(detail)
+  }
+  return res.json() as Promise<VoiceAnswerResponse>
+}
+
 export const api = {
   createSession: () => request<SessionState>("/sessions", { method: "POST" }),
   getSession: (id: string) => request<SessionState>(`/sessions/${id}`),
@@ -96,6 +117,7 @@ export const api = {
       body: JSON.stringify({ answer }),
     }),
   submitAnswerStream,
+  submitAnswerAudio,
   askClarification: (id: string, question: string) =>
     request<ClarifyResponse>(`/sessions/${id}/clarify`, {
       method: "POST",
@@ -119,6 +141,17 @@ export function useSubmitAnswer(sessionId: string | null) {
     mutationFn: ({ answer, onStage }: { answer: string; onStage: (s: Stage) => void }) => {
       if (!sessionId) throw new Error("no active session")
       return api.submitAnswerStream(sessionId, answer, onStage)
+    },
+  })
+}
+
+// Voice mode's answer mutation: uploads the recorded blob and resolves with the
+// transcript, score, and spoken reply/next-prompt audio all in one round trip.
+export function useSubmitAnswerAudio(sessionId: string | null) {
+  return useMutation({
+    mutationFn: (blob: Blob) => {
+      if (!sessionId) throw new Error("no active session")
+      return api.submitAnswerAudio(sessionId, blob)
     },
   })
 }

@@ -109,6 +109,7 @@ airtight/
 │  │  │  ├─ RubricPanel.tsx
 │  │  │  └─ StageStepper.tsx
 │  │  ├─ App.tsx
+│  │  ├─ audio.ts
 │  │  ├─ index.css
 │  │  ├─ lib.ts
 │  │  ├─ main.tsx
@@ -141,7 +142,8 @@ airtight/
 │  │  │  ├─ 0001_init.py
 │  │  │  ├─ 0002_clarifications.py
 │  │  │  ├─ 0003_model_response_cache.py
-│  │  │  └─ 0004_cache_normalized_answer.py
+│  │  │  ├─ 0004_cache_normalized_answer.py
+│  │  │  └─ 0005_turn_audio.py
 │  │  ├─ env.py
 │  │  └─ script.py.mako
 │  ├─ app/
@@ -189,6 +191,11 @@ airtight/
 │  │  │  ├─ reaction.py
 │  │  │  ├─ report.py
 │  │  │  └─ scoring.py
+│  │  ├─ voice/
+│  │  │  ├─ __init__.py
+│  │  │  ├─ audio.py
+│  │  │  ├─ polly.py
+│  │  │  └─ transcribe.py
 │  │  ├─ __init__.py
 │  │  ├─ config.py               # pydantic-settings
 │  │  └─ main.py                 # FastAPI app + /health
@@ -199,6 +206,7 @@ airtight/
 │  │  │  └─ test_golden.py
 │  │  ├─ __init__.py
 │  │  ├─ test_api.py
+│  │  ├─ test_api_voice.py
 │  │  ├─ test_bedrock_client.py
 │  │  ├─ test_conciseness.py
 │  │  ├─ test_consistency_check.py
@@ -213,7 +221,10 @@ airtight/
 │  │  ├─ test_response_cache.py
 │  │  ├─ test_scoring.py
 │  │  ├─ test_span_anchor.py
-│  │  └─ test_tier0_flags.py
+│  │  ├─ test_tier0_flags.py
+│  │  ├─ test_voice_audio.py
+│  │  ├─ test_voice_polly.py
+│  │  └─ test_voice_transcribe.py
 │  ├─ .dockerignore
 │  ├─ alembic.ini
 │  ├─ Dockerfile

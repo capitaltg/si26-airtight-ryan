@@ -43,7 +43,26 @@ export function ChatTurn({ turn }: { turn: TranscriptTurn }) {
 
       {/* presenter */}
       <div className="flex justify-end">
-        <div className={PRESENTER_BUBBLE}>{turn.answer}</div>
+        <div className={PRESENTER_BUBBLE}>
+          {turn.transcript ? (
+            // Voice mode: the scorer only ever saw the transcript, not the
+            // recording, so label it as such and offer the recording itself as
+            // a secondary, playable artifact underneath.
+            <div className="space-y-1.5">
+              <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                What the scorer heard
+              </span>
+              <p>{turn.transcript}</p>
+              {/* The transcript above already serves as this clip's caption (it's
+                  the verbatim text the scorer read), so a synced <track> would
+                  only duplicate it without real timing data to back it. */}
+              {/* oxlint-disable-next-line jsx-a11y/media-has-caption */}
+              <audio controls src={turn.audioUrl} className="h-8 w-full" />
+            </div>
+          ) : (
+            turn.answer
+          )}
+        </div>
       </div>
 
       {/* persona reply + score */}

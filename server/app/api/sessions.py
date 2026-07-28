@@ -8,30 +8,71 @@ mirrors in ``types.ts`` (task 11).
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import uuid
 from collections.abc import AsyncIterator
 from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.api.deps import get_bedrock_client, get_content, get_db, get_session_factory
+from app.api.deps import (
+    Synthesizer,
+    Transcriber,
+    get_bedrock_client,
+    get_content,
+    get_db,
+    get_session_factory,
+    get_synthesizer,
+    get_transcriber,
+)
 from app.bedrock.client import BedrockClient
+from app.config import settings
 from app.content.loader import Content
 from app.db import repo
 from app.db.models import RehearsalSession
 from app.pipeline import orchestrator
-from app.pipeline.orchestrator import ClarificationCapReached, SessionComplete
+from app.pipeline.orchestrator import AnswerAudio, ClarificationCapReached, SessionComplete
 from app.report.builder import build_report
 from app.schemas.report import Report
+from app.voice import SynthesisError, TranscriptionError
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
+
+# The browser-recorded container types this app ever expects (see
+# `frontend/src/audio.ts`'s `MIME_CANDIDATES`, plus the codec-parameter
+# variants browsers actually send, e.g. "audio/webm;codecs=opus"). Anything
+# else is client-controlled and untrusted: `content_type` is persisted and
+# later echoed back verbatim as the `media_type` on `GET .../turns/{i}/audio`,
+# so an unvalidated value is a stored-XSS vector (e.g. "text/html") and can
+# also exceed the `answer_audio_content_type` column's `String(64)` limit.
+_ALLOWED_AUDIO_CONTENT_TYPE_PREFIXES = ("audio/webm", "audio/mp4", "audio/ogg")
+_SAFE_DEFAULT_AUDIO_CONTENT_TYPE = "application/octet-stream"
+# Matches `answer_audio_content_type`'s `String(64)` column (app/db/models.py) —
+# an allowlisted-prefix value that's still too long to store falls back to the
+# safe default rather than blowing up at commit time on a DB that enforces the
+# column length (e.g. Postgres), after the (paid) transcription call already ran.
+_MAX_AUDIO_CONTENT_TYPE_LENGTH = 64
+
+
+def _safe_audio_content_type(content_type: str) -> str:
+    """Pass through only an allowlisted container type that also fits the DB
+    column; anything else falls back to a safe, generic type. This is purely a
+    replay-header safeguard — ffmpeg sniffs the real container from the bytes
+    regardless of what's claimed here (see `app/voice/audio.py`), so the
+    upload is never rejected for a mismatched-but-unrecognized content type."""
+    if (
+        content_type.lower().startswith(_ALLOWED_AUDIO_CONTENT_TYPE_PREFIXES)
+        and len(content_type) <= _MAX_AUDIO_CONTENT_TYPE_LENGTH
+    ):
+        return content_type
+    return _SAFE_DEFAULT_AUDIO_CONTENT_TYPE
 
 
 class MeterDTO(BaseModel):
@@ -74,6 +115,12 @@ class AnswerResponse(BaseModel):
     meters: list[MeterDTO]
     next_prompt: PromptDTO | None
     done: bool
+
+
+class VoiceAnswerResponse(AnswerResponse):
+    transcript: str
+    reply_audio: str | None  # base64 mp3, null if synthesis failed
+    next_prompt_audio: str | None  # base64 mp3, null at end of session or on failure
 
 
 class ClarifyRequest(BaseModel):
@@ -148,6 +195,18 @@ def _require_session(db: Session, session_id: uuid.UUID) -> RehearsalSession:
     return session
 
 
+def _speak(synthesizer: Synthesizer, text: str, voice_id: str) -> str | None:
+    """Synthesize speech for one line, base64-encoded for JSON transport. A
+    synthesis failure never costs the presenter a scored turn — it just means
+    no audio rides along with an otherwise-normal response."""
+    try:
+        audio = synthesizer(text, voice_id)
+    except SynthesisError:
+        logger.exception("speech synthesis failed")
+        return None
+    return base64.b64encode(audio).decode()
+
+
 @router.post("", response_model=SessionStateDTO, status_code=201)
 def create_session(
     db: Session = Depends(get_db),
@@ -180,6 +239,87 @@ def submit_answer(
     except SessionComplete as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _answer_payload(db, session.id, result)
+
+
+@router.post("/{session_id}/answer_audio", response_model=VoiceAnswerResponse)
+def submit_answer_audio(
+    session_id: uuid.UUID,
+    audio: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    content: Content = Depends(get_content),
+    client: BedrockClient = Depends(get_bedrock_client),
+    transcriber: Transcriber = Depends(get_transcriber),
+    synthesizer: Synthesizer = Depends(get_synthesizer),
+) -> VoiceAnswerResponse:
+    """Voice twin of ``/answer``: transcribe the recording, then run the exact
+    same ``orchestrator.submit_answer`` call the text path uses (the fixed
+    transcript standing in for the typed answer), so a presenter's spoken
+    answer scores byte-identically to the same words typed.
+
+    Ordering matters for the "no silent score" guarantee: transcription
+    happens before anything touches the DB, so a failed or blank transcript
+    leaves the session completely untouched (no turn row, no meter movement).
+    """
+    session = _require_session(db, session_id)
+
+    data = audio.file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="empty audio upload")
+    if len(data) > settings.max_answer_audio_bytes:
+        raise HTTPException(status_code=413, detail="audio upload too large")
+
+    content_type = _safe_audio_content_type(audio.content_type or "audio/webm")
+    try:
+        transcript = transcriber(data, content_type)
+    except TranscriptionError:
+        logger.exception("transcription failed for session %s", session_id)
+        raise HTTPException(
+            status_code=422, detail="Could not transcribe the recording"
+        ) from None
+    if not transcript.strip():
+        raise HTTPException(status_code=422, detail="Could not transcribe the recording")
+
+    try:
+        result = orchestrator.submit_answer(
+            db,
+            content,
+            client,
+            session,
+            transcript,
+            audio=AnswerAudio(data=data, content_type=content_type, transcript=transcript),
+        )
+    except SessionComplete as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    persona = content.personas[result.persona_id]
+    reply_audio = _speak(synthesizer, result.reaction.in_character_reply, persona.polly_voice_id)
+    next_prompt_audio = (
+        _speak(synthesizer, result.next.prompt, result.next.persona.polly_voice_id)
+        if result.next is not None
+        else None
+    )
+
+    return VoiceAnswerResponse(
+        **_answer_payload(db, session.id, result).model_dump(),
+        transcript=transcript,
+        reply_audio=reply_audio,
+        next_prompt_audio=next_prompt_audio,
+    )
+
+
+@router.get("/{session_id}/turns/{turn_index}/audio")
+def get_turn_audio(
+    session_id: uuid.UUID,
+    turn_index: int,
+    db: Session = Depends(get_db),
+) -> Response:
+    """Replay the recording behind one scored turn, or 404 if that turn was
+    answered via the text path (no audio was ever attached)."""
+    turns = repo.get_turns(db, session_id)
+    turn = next((t for t in turns if t.turn_index == turn_index), None)
+    if turn is None or turn.answer_audio is None:
+        raise HTTPException(status_code=404, detail="no audio for this turn")
+    return Response(content=turn.answer_audio, media_type=turn.answer_audio_content_type)
 
 
 @router.post("/{session_id}/clarify", response_model=ClarifyResponse)

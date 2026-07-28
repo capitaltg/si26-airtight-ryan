@@ -117,6 +117,57 @@ def test_append_turn_round_trips_jsonb_verbatim(db: Session) -> None:
     assert PersonaReaction.model_validate(turn.reaction_json) == reaction
 
 
+def test_append_turn_persists_audio_fields_when_given(db: Session) -> None:
+    session = repo.create_session(
+        db, scenario_version="v1", rubric_version=1, persona_ids=["technical_evaluator"]
+    )
+    repo.append_turn(
+        db,
+        session_id=session.id,
+        turn_index=0,
+        persona_id="technical_evaluator",
+        concern_id="technical_approach",
+        user_answer="We will deliver X.",
+        extraction=Extraction(),
+        score=ScoreOutput(support_delta=0, matched_rows=["unsubstantiated"], capped=False),
+        reaction=None,
+        answer_audio=b"\x00\x01fake-webm-bytes",
+        answer_audio_content_type="audio/webm",
+        transcript="We will deliver X.",
+    )
+    db.commit()
+
+    turn = repo.get_turns(db, session.id)[0]
+    assert turn.answer_audio == b"\x00\x01fake-webm-bytes"
+    assert turn.answer_audio_content_type == "audio/webm"
+    assert turn.transcript == "We will deliver X."
+
+
+def test_append_turn_audio_fields_default_to_none(db: Session) -> None:
+    """The text-only path (no audio kwargs passed) must leave the new columns
+    null — this is what keeps ``POST /answer`` byte-identical."""
+    session = repo.create_session(
+        db, scenario_version="v1", rubric_version=1, persona_ids=["technical_evaluator"]
+    )
+    repo.append_turn(
+        db,
+        session_id=session.id,
+        turn_index=0,
+        persona_id="technical_evaluator",
+        concern_id="technical_approach",
+        user_answer="We will deliver X.",
+        extraction=Extraction(),
+        score=ScoreOutput(support_delta=0, matched_rows=["unsubstantiated"], capped=False),
+        reaction=None,
+    )
+    db.commit()
+
+    turn = repo.get_turns(db, session.id)[0]
+    assert turn.answer_audio is None
+    assert turn.answer_audio_content_type is None
+    assert turn.transcript is None
+
+
 def test_reaction_is_optional_on_a_turn(db: Session) -> None:
     session = repo.create_session(
         db, scenario_version="v1", rubric_version=1, persona_ids=["program_rep"]

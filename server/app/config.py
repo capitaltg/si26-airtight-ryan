@@ -14,5 +14,11 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://airtight:airtight@localhost:5432/airtight"
     content_dir: Path = Path(__file__).parent / "content" / "store"
 
+    # Voice settings (Transcribe and Polly) — reuse aws_region above
+    transcribe_language_code: str = "en-US"
+    transcribe_sample_rate: int = 16000
+    polly_engine: str = "neural"
+    max_answer_audio_bytes: int = 10 * 1024 * 1024
+
 
 settings = Settings()

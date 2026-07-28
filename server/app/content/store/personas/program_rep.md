@@ -24,6 +24,7 @@ non_negotiables:
   - do not over-promise a zero-risk cutover
   - do not ignore end-user needs
 rubric_version: 1
+polly_voice_id: Danielle
 ---
 
 # Priya, Program / End-User Representative

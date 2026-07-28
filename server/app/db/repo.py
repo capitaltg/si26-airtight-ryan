@@ -59,6 +59,9 @@ def append_turn(
     extraction: Extraction,
     score: ScoreOutput,
     reaction: PersonaReaction | None,
+    answer_audio: bytes | None = None,
+    answer_audio_content_type: str | None = None,
+    transcript: str | None = None,
 ) -> Turn:
     turn = Turn(
         session_id=session_id,
@@ -69,6 +72,9 @@ def append_turn(
         extraction_json=extraction.model_dump(mode="json"),
         score_json=score.model_dump(mode="json"),
         reaction_json=reaction.model_dump(mode="json") if reaction is not None else None,
+        answer_audio=answer_audio,
+        answer_audio_content_type=answer_audio_content_type,
+        transcript=transcript,
     )
     db.add(turn)
     db.flush()

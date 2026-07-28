@@ -26,6 +26,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    LargeBinary,
     String,
     Text,
     Uuid,
@@ -68,7 +69,9 @@ class Turn(Base):
     ``extraction_json`` / ``score_json`` / ``reaction_json`` store the pydantic
     ``.model_dump(mode="json")`` of each object verbatim. ``reaction_json`` is
     nullable because the reply is generated after the number is locked and may not
-    exist yet when the turn row is first written.
+    exist yet when the turn row is first written. ``answer_audio`` /
+    ``answer_audio_content_type`` / ``transcript`` are populated only on the voice
+    path (``POST /answer_audio``); they are null for a typed turn.
     """
 
     __tablename__ = "turns"
@@ -84,6 +87,15 @@ class Turn(Base):
     extraction_json: Mapped[dict[str, Any]] = mapped_column(JSON_)
     score_json: Mapped[dict[str, Any]] = mapped_column(JSON_)
     reaction_json: Mapped[dict[str, Any] | None] = mapped_column(JSON_, nullable=True)
+    # Populated only on the voice path (POST /answer_audio); null for a typed turn.
+    # `deferred=True`: this blob (up to `settings.max_answer_audio_bytes`, 10 MiB)
+    # is only ever read by the replay endpoint (`GET .../turns/{i}/audio`), but
+    # `repo.get_turns` is called on nearly every request (next_concern, session
+    # state, build_report); deferring keeps those reads from pulling every turn's
+    # full audio blob into memory when nothing asked for it.
+    answer_audio: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
+    answer_audio_content_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
