@@ -11,6 +11,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent } from "react"
 import {
   useAskClarification,
   useCreateSession,
+  useSpeakPrompt,
   useSubmitAnswer,
   useSubmitAnswerAudio,
 } from "../api/client"
@@ -57,6 +58,7 @@ export function Rehearsal() {
   const clarify = useAskClarification(sessionId)
   const recorder = useRecorder()
   const submitAudio = useSubmitAnswerAudio(sessionId)
+  const speakPrompt = useSpeakPrompt(sessionId)
   // Guards the hold-to-talk button's pointerup/pointercancel/blur handlers
   // (any of which can fire for a single press-and-release) against submitting
   // more than once per recording, independent of React's state-update timing.
@@ -234,6 +236,32 @@ export function Rehearsal() {
       // Clear the placeholder; clarify.isError red text surfaces the message and
       // the draft stays intact for a retry.
       onError: () => setPending(null),
+    })
+  }
+
+  // Switching into voice mode speaks the active prompt: the persona's intro (on
+  // their first prompt of the session) then their question, one clip in one
+  // voice. `primePlayback` runs synchronously inside this click so the browser's
+  // autoplay policy lets the clip play once the round trip resolves — the toggle
+  // is the user gesture `POST /sessions` never has, which is why the opening
+  // prompt can be spoken here and not at session start.
+  //
+  // Failure is deliberately silent (no `voiceError`, no error text): the intro
+  // and question are already rendered above, and a dead clip must not stop the
+  // presenter from entering voice mode. This matches `playSequence`, which
+  // already swallows blocked and failed clips.
+  function enterVoiceMode() {
+    const wasText = mode === "text"
+    setVoiceError(null)
+    setMode("voice")
+    // Only a real text→voice transition speaks. Nothing to speak at end of
+    // session, and never talk over a reply clip that's already in flight.
+    if (!wasText || !prompt || submitAudio.isPending) return
+    primePlayback()
+    speakPrompt.mutate(undefined, {
+      onSuccess: (res) => {
+        if (res.audio) void playSequence([res.audio])
+      },
     })
   }
 
@@ -575,10 +603,7 @@ export function Rehearsal() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        setVoiceError(null)
-                        setMode("voice")
-                      }}
+                      onClick={enterVoiceMode}
                       className={`px-2.5 py-1 transition ${
                         mode === "voice"
                           ? "bg-slate-900 text-white"
