@@ -116,6 +116,7 @@ airtight/
 │  │  │  └─ StageStepper.tsx
 │  │  ├─ App.tsx
 │  │  ├─ audio.ts
+│  │  ├─ devices.ts              # audio device list, stored choice, level meter
 │  │  ├─ index.css
 │  │  ├─ lib.ts
 │  │  ├─ main.tsx
