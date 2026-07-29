@@ -27,7 +27,8 @@ from app.content.loader import Content
 from app.db import repo
 from app.db.models import RehearsalSession, Turn
 from app.pipeline import orchestrator
-from app.report.builder import ReactClient, build_report
+from app.report.builder import ReactClient, build_scored_report, render_narrative
+from app.schemas.report import Report
 
 logger = logging.getLogger(__name__)
 
@@ -51,17 +52,22 @@ def archive_session(
     session.status = "complete" if exhausted else "ended"
     session.archived_at = datetime.now(UTC)
 
+    # The deterministic, code-owned scoring is always safe; only the paid
+    # narrative call can fail. Narrow the exception boundary to only wrap the
+    # model call, not the DB reads or scoring logic.
+    scored = build_scored_report(
+        session_id=session.id,
+        status=session.status,
+        turns=repo.get_turns(db, session.id),
+        meters=repo.get_meters(db, session.id),
+        concern_statuses=repo.get_concern_statuses(db, session.id),
+        content=content,
+        clarifications=repo.get_clarifications(db, session.id),
+    )
+
     try:
-        report = build_report(
-            session_id=session.id,
-            status=session.status,
-            turns=repo.get_turns(db, session.id),
-            meters=repo.get_meters(db, session.id),
-            concern_statuses=repo.get_concern_statuses(db, session.id),
-            content=content,
-            client=client,
-            clarifications=repo.get_clarifications(db, session.id),
-        )
+        narrative = render_narrative(scored, content, client)
+        report = Report(**scored.model_dump(), narrative=narrative)
         session.report_json = report.model_dump(mode="json")
     except Exception:
         # Archiving must never fail because a paid call failed. The stamp and the
