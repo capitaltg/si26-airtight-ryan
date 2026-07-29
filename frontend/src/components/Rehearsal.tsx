@@ -851,6 +851,7 @@ export function Rehearsal() {
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 p-4">
           <dialog
             open
+            aria-modal="true"
             aria-label="Mic check"
             className="relative m-0 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-4 shadow-lg"
           >
