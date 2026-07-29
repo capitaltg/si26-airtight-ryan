@@ -92,6 +92,7 @@ session-history/
 │  │  ├─ a11y-contrast.spec.ts   # axe-core WCAG 2.1 AA color-contrast check
 │  │  ├─ health.spec.ts
 │  │  ├─ persona-intro.spec.ts
+│  │  ├─ session-history.spec.ts # past-rehearsals list and archive view
 │  │  └─ voice-prompt-audio.spec.ts
 │  ├─ .gitignore
 │  ├─ package-lock.json
