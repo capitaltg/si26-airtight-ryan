@@ -71,7 +71,7 @@ Note: the design docs still say `backend/`; the actual Python package lives in `
 
 <!-- STRUCTURE:START -->
 ```
-airtight/
+session-history/
 ├─ .devcontainer/
 │  ├─ bin/
 │  │  ├─ frontend
@@ -202,7 +202,8 @@ airtight/
 │  │  │  └─ transcribe.py
 │  │  ├─ __init__.py
 │  │  ├─ config.py               # pydantic-settings
-│  │  └─ main.py                 # FastAPI app + /health
+│  │  ├─ main.py                 # FastAPI app + /health
+│  │  └─ session_archive.py      # archive a finished rehearsal
 │  ├─ tests/
 │  │  ├─ golden/
 │  │  │  ├─ __init__.py
@@ -225,6 +226,7 @@ airtight/
 │  │  ├─ test_report.py
 │  │  ├─ test_response_cache.py
 │  │  ├─ test_scoring.py
+│  │  ├─ test_session_archive.py
 │  │  ├─ test_span_anchor.py
 │  │  ├─ test_tier0_flags.py
 │  │  ├─ test_voice_audio.py
