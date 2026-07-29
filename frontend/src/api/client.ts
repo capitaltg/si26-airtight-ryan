@@ -6,7 +6,9 @@ import { useMutation, useQuery } from "@tanstack/react-query"
 
 import type {
   AnswerResponse,
+  ArchivedTranscript,
   ClarifyResponse,
+  HistorySummary,
   PromptAudio,
   Report,
   RubricDisclosure,
@@ -127,6 +129,8 @@ export const api = {
     }),
   getRubric: () => request<RubricDisclosure>("/content/rubric"),
   getReport: (id: string) => request<Report>(`/sessions/${id}/report`),
+  getHistory: () => request<HistorySummary[]>("/sessions/history"),
+  getTranscript: (id: string) => request<ArchivedTranscript>(`/sessions/${id}/transcript`),
 }
 
 // Create-a-session mutation: the rehearsal starts empty and the presenter clicks
@@ -202,6 +206,27 @@ export function useReport(sessionId: string | null, enabled: boolean) {
       return api.getReport(sessionId)
     },
     enabled: enabled && sessionId !== null,
+    staleTime: Infinity,
+  })
+}
+
+// The past-rehearsals list. Refetched on mount rather than cached indefinitely:
+// finishing a session changes it, and the rehearsal screen invalidates this key
+// when a turn comes back done.
+export function useHistory() {
+  return useQuery({ queryKey: ["history"], queryFn: api.getHistory })
+}
+
+// One archived session's transcript. Archived rows never change, so cache it for
+// the tab's life.
+export function useArchivedTranscript(sessionId: string | null) {
+  return useQuery({
+    queryKey: ["transcript", sessionId],
+    queryFn: () => {
+      if (!sessionId) throw new Error("no session selected")
+      return api.getTranscript(sessionId)
+    },
+    enabled: sessionId !== null,
     staleTime: Infinity,
   })
 }

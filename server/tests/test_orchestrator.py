@@ -497,3 +497,50 @@ def test_neither_prompt_kind_carries_the_speaker_label(db: Session, content: Con
     assert follow_up.is_follow_up is True
     assert follow_up.concern.concern_id == core.concern.concern_id
     assert not follow_up.prompt.startswith(label)
+
+
+def test_submit_answer_persists_the_prompt_and_intro(db: Session, content: Content) -> None:
+    client = ScriptedClient()
+    session = orchestrator.start_session(db, content)
+
+    first = orchestrator.next_concern(db, content, session)
+    assert first is not None
+    client.next_extraction = _full(first.concern)
+    orchestrator.submit_answer(db, content, client, session, "Here is the architecture.")
+
+    stored = repo.get_turns(db, session.id)[0]
+    # Byte-identical to what the presenter was shown, not re-derived.
+    assert stored.prompt == first.prompt
+    assert stored.prompt_intro == first.persona.intro
+
+
+def test_second_turn_by_the_same_persona_stores_no_intro(
+    db: Session, content: Content
+) -> None:
+    client = ScriptedClient()
+    session = orchestrator.start_session(db, content)
+    for _ in range(2):
+        asg = orchestrator.next_concern(db, content, session)
+        assert asg is not None
+        client.next_extraction = _full(asg.concern)
+        orchestrator.submit_answer(db, content, client, session, "Answered.")
+
+    turns = repo.get_turns(db, session.id)
+    assert turns[0].prompt_intro is not None
+    # Dana's second concern: she already introduced herself.
+    assert turns[1].persona_id == turns[0].persona_id
+    assert turns[1].prompt_intro is None
+
+
+def test_clarification_persists_the_prompt_it_was_asked_against(
+    db: Session, content: Content
+) -> None:
+    client = ScriptedClient()
+    session = orchestrator.start_session(db, content)
+    active = orchestrator.next_concern(db, content, session)
+    assert active is not None
+
+    orchestrator.ask_clarification(db, content, client, session, "What do you mean?")
+
+    stored = repo.get_clarifications(db, session.id)[0]
+    assert stored.prompt == active.prompt

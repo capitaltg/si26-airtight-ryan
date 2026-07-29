@@ -15,7 +15,7 @@ from app.api.deps import get_session_factory, get_synthesizer, get_transcriber
 from app.config import settings
 from app.db import repo
 from app.voice import SynthesisError, TranscriptionError
-from tests.test_api import client  # noqa: F401  (reused fixture)
+from tests.test_api import client, db_factory  # noqa: F401  (reused fixtures)
 
 # Fields shared by AnswerResponse and VoiceAnswerResponse; the equivalence test
 # below asserts these match exactly between the text and voice paths.
@@ -252,6 +252,20 @@ def test_answer_audio_after_session_complete_returns_409(voice_client: TestClien
     assert r.status_code == 409
 
 
+def test_answer_audio_after_end_returns_409(voice_client: TestClient) -> None:
+    """`/end` on a rehearsal with concerns still open archives it without
+    exhausting the agenda, so the orchestrator alone wouldn't reject a
+    follow-up answer — the voice path needs its own archived-session guard."""
+    session_id = voice_client.post("/sessions").json()["id"]
+    voice_client.post(f"/sessions/{session_id}/end")
+
+    r = voice_client.post(
+        f"/sessions/{session_id}/answer_audio",
+        files={"audio": ("recording.webm", b"fake-audio-bytes", "audio/webm")},
+    )
+    assert r.status_code == 409
+
+
 def test_answer_audio_defaults_content_type_when_missing(voice_client: TestClient) -> None:
     session_id = voice_client.post("/sessions").json()["id"]
 
@@ -458,3 +472,38 @@ def test_prompt_audio_after_session_complete_returns_409(voice_client: TestClien
 def test_prompt_audio_404s_for_an_unknown_session(voice_client: TestClient) -> None:
     r = voice_client.get(f"/sessions/{uuid.uuid4()}/prompt_audio")
     assert r.status_code == 404
+
+
+def test_archiving_drops_the_stored_recording(voice_client: TestClient) -> None:  # noqa: F811
+    session_id = voice_client.post("/sessions").json()["id"]
+    voice_client.post(
+        f"/sessions/{session_id}/answer_audio",
+        files={"audio": ("answer.webm", b"fake-webm-bytes", "audio/webm")},
+    )
+    # The recording is replayable while the session is live.
+    assert voice_client.get(f"/sessions/{session_id}/turns/0/audio").status_code == 200
+
+    voice_client.post(f"/sessions/{session_id}/end")
+
+    # Archived: the bytes are gone, so replay 404s.
+    assert voice_client.get(f"/sessions/{session_id}/turns/0/audio").status_code == 404
+    # The transcript, which is what was actually scored, survives.
+    turns = voice_client.get(f"/sessions/{session_id}/transcript").json()["turns"]
+    assert turns[0]["transcript"] == "Here is the architecture."
+
+
+def test_voice_path_archives_on_done(voice_client: TestClient) -> None:  # noqa: F811
+    """The third answer path. `/answer` and `/answer/stream` are covered in
+    test_api.py; this is the audio one."""
+    session_id = voice_client.post("/sessions").json()["id"]
+    for _ in range(20):
+        r = voice_client.post(
+            f"/sessions/{session_id}/answer_audio",
+            files={"audio": ("answer.webm", b"fake-webm-bytes", "audio/webm")},
+        )
+        if r.json()["done"]:
+            break
+    else:
+        raise AssertionError("session never finished")
+
+    assert [row["id"] for row in voice_client.get("/sessions/history").json()] == [session_id]

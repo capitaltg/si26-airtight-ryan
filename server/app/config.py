@@ -20,5 +20,13 @@ class Settings(BaseSettings):
     polly_engine: str = "neural"
     max_answer_audio_bytes: int = 10 * 1024 * 1024
 
+    # History retention. `POST /sessions` prunes: it keeps the `history_keep`
+    # newest archived sessions and deletes any non-archived session older than
+    # the TTL. The TTL is what clears abandoned false starts and their audio
+    # blobs; it is time-based rather than "delete other active sessions" so that
+    # concurrent e2e runs never delete each other's live session.
+    history_keep: int = 5
+    abandoned_session_ttl_hours: int = 24
+
 
 settings = Settings()

@@ -57,6 +57,18 @@ class RehearsalSession(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    # Non-null exactly when this session is history: set by
+    # `app.session_archive.archive_session` when the rehearsal finishes. Doubles
+    # as the history list's sort key.
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # `Report.model_dump(mode="json")` verbatim, snapshotted at archive time so
+    # reading history costs no Bedrock call and the archived report stays
+    # byte-identical to what the presenter saw after a content or rubric bump.
+    # NULL means the snapshot was not written (the narrative call failed); the
+    # read path falls back to building it on demand.
+    report_json: Mapped[dict[str, Any] | None] = mapped_column(JSON_, nullable=True)
 
     turns: Mapped[list[Turn]] = relationship(
         back_populates="session", cascade="all, delete-orphan"
@@ -96,6 +108,13 @@ class Turn(Base):
     answer_audio: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
     answer_audio_content_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The question as asked, frozen here rather than re-derived at read time: a
+    # content bump would otherwise rewrite an archived transcript. Nullable
+    # because rows written before migration 0006 have no value.
+    prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The persona's self-introduction, non-null only on their first prompt of
+    # the session.
+    prompt_intro: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -140,6 +159,8 @@ class Clarification(Base):
     seq: Mapped[int] = mapped_column(Integer)  # per-concern order for transcript render
     question: Mapped[str] = mapped_column(Text)
     reply: Mapped[str] = mapped_column(Text)
+    # The active prompt this clarification was asked against.
+    prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

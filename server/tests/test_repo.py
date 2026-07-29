@@ -7,15 +7,17 @@ trail depends on scored artifacts persisting *verbatim* — these tests assert t
 stored extraction/score/reaction reconstruct byte-for-byte, spans included.
 """
 
+import uuid
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db import repo
-from app.db.models import Base
+from app.db.models import Base, RehearsalSession
 from app.schemas.extraction import (
     Backing,
     Claim,
@@ -35,6 +37,11 @@ def db() -> Iterator[Session]:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+
+    @event.listens_for(engine, "connect")
+    def _fk_on(dbapi_connection, connection_record):  # type: ignore[no-untyped-def]
+        dbapi_connection.execute("PRAGMA foreign_keys=ON")
+
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
     with factory() as session:
@@ -238,3 +245,197 @@ def test_meter_upsert_and_concern_status(db: Session) -> None:
 
     statuses = repo.get_concern_statuses(db, session.id)
     assert statuses["cost_realism"] == "satisfied"
+
+
+def test_append_turn_stores_the_prompt_it_asked(db: Session) -> None:
+    """The prompt is frozen on the row: re-deriving it later from content would
+    let a content bump rewrite an archived transcript."""
+    session = repo.create_session(
+        db, scenario_version="poc-v1", rubric_version=1, persona_ids=["technical_evaluator"]
+    )
+    turn = repo.append_turn(
+        db,
+        session_id=session.id,
+        turn_index=0,
+        persona_id="technical_evaluator",
+        concern_id="technical_approach",
+        user_answer="Here is the architecture.",
+        extraction=Extraction(),
+        score=ScoreOutput(support_delta=0),
+        reaction=PersonaReaction(in_character_reply="Noted.", rationale="Noted."),
+        prompt="Walk me through the architecture.",
+        prompt_intro="I'm Dana, the senior technical evaluator.",
+    )
+    db.expire_all()
+    stored = repo.get_turns(db, session.id)[0]
+    assert stored.id == turn.id
+    assert stored.prompt == "Walk me through the architecture."
+    assert stored.prompt_intro == "I'm Dana, the senior technical evaluator."
+
+
+def test_append_turn_prompt_columns_default_to_null(db: Session) -> None:
+    session = repo.create_session(
+        db, scenario_version="poc-v1", rubric_version=1, persona_ids=["technical_evaluator"]
+    )
+    repo.append_turn(
+        db,
+        session_id=session.id,
+        turn_index=0,
+        persona_id="technical_evaluator",
+        concern_id="technical_approach",
+        user_answer="Here is the architecture.",
+        extraction=Extraction(),
+        score=ScoreOutput(support_delta=0),
+        reaction=None,
+    )
+    db.expire_all()
+    stored = repo.get_turns(db, session.id)[0]
+    assert stored.prompt is None
+    assert stored.prompt_intro is None
+
+
+def test_append_clarification_stores_the_active_prompt(db: Session) -> None:
+    session = repo.create_session(
+        db, scenario_version="poc-v1", rubric_version=1, persona_ids=["technical_evaluator"]
+    )
+    repo.append_clarification(
+        db,
+        session_id=session.id,
+        concern_id="technical_approach",
+        persona_id="technical_evaluator",
+        seq=0,
+        question="Do you mean the hosting boundary?",
+        reply="I mean the whole boundary.",
+        prompt="Walk me through the architecture.",
+    )
+    db.expire_all()
+    stored = repo.get_clarifications(db, session.id)[0]
+    assert stored.prompt == "Walk me through the architecture."
+
+
+def test_new_session_columns_start_null(db: Session) -> None:
+    session = repo.create_session(
+        db, scenario_version="poc-v1", rubric_version=1, persona_ids=["technical_evaluator"]
+    )
+    assert session.archived_at is None
+    assert session.report_json is None
+
+
+def _archived(db: Session, *, archived_at: datetime) -> uuid.UUID:
+    session = repo.create_session(
+        db, scenario_version="poc-v1", rubric_version=1, persona_ids=["technical_evaluator"]
+    )
+    session.archived_at = archived_at
+    db.flush()
+    return session.id
+
+
+def test_prune_history_keeps_the_newest_archived_sessions(db: Session) -> None:
+    base = datetime(2026, 7, 28, 12, 0, tzinfo=UTC)
+    ids = [_archived(db, archived_at=base + timedelta(minutes=i)) for i in range(7)]
+
+    repo.prune_history(db, keep=5, abandoned_ttl_hours=24)
+
+    surviving = {s.id for s in db.scalars(select(RehearsalSession))}
+    assert surviving == set(ids[2:])  # the two oldest are gone
+
+
+def test_prune_history_leaves_a_live_session_alone(db: Session) -> None:
+    base = datetime(2026, 7, 28, 12, 0, tzinfo=UTC)
+    for i in range(6):
+        _archived(db, archived_at=base + timedelta(minutes=i))
+    live = repo.create_session(
+        db, scenario_version="poc-v1", rubric_version=1, persona_ids=["technical_evaluator"]
+    )
+
+    repo.prune_history(db, keep=5, abandoned_ttl_hours=24)
+
+    assert db.get(RehearsalSession, live.id) is not None
+
+
+def test_prune_history_deletes_an_abandoned_session_past_its_ttl(db: Session) -> None:
+    stale = repo.create_session(
+        db, scenario_version="poc-v1", rubric_version=1, persona_ids=["technical_evaluator"]
+    )
+    stale.created_at = datetime.now(UTC) - timedelta(hours=48)
+    fresh = repo.create_session(
+        db, scenario_version="poc-v1", rubric_version=1, persona_ids=["technical_evaluator"]
+    )
+    fresh.created_at = datetime.now(UTC)
+    db.flush()
+
+    repo.prune_history(db, keep=5, abandoned_ttl_hours=24)
+
+    assert db.get(RehearsalSession, stale.id) is None
+    assert db.get(RehearsalSession, fresh.id) is not None
+
+
+def test_prune_history_never_deletes_a_recent_archived_session_as_abandoned(
+    db: Session,
+) -> None:
+    """An archived session is history regardless of age; only rule 1 can touch it."""
+    old_but_archived = repo.create_session(
+        db, scenario_version="poc-v1", rubric_version=1, persona_ids=["technical_evaluator"]
+    )
+    old_but_archived.created_at = datetime.now(UTC) - timedelta(hours=48)
+    old_but_archived.archived_at = datetime.now(UTC)
+    db.flush()
+
+    repo.prune_history(db, keep=5, abandoned_ttl_hours=24)
+
+    assert db.get(RehearsalSession, old_but_archived.id) is not None
+
+
+def test_deleting_a_session_cascades_to_every_child_row(db: Session) -> None:
+    session = repo.create_session(
+        db, scenario_version="poc-v1", rubric_version=1, persona_ids=["technical_evaluator"]
+    )
+    repo.append_turn(
+        db,
+        session_id=session.id,
+        turn_index=0,
+        persona_id="technical_evaluator",
+        concern_id="technical_approach",
+        user_answer="Here is the architecture.",
+        extraction=Extraction(),
+        score=ScoreOutput(support_delta=0),
+        reaction=None,
+    )
+    repo.append_claims(
+        db,
+        session_id=session.id,
+        turn_index=0,
+        claims=[
+            Claim(
+                text="A named lead is committed.",
+                type=ClaimType.commitment,
+                backing=Backing.backed,
+                span="named lead",
+            )
+        ],
+    )
+    repo.append_clarification(
+        db,
+        session_id=session.id,
+        concern_id="technical_approach",
+        persona_id="technical_evaluator",
+        seq=0,
+        question="What do you mean?",
+        reply="The whole boundary.",
+    )
+    repo.upsert_meter(
+        db, session_id=session.id, persona_id="technical_evaluator", support=52, capped=False
+    )
+    repo.set_concern_status(
+        db, session_id=session.id, concern_id="technical_approach", status="satisfied"
+    )
+    db.flush()
+
+    db.delete(session)
+    db.flush()
+
+    assert repo.get_turns(db, session.id) == []
+    assert repo.get_claims(db, session.id) == []
+    assert repo.get_clarifications(db, session.id) == []
+    assert repo.get_meters(db, session.id) == []
+    assert repo.get_concern_statuses(db, session.id) == {}

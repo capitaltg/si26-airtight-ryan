@@ -3,6 +3,7 @@
 // answers are submitted, and exposes the disclosed rubric drawer. All scoring is
 // the backend's — this component only renders what the API returns.
 
+import { useQueryClient } from "@tanstack/react-query"
 import { useEffect, useRef, useState } from "react"
 // Aliased because the window-level push-to-talk listener below needs the DOM
 // `KeyboardEvent`, which an unaliased React import would shadow.
@@ -19,7 +20,9 @@ import { playSequence, primePlayback, useRecorder } from "../audio"
 import { prettify } from "../lib"
 import type { Meter, Prompt, Stage, TranscriptTurn } from "../types"
 import { AfterActionReport } from "./AfterActionReport"
+import { ArchiveView } from "./ArchiveView"
 import { ChatTurn } from "./ChatTurn"
+import { HistoryList } from "./HistoryList"
 import { MeterPanel } from "./MeterBar"
 import { PendingTurn } from "./PendingTurn"
 import { PromptIntro } from "./PromptIntro"
@@ -34,6 +37,9 @@ export function Rehearsal() {
   const [draft, setDraft] = useState("")
   const [rubricOpen, setRubricOpen] = useState(false)
   const [showReport, setShowReport] = useState(false)
+  // A past rehearsal the presenter opened read-only. Non-null replaces the whole
+  // screen with the archive view; null is the normal rehearsal flow.
+  const [viewingSessionId, setViewingSessionId] = useState<string | null>(null)
   // Optimistic pending turn: the submitted answer + which prompt it answered,
   // shown with a live stage stepper while the backend scores it.
   const [pending, setPending] = useState<{
@@ -67,6 +73,7 @@ export function Rehearsal() {
   const recorder = useRecorder()
   const submitAudio = useSubmitAnswerAudio(sessionId)
   const speakPrompt = useSpeakPrompt(sessionId)
+  const queryClient = useQueryClient()
   // Mirrors `submitAudio.isPending` for the `speakPrompt.onSuccess` closure in
   // `enterVoiceMode`: that closure is created at click time, but reading
   // `submitAudio.isPending` directly inside it would still be whatever it was
@@ -207,6 +214,8 @@ export function Rehearsal() {
           setMeters(res.meters)
           setPrompt(res.next_prompt)
           setDone(res.done)
+          // A done turn archived the session server-side, so the list is stale.
+          if (res.done) void queryClient.invalidateQueries({ queryKey: ["history"] })
           setDraft("")
           setPending(null)
         },
@@ -410,6 +419,8 @@ export function Rehearsal() {
             setMeters(res.meters)
             setPrompt(res.next_prompt)
             setDone(res.done)
+            // A done turn archived the session server-side, so the list is stale.
+            if (res.done) void queryClient.invalidateQueries({ queryKey: ["history"] })
             setPending(null)
             // Play the persona's spoken reply, then the next prompt's spoken
             // read-aloud, back to back. A rejected/blocked clip is swallowed by
@@ -493,6 +504,16 @@ export function Rehearsal() {
     }
   }, [pushToTalkEnabled])
 
+  // A past rehearsal is open: it owns the whole screen. Checked before the
+  // landing and report branches so opening a card works from either one.
+  if (viewingSessionId) {
+    return (
+      <div className="mx-auto flex min-h-screen max-w-5xl flex-col gap-4 px-4 py-6">
+        <ArchiveView sessionId={viewingSessionId} onBack={() => setViewingSessionId(null)} />
+      </div>
+    )
+  }
+
   // Not started yet: a single call to action.
   if (!sessionId) {
     return (
@@ -514,6 +535,7 @@ export function Rehearsal() {
         {create.isError && (
           <p className="text-sm text-red-700">{(create.error as Error).message}</p>
         )}
+        <HistoryList onSelect={setViewingSessionId} />
       </div>
     )
   }
@@ -538,6 +560,9 @@ export function Rehearsal() {
           <p className="text-sm text-red-700 print:hidden">{(create.error as Error).message}</p>
         )}
         <AfterActionReport sessionId={sessionId} />
+        <div className="print:hidden">
+          <HistoryList onSelect={setViewingSessionId} />
+        </div>
       </div>
     )
   }

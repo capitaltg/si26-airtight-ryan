@@ -185,3 +185,41 @@ export interface TranscriptTurn {
   transcript?: string
   audioUrl?: string
 }
+
+// --- session history (GET /sessions/history, GET /sessions/{id}/transcript) ---
+
+// One past rehearsal as summarized for the list. `archived_at` is when it became
+// history and is the list's sort key.
+export interface HistorySummary {
+  id: string
+  created_at: string
+  archived_at: string
+  status: string // "complete" | "ended"
+  turn_count: number
+  meters: Meter[]
+  concerns_satisfied: number
+  concerns_total: number
+}
+
+// One exchange from an archived session. Field names mirror TranscriptTurn above
+// so ChatTurn renders it unchanged.
+export interface ArchivedTurn {
+  persona_id: string
+  display_name: string
+  concern_id: string
+  is_follow_up: boolean
+  prompt: string
+  intro: string | null
+  answer: string
+  reply: string
+  rationale: string
+  support_delta: number
+  matched_rows: string[]
+  capped: boolean
+  scored: boolean
+  transcript: string | null
+}
+
+export interface ArchivedTranscript {
+  turns: ArchivedTurn[]
+}
