@@ -489,6 +489,55 @@ def test_archived_report_is_served_from_the_snapshot(client: TestClient) -> None
     assert again == snapshot
 
 
+def test_history_lists_newest_first_with_summary_fields(client: TestClient) -> None:
+    first = client.post("/sessions").json()["id"]
+    _drive_to_done(client, first)
+    second = client.post("/sessions").json()["id"]
+    client.post(f"/sessions/{second}/end")
+
+    rows = client.get("/sessions/history").json()
+
+    assert [row["id"] for row in rows] == [second, first]
+    finished = rows[1]
+    assert finished["status"] == "complete"
+    # Counted from the rows, so compare against the rows rather than hardcoding
+    # what `_FakeClient` happens to produce.
+    transcript = client.get(f"/sessions/{first}/transcript").json()["turns"]
+    assert finished["turn_count"] == len(transcript) > 0
+    assert finished["concerns_total"] == 8
+    assert finished["concerns_satisfied"] == 1  # see `_drive_to_done`
+    assert len(finished["meters"]) == 3
+    assert rows[0]["status"] == "ended"
+    assert rows[0]["turn_count"] == 0
+    assert rows[0]["archived_at"] is not None
+
+
+def test_history_excludes_a_live_session(client: TestClient) -> None:
+    live = client.post("/sessions").json()["id"]
+
+    rows = client.get("/sessions/history").json()
+
+    assert live not in [row["id"] for row in rows]
+    assert rows == []
+
+
+def test_history_caps_at_five(client: TestClient) -> None:
+    for _ in range(7):
+        session_id = client.post("/sessions").json()["id"]
+        client.post(f"/sessions/{session_id}/end")
+
+    assert len(client.get("/sessions/history").json()) == 5
+
+
+def test_history_route_wins_over_the_session_id_route(client: TestClient) -> None:
+    """Declared after GET /sessions/{session_id}, "history" would be parsed as a
+    UUID path parameter and 422 instead."""
+    r = client.get("/sessions/history")
+
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)
+
+
 def test_creating_a_session_prunes_beyond_the_keep_limit(client: TestClient) -> None:
     finished = []
     for _ in range(6):

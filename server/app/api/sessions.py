@@ -13,6 +13,7 @@ import json
 import logging
 import uuid
 from collections.abc import AsyncIterator
+from datetime import datetime
 from typing import cast
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -145,6 +146,20 @@ class PromptAudioDTO(BaseModel):
     audio: str | None  # base64 mp3, null if synthesis failed
 
 
+class HistorySummaryDTO(BaseModel):
+    """One card in the past-rehearsals list. Everything here is derived from
+    rows that already existed; nothing is stored for the list itself."""
+
+    id: uuid.UUID
+    created_at: datetime
+    archived_at: datetime
+    status: str  # "complete" | "ended"
+    turn_count: int
+    meters: list[MeterDTO]
+    concerns_satisfied: int
+    concerns_total: int
+
+
 def _meters(db: Session, session_id: uuid.UUID) -> list[MeterDTO]:
     return [
         MeterDTO(persona_id=m.persona_id, support=m.support, capped=m.capped)
@@ -241,6 +256,31 @@ def create_session(
     )
     session = orchestrator.start_session(db, content)
     return _state(db, content, session)
+
+
+# Declared before `GET /{session_id}`: FastAPI matches in declaration order, so
+# the other way around "history" is parsed as the `session_id` UUID path
+# parameter and the request 422s.
+@router.get("/history", response_model=list[HistorySummaryDTO])
+def get_history(db: Session = Depends(get_db)) -> list[HistorySummaryDTO]:
+    """The most recent finished rehearsals, newest first."""
+    rows: list[HistorySummaryDTO] = []
+    for session in repo.list_archived_sessions(db, limit=settings.history_keep):
+        assert session.archived_at is not None  # guaranteed by the query's filter
+        statuses = repo.get_concern_statuses(db, session.id)
+        rows.append(
+            HistorySummaryDTO(
+                id=session.id,
+                created_at=session.created_at,
+                archived_at=session.archived_at,
+                status=session.status,
+                turn_count=len(repo.get_turns(db, session.id)),
+                meters=_meters(db, session.id),
+                concerns_satisfied=sum(1 for s in statuses.values() if s == "satisfied"),
+                concerns_total=len(statuses),
+            )
+        )
+    return rows
 
 
 @router.get("/{session_id}", response_model=SessionStateDTO)

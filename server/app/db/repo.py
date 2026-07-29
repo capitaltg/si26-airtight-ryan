@@ -256,3 +256,15 @@ def prune_history(db: Session, *, keep: int = 5, abandoned_ttl_hours: int) -> No
         db.delete(session)
 
     db.flush()
+
+
+def list_archived_sessions(db: Session, *, limit: int) -> list[RehearsalSession]:
+    """The newest archived sessions, newest first. Non-archived sessions are not
+    history and never appear here."""
+    stmt = (
+        select(RehearsalSession)
+        .where(RehearsalSession.archived_at.is_not(None))
+        .order_by(RehearsalSession.archived_at.desc())
+        .limit(limit)
+    )
+    return list(db.scalars(stmt))
