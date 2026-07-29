@@ -109,6 +109,7 @@ airtight/
 │  │  │  ├─ ChatTurn.tsx
 │  │  │  ├─ HistoryList.tsx
 │  │  │  ├─ MeterBar.tsx
+│  │  │  ├─ MicCheck.tsx
 │  │  │  ├─ PendingTurn.tsx
 │  │  │  ├─ PromptIntro.tsx
 │  │  │  ├─ Rehearsal.tsx
