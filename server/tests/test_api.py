@@ -384,3 +384,106 @@ def test_clarify_echoes_the_active_prompt_with_its_intro(client: TestClient) -> 
     expected = client.app.state.content.personas["technical_evaluator"].intro
     # A clarification persists no turn, so the intro is still owed and still shown.
     assert body["prompt"]["intro"] == expected
+
+
+def _drive_to_done(client: TestClient, session_id: str) -> None:
+    """Answer until the agenda is exhausted. `_FakeClient` returns coverage for
+    the first concern's sub-question ids only, so that concern satisfies in one
+    turn and each of the other seven takes its follow-up and then closes as
+    dodged: 15 turns, one satisfied concern."""
+    for _ in range(20):
+        if client.get(f"/sessions/{session_id}").json()["done"]:
+            return
+        client.post(f"/sessions/{session_id}/answer", json={"answer": "Here is the architecture."})
+    raise AssertionError("session never finished")
+
+
+def test_finishing_a_session_archives_it(client: TestClient) -> None:
+    session_id = client.post("/sessions").json()["id"]
+    _drive_to_done(client, session_id)
+
+    history = client.get("/sessions/history")
+    assert history.status_code == 200
+    ids = [row["id"] for row in history.json()]
+    assert session_id in ids
+
+
+def test_ending_a_session_archives_it(client: TestClient) -> None:
+    session_id = client.post("/sessions").json()["id"]
+
+    r = client.post(f"/sessions/{session_id}/end")
+    assert r.status_code == 200
+    assert r.json()["status"] == "ended"
+
+    assert [row["id"] for row in client.get("/sessions/history").json()] == [session_id]
+
+
+def test_ending_twice_keeps_the_first_archive(client: TestClient) -> None:
+    session_id = client.post("/sessions").json()["id"]
+    client.post(f"/sessions/{session_id}/end")
+    first = client.get("/sessions/history").json()[0]["archived_at"]
+
+    client.post(f"/sessions/{session_id}/end")
+
+    rows = client.get("/sessions/history").json()
+    assert len(rows) == 1
+    assert rows[0]["archived_at"] == first
+
+
+def test_streaming_answer_archives_on_done(client: TestClient) -> None:
+    """Every turn goes over SSE, so the turn that finishes the rehearsal is a
+    streaming one. The archive runs in that endpoint's worker thread, before its
+    commit, so the terminal frame already reflects an archived session."""
+    session_id = client.post("/sessions").json()["id"]
+    for _ in range(20):
+        with client.stream(
+            "POST",
+            f"/sessions/{session_id}/answer/stream",
+            json={"answer": "Here is the architecture."},
+        ) as r:
+            events = _collect_sse(r)
+        result = next(e["result"] for e in events if "result" in e)
+        if result["done"]:
+            break
+    else:
+        raise AssertionError("session never finished")
+
+    assert [row["id"] for row in client.get("/sessions/history").json()] == [session_id]
+
+
+class _ExplodingReactClient(_FakeClient):
+    """Extraction still works; only the narrative call fails."""
+
+    def react(self, prompt, *, max_tokens=1024, cache_key=None) -> str:
+        raise RuntimeError("bedrock unavailable")
+
+
+def test_report_is_readable_when_the_snapshot_failed(client: TestClient) -> None:
+    client.app.dependency_overrides[get_bedrock_client] = _ExplodingReactClient
+    session_id = client.post("/sessions").json()["id"]
+    client.post(f"/sessions/{session_id}/end")
+    # Back to the working client so the on-demand fallback can build a report.
+    client.app.dependency_overrides[get_bedrock_client] = _FakeClient
+
+    r = client.get(f"/sessions/{session_id}/report")
+    assert r.status_code == 200
+    assert r.json()["narrative"]["scored"] is False
+
+
+class _RaisingReactClient(_FakeClient):
+    """Fails if anything asks it for a narrative. Proves the snapshot is served
+    without a model call."""
+
+    def react(self, prompt, *, max_tokens=1024, cache_key=None) -> str:
+        raise AssertionError("the archived report must not call the model")
+
+
+def test_archived_report_is_served_from_the_snapshot(client: TestClient) -> None:
+    session_id = client.post("/sessions").json()["id"]
+    client.post(f"/sessions/{session_id}/end")
+    snapshot = client.get(f"/sessions/{session_id}/report").json()
+
+    client.app.dependency_overrides[get_bedrock_client] = _RaisingReactClient
+    again = client.get(f"/sessions/{session_id}/report").json()
+
+    assert again == snapshot

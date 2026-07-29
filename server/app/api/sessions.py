@@ -39,6 +39,7 @@ from app.pipeline import orchestrator
 from app.pipeline.orchestrator import AnswerAudio, ClarificationCapReached, SessionComplete
 from app.report.builder import build_report
 from app.schemas.report import Report
+from app.session_archive import archive_session
 from app.voice import SynthesisError, TranscriptionError
 
 logger = logging.getLogger(__name__)
@@ -257,6 +258,8 @@ def submit_answer(
         result = orchestrator.submit_answer(db, content, client, session, body.answer)
     except SessionComplete as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if result.done:
+        archive_session(db, content, client, session)
     return _answer_payload(db, session.id, result)
 
 
@@ -309,6 +312,9 @@ def submit_answer_audio(
         )
     except SessionComplete as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    if result.done:
+        archive_session(db, content, client, session)
 
     persona = content.personas[result.persona_id]
     reply_audio = _speak(synthesizer, result.reaction.in_character_reply, persona.polly_voice_id)
@@ -440,6 +446,11 @@ async def submit_answer_stream(
             ):
                 if "result" in ev:
                     result = cast(orchestrator.TurnResult, ev["result"])
+                    # Before the commit below, on this worker's own session, so
+                    # the result frame the client receives already reflects an
+                    # archived session.
+                    if result.done:
+                        archive_session(db, content, client, session)
                     payload = _answer_payload(db, session_id, result).model_dump(mode="json")
                     emit({"result": payload})
                 else:
@@ -483,10 +494,13 @@ def end_session(
     session_id: uuid.UUID,
     db: Session = Depends(get_db),
     content: Content = Depends(get_content),
+    client: BedrockClient = Depends(get_bedrock_client),
 ) -> SessionStateDTO:
+    """End the rehearsal and archive it. `archive_session` owns the status write:
+    it sets "complete" when the agenda happened to be exhausted and "ended"
+    otherwise, so this path and the answer paths agree by construction."""
     session = _require_session(db, session_id)
-    session.status = "ended"
-    db.flush()
+    archive_session(db, content, client, session)
     return _state(db, content, session)
 
 
@@ -501,6 +515,10 @@ def get_report(
     per-persona meters, coverage/dodge/contradiction counts, and every finding's
     verbatim span) plus one labeled 'Not scored' model narrative."""
     session = _require_session(db, session_id)
+    if session.report_json is not None:
+        # Archived: return the bytes snapshotted at finish. No model call, and no
+        # re-render against content that may have bumped since.
+        return Report.model_validate(session.report_json)
     return build_report(
         session_id=session.id,
         status=session.status,
