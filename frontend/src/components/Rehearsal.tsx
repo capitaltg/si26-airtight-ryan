@@ -3,6 +3,7 @@
 // answers are submitted, and exposes the disclosed rubric drawer. All scoring is
 // the backend's — this component only renders what the API returns.
 
+import { useQueryClient } from "@tanstack/react-query"
 import { useEffect, useRef, useState } from "react"
 // Aliased because the window-level push-to-talk listener below needs the DOM
 // `KeyboardEvent`, which an unaliased React import would shadow.
@@ -20,6 +21,7 @@ import { prettify } from "../lib"
 import type { Meter, Prompt, Stage, TranscriptTurn } from "../types"
 import { AfterActionReport } from "./AfterActionReport"
 import { ChatTurn } from "./ChatTurn"
+import { HistoryList } from "./HistoryList"
 import { MeterPanel } from "./MeterBar"
 import { PendingTurn } from "./PendingTurn"
 import { PromptIntro } from "./PromptIntro"
@@ -34,6 +36,13 @@ export function Rehearsal() {
   const [draft, setDraft] = useState("")
   const [rubricOpen, setRubricOpen] = useState(false)
   const [showReport, setShowReport] = useState(false)
+  // A past rehearsal the presenter opened read-only. Non-null replaces the whole
+  // screen with the archive view; null is the normal rehearsal flow. The
+  // archive-view branch that reads this is added in the next task
+  // (useArchivedTranscript's first consumer); referenced here as a no-op so it
+  // isn't flagged unused in the meantime.
+  const [viewingSessionId, setViewingSessionId] = useState<string | null>(null)
+  void viewingSessionId
   // Optimistic pending turn: the submitted answer + which prompt it answered,
   // shown with a live stage stepper while the backend scores it.
   const [pending, setPending] = useState<{
@@ -67,6 +76,7 @@ export function Rehearsal() {
   const recorder = useRecorder()
   const submitAudio = useSubmitAnswerAudio(sessionId)
   const speakPrompt = useSpeakPrompt(sessionId)
+  const queryClient = useQueryClient()
   // Mirrors `submitAudio.isPending` for the `speakPrompt.onSuccess` closure in
   // `enterVoiceMode`: that closure is created at click time, but reading
   // `submitAudio.isPending` directly inside it would still be whatever it was
@@ -207,6 +217,8 @@ export function Rehearsal() {
           setMeters(res.meters)
           setPrompt(res.next_prompt)
           setDone(res.done)
+          // A done turn archived the session server-side, so the list is stale.
+          if (res.done) void queryClient.invalidateQueries({ queryKey: ["history"] })
           setDraft("")
           setPending(null)
         },
@@ -410,6 +422,8 @@ export function Rehearsal() {
             setMeters(res.meters)
             setPrompt(res.next_prompt)
             setDone(res.done)
+            // A done turn archived the session server-side, so the list is stale.
+            if (res.done) void queryClient.invalidateQueries({ queryKey: ["history"] })
             setPending(null)
             // Play the persona's spoken reply, then the next prompt's spoken
             // read-aloud, back to back. A rejected/blocked clip is swallowed by
@@ -514,6 +528,7 @@ export function Rehearsal() {
         {create.isError && (
           <p className="text-sm text-red-700">{(create.error as Error).message}</p>
         )}
+        <HistoryList onSelect={setViewingSessionId} />
       </div>
     )
   }
@@ -538,6 +553,9 @@ export function Rehearsal() {
           <p className="text-sm text-red-700 print:hidden">{(create.error as Error).message}</p>
         )}
         <AfterActionReport sessionId={sessionId} />
+        <div className="print:hidden">
+          <HistoryList onSelect={setViewingSessionId} />
+        </div>
       </div>
     )
   }

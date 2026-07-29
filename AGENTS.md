@@ -105,6 +105,7 @@ session-history/
 │  │  ├─ components/
 │  │  │  ├─ AfterActionReport.tsx
 │  │  │  ├─ ChatTurn.tsx
+│  │  │  ├─ HistoryList.tsx
 │  │  │  ├─ MeterBar.tsx
 │  │  │  ├─ PendingTurn.tsx
 │  │  │  ├─ PromptIntro.tsx
