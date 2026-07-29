@@ -20,6 +20,7 @@ import { playSequence, primePlayback, useRecorder } from "../audio"
 import { prettify } from "../lib"
 import type { Meter, Prompt, Stage, TranscriptTurn } from "../types"
 import { AfterActionReport } from "./AfterActionReport"
+import { ArchiveView } from "./ArchiveView"
 import { ChatTurn } from "./ChatTurn"
 import { HistoryList } from "./HistoryList"
 import { MeterPanel } from "./MeterBar"
@@ -37,12 +38,8 @@ export function Rehearsal() {
   const [rubricOpen, setRubricOpen] = useState(false)
   const [showReport, setShowReport] = useState(false)
   // A past rehearsal the presenter opened read-only. Non-null replaces the whole
-  // screen with the archive view; null is the normal rehearsal flow. The
-  // archive-view branch that reads this is added in the next task
-  // (useArchivedTranscript's first consumer); referenced here as a no-op so it
-  // isn't flagged unused in the meantime.
+  // screen with the archive view; null is the normal rehearsal flow.
   const [viewingSessionId, setViewingSessionId] = useState<string | null>(null)
-  void viewingSessionId
   // Optimistic pending turn: the submitted answer + which prompt it answered,
   // shown with a live stage stepper while the backend scores it.
   const [pending, setPending] = useState<{
@@ -506,6 +503,16 @@ export function Rehearsal() {
       stopRecordingRef.current()
     }
   }, [pushToTalkEnabled])
+
+  // A past rehearsal is open: it owns the whole screen. Checked before the
+  // landing and report branches so opening a card works from either one.
+  if (viewingSessionId) {
+    return (
+      <div className="mx-auto flex min-h-screen max-w-5xl flex-col gap-4 px-4 py-6">
+        <ArchiveView sessionId={viewingSessionId} onBack={() => setViewingSessionId(null)} />
+      </div>
+    )
+  }
 
   // Not started yet: a single call to action.
   if (!sessionId) {

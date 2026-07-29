@@ -104,6 +104,7 @@ session-history/
 │  │  │  └─ client.ts
 │  │  ├─ components/
 │  │  │  ├─ AfterActionReport.tsx
+│  │  │  ├─ ArchiveView.tsx
 │  │  │  ├─ ChatTurn.tsx
 │  │  │  ├─ HistoryList.tsx
 │  │  │  ├─ MeterBar.tsx
