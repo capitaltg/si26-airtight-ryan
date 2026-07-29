@@ -487,3 +487,18 @@ def test_archived_report_is_served_from_the_snapshot(client: TestClient) -> None
     again = client.get(f"/sessions/{session_id}/report").json()
 
     assert again == snapshot
+
+
+def test_creating_a_session_prunes_beyond_the_keep_limit(client: TestClient) -> None:
+    finished = []
+    for _ in range(6):
+        session_id = client.post("/sessions").json()["id"]
+        client.post(f"/sessions/{session_id}/end")
+        finished.append(session_id)
+
+    # The seventh create prunes the oldest archived session.
+    client.post("/sessions")
+
+    ids = [row["id"] for row in client.get("/sessions/history").json()]
+    assert finished[0] not in ids
+    assert len(ids) == 5

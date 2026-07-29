@@ -9,6 +9,7 @@ read back verbatim — no summarization of scored artifacts.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -222,3 +223,36 @@ def set_concern_status(
 def get_concern_statuses(db: Session, session_id: uuid.UUID) -> dict[str, str]:
     stmt = select(ConcernStatus).where(ConcernStatus.session_id == session_id)
     return {row.concern_id: row.status for row in db.scalars(stmt)}
+
+
+def prune_history(db: Session, *, keep: int = 5, abandoned_ttl_hours: int) -> None:
+    """Enforce retention. Called at the top of ``POST /sessions``, so the session
+    about to be created can never be a deletion candidate and no background job
+    is needed.
+
+    Two rules: archived sessions beyond the ``keep`` newest go, and non-archived
+    sessions older than ``abandoned_ttl_hours`` go. Deletion runs through the ORM
+    so ``cascade="all, delete-orphan"`` and the ``ondelete="CASCADE"`` FKs clear
+    turns, claim ledger, clarifications, meters, and concern status with them.
+    """
+    archived = list(
+        db.scalars(
+            select(RehearsalSession)
+            .where(RehearsalSession.archived_at.is_not(None))
+            .order_by(RehearsalSession.archived_at.desc())
+        )
+    )
+    for session in archived[keep:]:
+        db.delete(session)
+
+    cutoff = datetime.now(UTC) - timedelta(hours=abandoned_ttl_hours)
+    abandoned = db.scalars(
+        select(RehearsalSession).where(
+            RehearsalSession.archived_at.is_(None),
+            RehearsalSession.created_at < cutoff,
+        )
+    )
+    for session in abandoned:
+        db.delete(session)
+
+    db.flush()

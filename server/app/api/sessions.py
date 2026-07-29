@@ -232,6 +232,13 @@ def create_session(
     db: Session = Depends(get_db),
     content: Content = Depends(get_content),
 ) -> SessionStateDTO:
+    # Retention runs here, before the new row exists, so the session being
+    # created is never a deletion candidate.
+    repo.prune_history(
+        db,
+        keep=settings.history_keep,
+        abandoned_ttl_hours=settings.abandoned_session_ttl_hours,
+    )
     session = orchestrator.start_session(db, content)
     return _state(db, content, session)
 
