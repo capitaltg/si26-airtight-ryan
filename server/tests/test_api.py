@@ -1,4 +1,5 @@
 import json
+import uuid
 from collections.abc import Iterator
 
 import pytest
@@ -11,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 from app.api.deps import get_bedrock_client, get_db, get_session_factory
 from app.bedrock.cache import CacheKeyInput
 from app.content.loader import Content
+from app.db import repo
 from app.db.models import Base
 from app.main import app
 from app.schemas.extraction import (
@@ -82,16 +84,39 @@ class _FakeClient:
         return "Strong on the technical approach; keep drilling staffing specifics."
 
 
+class _PartialClient(_FakeClient):
+    """Covers one sub-question only, so the concern goes `partial` and earns a
+    follow-up on the same concern."""
+
+    def extract(self, content, *, content_schema, tool_name, max_tokens=4096, cache_key=None):
+        if content_schema is Extraction:
+            return Extraction(
+                sub_question_coverage=[
+                    SubQuestionCoverage(id="architecture", addressed=Addressed.full, span="x")
+                ]
+            )
+        return super().extract(
+            content,
+            content_schema=content_schema,
+            tool_name=tool_name,
+            max_tokens=max_tokens,
+            cache_key=cache_key,
+        )
+
+
 @pytest.fixture
-def client() -> Iterator[TestClient]:
+def db_factory() -> Iterator[sessionmaker[Session]]:
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
     )
     Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    yield sessionmaker(bind=engine, expire_on_commit=False)
 
+
+@pytest.fixture
+def client(db_factory: sessionmaker[Session]) -> Iterator[TestClient]:
     def _get_db() -> Iterator[Session]:
-        db = factory()
+        db = db_factory()
         try:
             yield db
             db.commit()
@@ -102,7 +127,7 @@ def client() -> Iterator[TestClient]:
     app.dependency_overrides[get_bedrock_client] = _FakeClient
     # The SSE endpoint opens its own session off the factory (own worker thread),
     # so point it at the same in-memory engine the request sessions use.
-    app.dependency_overrides[get_session_factory] = lambda: factory
+    app.dependency_overrides[get_session_factory] = lambda: db_factory
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
@@ -551,3 +576,87 @@ def test_creating_a_session_prunes_beyond_the_keep_limit(client: TestClient) -> 
     ids = [row["id"] for row in client.get("/sessions/history").json()]
     assert finished[0] not in ids
     assert len(ids) == 5
+
+
+def test_transcript_returns_the_prompt_as_asked(client: TestClient) -> None:
+    session_id = client.post("/sessions").json()["id"]
+    asked = client.get(f"/sessions/{session_id}").json()["prompt"]
+    client.post(f"/sessions/{session_id}/answer", json={"answer": "Here is the architecture."})
+
+    turns = client.get(f"/sessions/{session_id}/transcript").json()["turns"]
+
+    assert len(turns) == 1
+    turn = turns[0]
+    assert turn["prompt"] == asked["prompt"]
+    assert turn["intro"] == asked["intro"]
+    assert turn["display_name"] == asked["display_name"]
+    assert turn["persona_id"] == "technical_evaluator"
+    assert turn["concern_id"] == "technical_approach"
+    assert turn["is_follow_up"] is False
+    assert turn["answer"] == "Here is the architecture."
+    assert turn["reply"] == "Concrete. Good."
+    assert turn["rationale"] == "+2 backed."
+    assert turn["support_delta"] == 2
+    assert turn["scored"] is True
+    assert turn["transcript"] is None
+
+
+def test_transcript_interleaves_clarifications_and_marks_them_unscored(
+    client: TestClient,
+) -> None:
+    session_id = client.post("/sessions").json()["id"]
+    client.post(f"/sessions/{session_id}/clarify", json={"question": "Which boundary?"})
+    client.post(f"/sessions/{session_id}/answer", json={"answer": "Here is the architecture."})
+
+    turns = client.get(f"/sessions/{session_id}/transcript").json()["turns"]
+
+    assert [t["scored"] for t in turns] == [False, True]
+    clarification = turns[0]
+    assert clarification["answer"] == "Which boundary?"
+    assert clarification["rationale"] == ""
+    assert clarification["support_delta"] == 0
+    assert clarification["matched_rows"] == []
+    assert clarification["capped"] is False
+    # Asked against the active prompt, which is the same one the scored turn answered.
+    assert clarification["prompt"] == turns[1]["prompt"]
+
+
+def test_transcript_marks_a_second_turn_on_one_concern_as_a_follow_up(
+    client: TestClient,
+) -> None:
+    session_id = client.post("/sessions").json()["id"]
+    # `_PartialClient` covers only one sub-question, so the first concern earns a
+    # same-concern follow-up instead of satisfying.
+    client.app.dependency_overrides[get_bedrock_client] = _PartialClient
+    for _ in range(2):
+        client.post(f"/sessions/{session_id}/answer", json={"answer": "Partly there."})
+
+    turns = client.get(f"/sessions/{session_id}/transcript").json()["turns"]
+
+    assert turns[0]["concern_id"] == turns[1]["concern_id"]
+    assert turns[0]["is_follow_up"] is False
+    assert turns[1]["is_follow_up"] is True
+
+
+def test_transcript_falls_back_to_the_core_ask_for_a_pre_migration_turn(
+    client: TestClient, db_factory
+) -> None:
+    session_id = client.post("/sessions").json()["id"]
+    client.post(f"/sessions/{session_id}/answer", json={"answer": "Here is the architecture."})
+    # Simulate a row written before migration 0006.
+    with db_factory() as db:
+        turn = repo.get_turns(db, uuid.UUID(session_id))[0]
+        turn.prompt = None
+        turn.prompt_intro = None
+        db.commit()
+
+    turn = client.get(f"/sessions/{session_id}/transcript").json()["turns"][0]
+
+    assert turn["prompt"] == app.state.content.concerns["technical_approach"].core_ask
+    assert turn["intro"] is None
+
+
+def test_transcript_works_on_a_live_session(client: TestClient) -> None:
+    session_id = client.post("/sessions").json()["id"]
+
+    assert client.get(f"/sessions/{session_id}/transcript").json() == {"turns": []}

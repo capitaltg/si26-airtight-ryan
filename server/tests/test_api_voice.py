@@ -15,7 +15,7 @@ from app.api.deps import get_session_factory, get_synthesizer, get_transcriber
 from app.config import settings
 from app.db import repo
 from app.voice import SynthesisError, TranscriptionError
-from tests.test_api import client  # noqa: F401  (reused fixture)
+from tests.test_api import client, db_factory  # noqa: F401  (reused fixtures)
 
 # Fields shared by AnswerResponse and VoiceAnswerResponse; the equivalence test
 # below asserts these match exactly between the text and voice paths.

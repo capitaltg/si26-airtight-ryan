@@ -35,11 +35,13 @@ from app.bedrock.client import BedrockClient
 from app.config import settings
 from app.content.loader import Content
 from app.db import repo
-from app.db.models import RehearsalSession
+from app.db.models import Clarification, RehearsalSession, Turn
 from app.pipeline import orchestrator
 from app.pipeline.orchestrator import AnswerAudio, ClarificationCapReached, SessionComplete
 from app.report.builder import build_report
+from app.schemas.reaction import PersonaReaction
 from app.schemas.report import Report
+from app.schemas.scoring import ScoreOutput
 from app.session_archive import archive_session
 from app.voice import SynthesisError, TranscriptionError
 
@@ -160,6 +162,31 @@ class HistorySummaryDTO(BaseModel):
     concerns_total: int
 
 
+class ArchivedTurnDTO(BaseModel):
+    """One exchange read back from the stored rows. Field names mirror the
+    frontend's `TranscriptTurn`, so `ChatTurn` renders an archived turn with no
+    change."""
+
+    persona_id: str
+    display_name: str
+    concern_id: str
+    is_follow_up: bool
+    prompt: str
+    intro: str | None
+    answer: str
+    reply: str
+    rationale: str
+    support_delta: int
+    matched_rows: list[str]
+    capped: bool
+    scored: bool  # False for a clarification exchange
+    transcript: str | None  # voice turns only
+
+
+class TranscriptDTO(BaseModel):
+    turns: list[ArchivedTurnDTO]
+
+
 def _meters(db: Session, session_id: uuid.UUID) -> list[MeterDTO]:
     return [
         MeterDTO(persona_id=m.persona_id, support=m.support, capped=m.capped)
@@ -199,6 +226,99 @@ def _state(db: Session, content: Content, session: RehearsalSession) -> SessionS
         prompt=_prompt_dto(asg),
         done=asg is None,
     )
+
+
+def _display_name(content: Content, persona_id: str) -> str:
+    """The persona's authored name, or their id if the persona was removed from
+    content after this session was archived."""
+    persona = content.personas.get(persona_id)
+    return persona.display_name if persona is not None else persona_id
+
+
+def _asked_prompt(content: Content, concern_id: str, stored: str | None) -> str:
+    """The stored prompt, falling back to the content core ask for rows written
+    before migration 0006 (and to empty when that concern is also gone)."""
+    if stored:
+        return stored
+    concern = content.concerns.get(concern_id)
+    return concern.core_ask if concern is not None else ""
+
+
+def _archived_turns(
+    db: Session, content: Content, session_id: uuid.UUID
+) -> list[ArchivedTurnDTO]:
+    """Scored turns and clarifications merged into one `created_at`-ordered list.
+
+    The sort key carries two extra components because `created_at` comes from
+    `CURRENT_TIMESTAMP`, which has one-second resolution on SQLite: within one
+    second, clarifications come before turns (a clarification is always asked
+    against the still-active prompt, before the answer that resolves it, so a
+    same-second tie is a clarification immediately followed by the turn it led
+    to) and each kind orders by its own monotonic key, so the list is
+    deterministic rather than insertion-order-dependent.
+    """
+    rows: list[tuple[datetime, int, int, Turn | Clarification]] = [
+        (turn.created_at, 1, turn.turn_index, turn) for turn in repo.get_turns(db, session_id)
+    ] + [
+        (row.created_at, 0, row.id, row) for row in repo.get_clarifications(db, session_id)
+    ]
+    rows.sort(key=lambda row: (row[0], row[1], row[2]))
+
+    # A concern seen before means this is a repeat press on it. Only scored turns
+    # count: a clarification never advances the agenda or earns a follow-up.
+    scored_concerns: set[str] = set()
+    out: list[ArchivedTurnDTO] = []
+    for _, _, _, row in rows:
+        if isinstance(row, Turn):
+            score = ScoreOutput.model_validate(row.score_json)
+            reaction = (
+                PersonaReaction.model_validate(row.reaction_json)
+                if row.reaction_json is not None
+                else None
+            )
+            is_follow_up = row.concern_id in scored_concerns
+            scored_concerns.add(row.concern_id)
+            out.append(
+                ArchivedTurnDTO(
+                    persona_id=row.persona_id,
+                    display_name=_display_name(content, row.persona_id),
+                    concern_id=row.concern_id,
+                    is_follow_up=is_follow_up,
+                    prompt=_asked_prompt(content, row.concern_id, row.prompt),
+                    intro=row.prompt_intro,
+                    answer=row.user_answer,
+                    reply=reaction.in_character_reply if reaction is not None else "",
+                    rationale=reaction.rationale if reaction is not None else "",
+                    support_delta=score.support_delta,
+                    matched_rows=score.matched_rows,
+                    # The per-turn red-line flag, which is the auditable fact
+                    # about this answer. The persona's sticky meter cap is a
+                    # session-level fact and shows on the meters.
+                    capped=score.capped,
+                    scored=True,
+                    transcript=row.transcript,
+                )
+            )
+        else:
+            out.append(
+                ArchivedTurnDTO(
+                    persona_id=row.persona_id,
+                    display_name=_display_name(content, row.persona_id),
+                    concern_id=row.concern_id,
+                    is_follow_up=row.concern_id in scored_concerns,
+                    prompt=_asked_prompt(content, row.concern_id, row.prompt),
+                    intro=None,
+                    answer=row.question,
+                    reply=row.reply,
+                    rationale="",
+                    support_delta=0,
+                    matched_rows=[],
+                    capped=False,
+                    scored=False,
+                    transcript=None,
+                )
+            )
+    return out
 
 
 def _answer_payload(
@@ -397,6 +517,19 @@ def get_turn_audio(
     if turn is None or turn.answer_audio is None:
         raise HTTPException(status_code=404, detail="no audio for this turn")
     return Response(content=turn.answer_audio, media_type=turn.answer_audio_content_type)
+
+
+@router.get("/{session_id}/transcript", response_model=TranscriptDTO)
+def get_transcript(
+    session_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    content: Content = Depends(get_content),
+) -> TranscriptDTO:
+    """The rehearsal's exchanges, rebuilt from the stored rows rather than from a
+    snapshot: turns and clarifications already are the audit trail. Works on a
+    live session too, returning the turns so far."""
+    session = _require_session(db, session_id)
+    return TranscriptDTO(turns=_archived_turns(db, content, session.id))
 
 
 @router.get("/{session_id}/prompt_audio", response_model=PromptAudioDTO)
