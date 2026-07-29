@@ -438,7 +438,13 @@ def test_ending_a_session_archives_it(client: TestClient) -> None:
 
     r = client.post(f"/sessions/{session_id}/end")
     assert r.status_code == 200
-    assert r.json()["status"] == "ended"
+    body = r.json()
+    assert body["status"] == "ended"
+    # `done` reflects `archived_at`, not just whether the agenda happened to be
+    # exhausted — a freshly-created session has plenty of open concerns, but
+    # ending it is still terminal, and the response body itself must say so
+    # rather than requiring a follow-up GET to find out.
+    assert body["done"] is True
 
     assert [row["id"] for row in client.get("/sessions/history").json()] == [session_id]
 
@@ -476,6 +482,38 @@ def test_streaming_answer_archives_on_done(client: TestClient) -> None:
     assert [row["id"] for row in client.get("/sessions/history").json()] == [session_id]
 
 
+def test_answer_after_end_returns_409(client: TestClient) -> None:
+    """`/end` on a rehearsal with concerns still open archives it without
+    exhausting the agenda, so `orchestrator.submit_answer` alone would happily
+    keep scoring it — the archived check is what has to stop this."""
+    session_id = client.post("/sessions").json()["id"]
+    client.post(f"/sessions/{session_id}/end")
+
+    r = client.post(f"/sessions/{session_id}/answer", json={"answer": "late answer"})
+    assert r.status_code == 409
+
+
+def test_answer_stream_after_end_emits_error(client: TestClient) -> None:
+    session_id = client.post("/sessions").json()["id"]
+    client.post(f"/sessions/{session_id}/end")
+
+    with client.stream(
+        "POST", f"/sessions/{session_id}/answer/stream", json={"answer": "late answer"}
+    ) as r:
+        events = _collect_sse(r)
+
+    assert any("error" in e for e in events)
+    assert not any("result" in e for e in events)
+
+
+def test_clarify_after_end_returns_409(client: TestClient) -> None:
+    session_id = client.post("/sessions").json()["id"]
+    client.post(f"/sessions/{session_id}/end")
+
+    r = client.post(f"/sessions/{session_id}/clarify", json={"question": "late question?"})
+    assert r.status_code == 409
+
+
 class _ExplodingReactClient(_FakeClient):
     """Extraction still works; only the narrative call fails."""
 
@@ -492,7 +530,17 @@ def test_report_is_readable_when_the_snapshot_failed(client: TestClient) -> None
 
     r = client.get(f"/sessions/{session_id}/report")
     assert r.status_code == 200
-    assert r.json()["narrative"]["scored"] is False
+    first = r.json()
+    assert first["narrative"]["scored"] is False
+
+    # The rebuild above must have been backfilled onto the session: a second
+    # read against a client that fails any narrative call still succeeds and
+    # returns byte-identical content, proving it was served from the
+    # now-populated snapshot rather than rebuilt again.
+    client.app.dependency_overrides[get_bedrock_client] = _RaisingReactClient
+    second = client.get(f"/sessions/{session_id}/report")
+    assert second.status_code == 200
+    assert second.json() == first
 
 
 class _RaisingReactClient(_FakeClient):
@@ -512,6 +560,28 @@ def test_archived_report_is_served_from_the_snapshot(client: TestClient) -> None
     again = client.get(f"/sessions/{session_id}/report").json()
 
     assert again == snapshot
+
+
+def test_report_survives_a_stored_snapshot_that_no_longer_matches_the_schema(
+    client: TestClient,
+) -> None:
+    """A schema change after archiving (a new required field, a rename) leaves
+    an old snapshot un-parseable. There's no migration path for opaque stored
+    JSON, so the endpoint must self-heal by rebuilding rather than 500ing on
+    data it can no longer recover."""
+    session_id = client.post("/sessions").json()["id"]
+    client.post(f"/sessions/{session_id}/end")
+
+    session_factory = client.app.dependency_overrides[get_session_factory]()
+    with session_factory() as db:
+        session = repo.get_session(db, uuid.UUID(session_id))
+        assert session is not None
+        session.report_json = {"not": "a valid report"}
+        db.commit()
+
+    r = client.get(f"/sessions/{session_id}/report")
+    assert r.status_code == 200
+    assert r.json()["narrative"]["scored"] is False
 
 
 def test_history_lists_newest_first_with_summary_fields(client: TestClient) -> None:

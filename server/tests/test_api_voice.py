@@ -252,6 +252,20 @@ def test_answer_audio_after_session_complete_returns_409(voice_client: TestClien
     assert r.status_code == 409
 
 
+def test_answer_audio_after_end_returns_409(voice_client: TestClient) -> None:
+    """`/end` on a rehearsal with concerns still open archives it without
+    exhausting the agenda, so the orchestrator alone wouldn't reject a
+    follow-up answer — the voice path needs its own archived-session guard."""
+    session_id = voice_client.post("/sessions").json()["id"]
+    voice_client.post(f"/sessions/{session_id}/end")
+
+    r = voice_client.post(
+        f"/sessions/{session_id}/answer_audio",
+        files={"audio": ("recording.webm", b"fake-audio-bytes", "audio/webm")},
+    )
+    assert r.status_code == 409
+
+
 def test_answer_audio_defaults_content_type_when_missing(voice_client: TestClient) -> None:
     session_id = voice_client.post("/sessions").json()["id"]
 

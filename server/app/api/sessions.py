@@ -18,7 +18,7 @@ from typing import cast
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.deps import (
@@ -224,7 +224,7 @@ def _state(db: Session, content: Content, session: RehearsalSession) -> SessionS
         meters=_meters(db, session.id),
         concern_status=repo.get_concern_statuses(db, session.id),
         prompt=_prompt_dto(asg),
-        done=asg is None,
+        done=session.archived_at is not None or asg is None,
     )
 
 
@@ -350,6 +350,16 @@ def _require_session(db: Session, session_id: uuid.UUID) -> RehearsalSession:
     return session
 
 
+def _require_live_session(db: Session, session_id: uuid.UUID) -> RehearsalSession:
+    """Like `_require_session`, but rejects an already-archived session: history
+    is read-only, and answering it would silently diverge the stored report
+    snapshot from the transcript it's supposed to match."""
+    session = _require_session(db, session_id)
+    if session.archived_at is not None:
+        raise HTTPException(status_code=409, detail="session is archived")
+    return session
+
+
 def _speak(synthesizer: Synthesizer, text: str, voice_id: str) -> str | None:
     """Synthesize speech for one line, base64-encoded for JSON transport. A
     synthesis failure never costs the presenter a scored turn — it just means
@@ -420,7 +430,7 @@ def submit_answer(
     content: Content = Depends(get_content),
     client: BedrockClient = Depends(get_bedrock_client),
 ) -> AnswerResponse:
-    session = _require_session(db, session_id)
+    session = _require_live_session(db, session_id)
     try:
         result = orchestrator.submit_answer(db, content, client, session, body.answer)
     except SessionComplete as exc:
@@ -449,7 +459,7 @@ def submit_answer_audio(
     happens before anything touches the DB, so a failed or blank transcript
     leaves the session completely untouched (no turn row, no meter movement).
     """
-    session = _require_session(db, session_id)
+    session = _require_live_session(db, session_id)
 
     data = audio.file.read()
     if not data:
@@ -570,7 +580,7 @@ def clarify(
 ) -> ClarifyResponse:
     """Answer a clarifying question without scoring the turn. The active prompt is
     echoed back unchanged; no meter, ledger, agenda, or attempt count moves."""
-    session = _require_session(db, session_id)
+    session = _require_live_session(db, session_id)
     try:
         result = orchestrator.ask_clarification(db, content, client, session, body.question)
     except SessionComplete as exc:
@@ -620,6 +630,9 @@ async def submit_answer_stream(
             session = repo.get_session(db, session_id)
             if session is None:
                 emit({"error": "session not found"})
+                return
+            if session.archived_at is not None:
+                emit({"error": "session is archived"})
                 return
             for ev in orchestrator.submit_answer_events(
                 db, content, client, session, body.answer
@@ -698,8 +711,19 @@ def get_report(
     if session.report_json is not None:
         # Archived: return the bytes snapshotted at finish. No model call, and no
         # re-render against content that may have bumped since.
-        return Report.model_validate(session.report_json)
-    return build_report(
+        try:
+            return Report.model_validate(session.report_json)
+        except ValidationError:
+            # The schema drifted since this session was archived (a field was
+            # added or renamed) and the opaque stored snapshot can no longer be
+            # parsed. There's no migration path for it, so fall through and
+            # rebuild — the same recovery the `report_json is None` case below
+            # already relies on.
+            logger.exception(
+                "stored report snapshot failed validation for session %s; rebuilding",
+                session_id,
+            )
+    report = build_report(
         session_id=session.id,
         status=session.status,
         turns=repo.get_turns(db, session_id),
@@ -709,3 +733,10 @@ def get_report(
         client=client,
         clarifications=repo.get_clarifications(db, session_id),
     )
+    if session.archived_at is not None:
+        # Backfill so a future read of this archived session serves the
+        # snapshot instead of re-paying for a model call, getting fresh
+        # non-deterministic narrative text, or silently re-rendering the scored
+        # part against content/rubric that may have moved on since.
+        session.report_json = report.model_dump(mode="json")
+    return report
