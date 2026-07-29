@@ -71,7 +71,7 @@ Note: the design docs still say `backend/`; the actual Python package lives in `
 
 <!-- STRUCTURE:START -->
 ```
-session-history/
+airtight/
 ├─ .devcontainer/
 │  ├─ bin/
 │  │  ├─ frontend

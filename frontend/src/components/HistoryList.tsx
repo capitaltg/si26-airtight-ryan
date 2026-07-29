@@ -70,13 +70,13 @@ export function HistoryList({ onSelect }: { onSelect: (id: string) => void }) {
 
   return (
     <section data-testid="history-list" className="w-full max-w-2xl space-y-3 text-left">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600">
         Past rehearsals
       </h2>
       {isLoading && <p className="text-sm text-slate-500">Loading past rehearsals…</p>}
       {isError && <p className="text-sm text-red-700">{(error as Error).message}</p>}
       {data && data.length === 0 && (
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-slate-600">
           Finished rehearsals appear here. The five most recent are kept.
         </p>
       )}
