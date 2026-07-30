@@ -16,17 +16,19 @@ from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import cast
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.deps import (
+    DurationMeasurer,
     Synthesizer,
     Transcriber,
     get_bedrock_client,
     get_content,
     get_db,
+    get_duration_measurer,
     get_session_factory,
     get_synthesizer,
     get_transcriber,
@@ -490,11 +492,14 @@ def transcribe_audio(
 def submit_answer_audio(
     session_id: uuid.UUID,
     audio: UploadFile = File(...),
+    answer: str | None = Form(None),
+    raw_transcript: str | None = Form(None),
     db: Session = Depends(get_db),
     content: Content = Depends(get_content),
     client: BedrockClient = Depends(get_bedrock_client),
     transcriber: Transcriber = Depends(get_transcriber),
     synthesizer: Synthesizer = Depends(get_synthesizer),
+    measure: DurationMeasurer = Depends(get_duration_measurer),
 ) -> VoiceAnswerResponse:
     """Voice twin of ``/answer``: transcribe the recording, then run the exact
     same ``orchestrator.submit_answer`` call the text path uses (the fixed
@@ -514,19 +519,32 @@ def submit_answer_audio(
         raise HTTPException(status_code=413, detail="audio upload too large")
 
     content_type = _safe_audio_content_type(audio.content_type or "audio/webm")
-    try:
-        transcription = transcriber(data, content_type)
-    except TranscriptionError:
-        logger.exception("transcription failed for session %s", session_id)
-        raise HTTPException(
-            status_code=422, detail="Could not transcribe the recording"
-        ) from None
-    # Compatibility for dependency overrides written before duration became
-    # authoritative. Production transcribers always return TranscriptionResult.
-    if isinstance(transcription, str):
-        transcription = TranscriptionResult(text=transcription, duration_seconds=0.0)
-    if not transcription.text.strip():
-        raise HTTPException(status_code=422, detail="Could not transcribe the recording")
+    confirmed_answer = (answer or "").strip()
+    if confirmed_answer:
+        try:
+            duration_seconds = measure(data, content_type)
+        except TranscriptionError:
+            logger.exception("audio duration measurement failed for session %s", session_id)
+            raise HTTPException(status_code=422, detail="Could not read the recording") from None
+        scored_text = confirmed_answer
+        stored_transcript = (raw_transcript or "").strip() or confirmed_answer
+    else:
+        try:
+            transcription = transcriber(data, content_type)
+        except TranscriptionError:
+            logger.exception("transcription failed for session %s", session_id)
+            raise HTTPException(
+                status_code=422, detail="Could not transcribe the recording"
+            ) from None
+        # Compatibility for dependency overrides written before duration became
+        # authoritative. Production transcribers always return TranscriptionResult.
+        if isinstance(transcription, str):
+            transcription = TranscriptionResult(text=transcription, duration_seconds=0.0)
+        if not transcription.text.strip():
+            raise HTTPException(status_code=422, detail="Could not transcribe the recording")
+        scored_text = transcription.text
+        stored_transcript = transcription.text
+        duration_seconds = transcription.duration_seconds
 
     try:
         result = orchestrator.submit_answer(
@@ -534,12 +552,12 @@ def submit_answer_audio(
             content,
             client,
             session,
-            transcription.text,
+            scored_text,
             audio=AnswerAudio(
                 data=data,
                 content_type=content_type,
-                transcript=transcription.text,
-                duration_seconds=transcription.duration_seconds,
+                transcript=stored_transcript,
+                duration_seconds=duration_seconds,
             ),
         )
     except SessionComplete as exc:
@@ -563,7 +581,7 @@ def submit_answer_audio(
 
     return VoiceAnswerResponse(
         **_answer_payload(db, session.id, result).model_dump(),
-        transcript=transcription.text,
+        transcript=scored_text,
         reply_audio=reply_audio,
         next_prompt_audio=next_prompt_audio,
     )

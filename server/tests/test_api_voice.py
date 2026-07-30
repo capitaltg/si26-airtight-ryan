@@ -11,7 +11,12 @@ from collections.abc import Callable, Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.deps import get_session_factory, get_synthesizer, get_transcriber
+from app.api.deps import (
+    get_duration_measurer,
+    get_session_factory,
+    get_synthesizer,
+    get_transcriber,
+)
 from app.config import settings
 from app.db import repo
 from app.voice import SynthesisError, TranscriptionError
@@ -46,6 +51,23 @@ def _fake_transcribe_result(
         return TranscriptionResult(text=transcript, duration_seconds=duration)
 
     return _transcribe
+
+
+def _counting_transcribe(
+    transcript: str, calls: list[int]
+) -> Callable[[bytes, str], TranscriptionResult]:
+    def _transcribe(audio: bytes, content_type: str) -> TranscriptionResult:
+        calls.append(1)
+        return TranscriptionResult(text=transcript, duration_seconds=12.0)
+
+    return _transcribe
+
+
+def _fake_measure(duration: float) -> Callable[[bytes, str], float]:
+    def _measure(audio: bytes, content_type: str) -> float:
+        return duration
+
+    return _measure
 
 
 def _raising_transcribe(exc: Exception):
@@ -209,6 +231,111 @@ def test_answer_audio_scores_identically_to_text_answer(voice_client: TestClient
         turn = repo.get_turns(db, uuid.UUID(session_b))[0]
         assert turn.user_answer == transcript
         assert turn.transcript == transcript
+
+
+def test_answer_audio_scores_a_confirmed_edited_answer_without_transcribing(
+    voice_client: TestClient,
+) -> None:
+    session_id = voice_client.post("/sessions").json()["id"]
+    calls: list[int] = []
+    edited = "The confirmed, edited answer."
+    raw_transcript = "The unedited automatic transcript."
+    voice_client.app.dependency_overrides[get_transcriber] = lambda: _counting_transcribe(
+        "This must not be used.", calls
+    )
+    voice_client.app.dependency_overrides[get_duration_measurer] = lambda: _fake_measure(72.5)
+
+    response = voice_client.post(
+        f"/sessions/{session_id}/answer_audio",
+        data={"answer": edited, "raw_transcript": raw_transcript},
+        files={"audio": ("recording.webm", b"fake-audio-bytes", "audio/webm")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["transcript"] == edited
+    assert calls == []
+    session_factory = voice_client.app.dependency_overrides[get_session_factory]()
+    with session_factory() as db:
+        turn = repo.get_turns(db, uuid.UUID(session_id))[0]
+        assert turn.user_answer == edited
+        assert turn.transcript == raw_transcript
+
+
+def test_answer_audio_uses_server_measured_duration_for_confirmed_answer(
+    voice_client: TestClient,
+) -> None:
+    session_id = voice_client.post("/sessions").json()["id"]
+    voice_client.app.dependency_overrides[get_duration_measurer] = lambda: _fake_measure(72.5)
+
+    response = voice_client.post(
+        f"/sessions/{session_id}/answer_audio",
+        data={"answer": "Confirmed.", "duration_seconds": "9999"},
+        files={"audio": ("recording.webm", b"fake-audio-bytes", "audio/webm")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["limit"]["measured"] == 72.5
+
+
+def test_answer_audio_uses_confirmed_answer_as_raw_transcript_fallback(
+    voice_client: TestClient,
+) -> None:
+    session_id = voice_client.post("/sessions").json()["id"]
+    edited = "The confirmed, edited answer."
+    voice_client.app.dependency_overrides[get_duration_measurer] = lambda: _fake_measure(72.5)
+
+    response = voice_client.post(
+        f"/sessions/{session_id}/answer_audio",
+        data={"answer": edited},
+        files={"audio": ("recording.webm", b"fake-audio-bytes", "audio/webm")},
+    )
+
+    assert response.status_code == 200
+    session_factory = voice_client.app.dependency_overrides[get_session_factory]()
+    with session_factory() as db:
+        turn = repo.get_turns(db, uuid.UUID(session_id))[0]
+        assert turn.user_answer == edited
+        assert turn.transcript == edited
+
+
+def test_answer_audio_returns_422_when_confirmed_answer_duration_fails(
+    voice_client: TestClient,
+) -> None:
+    session_id = voice_client.post("/sessions").json()["id"]
+    voice_client.app.dependency_overrides[get_duration_measurer] = lambda: _raising_transcribe(
+        TranscriptionError("bad recording")
+    )
+
+    response = voice_client.post(
+        f"/sessions/{session_id}/answer_audio",
+        data={"answer": "Confirmed."},
+        files={"audio": ("recording.webm", b"fake-audio-bytes", "audio/webm")},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Could not read the recording"}
+    session_factory = voice_client.app.dependency_overrides[get_session_factory]()
+    with session_factory() as db:
+        assert repo.get_turns(db, uuid.UUID(session_id)) == []
+
+
+def test_answer_audio_with_blank_confirmed_answer_still_transcribes(
+    voice_client: TestClient,
+) -> None:
+    session_id = voice_client.post("/sessions").json()["id"]
+    calls: list[int] = []
+    voice_client.app.dependency_overrides[get_transcriber] = lambda: _counting_transcribe(
+        "Transcribed answer.", calls
+    )
+
+    response = voice_client.post(
+        f"/sessions/{session_id}/answer_audio",
+        data={"answer": "   "},
+        files={"audio": ("recording.webm", b"fake-audio-bytes", "audio/webm")},
+    )
+
+    assert response.status_code == 200
+    assert calls == [1]
 
 
 def test_failed_transcription_returns_422_and_leaves_session_untouched(
