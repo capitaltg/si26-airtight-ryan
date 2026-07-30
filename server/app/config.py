@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +21,11 @@ class Settings(BaseSettings):
     polly_engine: str = "neural"
     max_answer_audio_bytes: int = 10 * 1024 * 1024
 
+    text_answer_warning_words: int = 225
+    text_answer_limit_words: int = 300
+    voice_answer_warning_seconds: float = 90
+    voice_answer_limit_seconds: float = 120
+
     # History retention. `POST /sessions` prunes: it keeps the `history_keep`
     # newest archived sessions and deletes any non-archived session older than
     # the TTL. The TTL is what clears abandoned false starts and their audio
@@ -27,6 +33,29 @@ class Settings(BaseSettings):
     # concurrent e2e runs never delete each other's live session.
     history_keep: int = 5
     abandoned_session_ttl_hours: int = 24
+
+    @model_validator(mode="after")
+    def _validate_tangent_limits(self) -> "Settings":
+        pairs = (
+            (
+                "text_answer_warning_words",
+                self.text_answer_warning_words,
+                "text_answer_limit_words",
+                self.text_answer_limit_words,
+            ),
+            (
+                "voice_answer_warning_seconds",
+                self.voice_answer_warning_seconds,
+                "voice_answer_limit_seconds",
+                self.voice_answer_limit_seconds,
+            ),
+        )
+        for warning_name, warning, limit_name, limit in pairs:
+            if warning <= 0 or limit <= 0:
+                raise ValueError(f"{warning_name} and {limit_name} must be positive")
+            if warning >= limit:
+                raise ValueError(f"{warning_name} must be less than {limit_name}")
+        return self
 
 
 settings = Settings()

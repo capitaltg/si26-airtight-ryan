@@ -15,10 +15,11 @@ import {
   useSpeakPrompt,
   useSubmitAnswer,
   useSubmitAnswerAudio,
+  useTangentLimits,
 } from "../api/client"
 import { playSequence, primePlayback, setOutputDevice, useRecorder } from "../audio"
 import { useDevicePreferences } from "../devices"
-import { prettify } from "../lib"
+import { countWords, prettify } from "../lib"
 import type { Meter, Prompt, Stage, TranscriptTurn } from "../types"
 import { AfterActionReport } from "./AfterActionReport"
 import { ArchiveView } from "./ArchiveView"
@@ -56,6 +57,7 @@ export function Rehearsal() {
   } | null>(null)
   const [stage, setStage] = useState<Stage>("extracting")
   const [elapsed, setElapsed] = useState(0)
+  const [recordingElapsed, setRecordingElapsed] = useState(0)
   // Clarifications left on the current concern. null = not yet asked (full
   // allowance); reset whenever the active concern changes.
   const [clarifyRemaining, setClarifyRemaining] = useState<number | null>(null)
@@ -76,6 +78,7 @@ export function Rehearsal() {
 
   const create = useCreateSession()
   const submit = useSubmitAnswer(sessionId)
+  const tangentLimits = useTangentLimits()
   const clarify = useAskClarification(sessionId)
   // Single owner of the device choice for the whole screen: the same ids the
   // mic check panel edits are the ids this rehearsal records and plays with.
@@ -165,6 +168,19 @@ export function Rehearsal() {
     return () => clearInterval(timer)
   }, [pending])
 
+  useEffect(() => {
+    if (!recorder.recording) {
+      setRecordingElapsed(0)
+      return
+    }
+    const started = performance.now()
+    const timer = window.setInterval(
+      () => setRecordingElapsed((performance.now() - started) / 1000),
+      250,
+    )
+    return () => window.clearInterval(timer)
+  }, [recorder.recording])
+
   function startSession() {
     create.mutate(undefined, {
       onSuccess: (s) => {
@@ -227,6 +243,7 @@ export function Rehearsal() {
               supportDelta: res.support_delta,
               matchedRows: res.matched_rows,
               capped: res.capped,
+              limit: res.limit,
             },
           ])
           setMeters(res.meters)
@@ -430,6 +447,7 @@ export function Rehearsal() {
                 supportDelta: res.support_delta,
                 matchedRows: res.matched_rows,
                 capped: res.capped,
+                limit: res.limit,
                 transcript: res.transcript,
                 audioUrl: URL.createObjectURL(blob),
               },
@@ -758,6 +776,25 @@ export function Rehearsal() {
                       className="w-full resize-y rounded-md border border-slate-300 p-3 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
                       disabled={submit.isPending || clarify.isPending}
                     />
+                    {tangentLimits.data &&
+                      (() => {
+                        const words = countWords(draft)
+                        const policy = tangentLimits.data.text
+                        const over = words > policy.limit
+                        const warning = words >= policy.warning
+                        return (
+                          <p
+                            className={`text-xs ${over ? "text-red-700" : warning ? "text-amber-700" : "text-slate-500"}`}
+                          >
+                            {words} / {policy.limit} words
+                            {over
+                              ? ` · Over ${policy.limit}-word limit. Submitting applies a ${tangentLimits.data.penalty} penalty.`
+                              : warning
+                                ? ` · Approaching ${policy.limit}-word limit.`
+                                : ""}
+                          </p>
+                        )
+                      })()}
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-sm">
                         {submit.isError ? (
@@ -799,6 +836,26 @@ export function Rehearsal() {
                   // buttons. "Ask a clarifying question" stays text-only for
                   // now, so it simply isn't offered here.
                   <div className="space-y-2">
+                    {tangentLimits.data &&
+                      recorder.recording &&
+                      (() => {
+                        const policy = tangentLimits.data.voice
+                        const over = recordingElapsed > policy.limit
+                        const warning = recordingElapsed >= policy.warning
+                        return (
+                          <p
+                            className={`text-xs ${over ? "text-red-700" : warning ? "text-amber-700" : "text-slate-500"}`}
+                          >
+                            Recording {recordingElapsed.toFixed(1)} / {policy.limit.toFixed(0)}{" "}
+                            seconds
+                            {over
+                              ? ` · Release to send. ${tangentLimits.data.penalty} penalty.`
+                              : warning
+                                ? " · Approaching limit."
+                                : ""}
+                          </p>
+                        )
+                      })()}
                     <button
                       type="button"
                       onPointerDown={startRecording}

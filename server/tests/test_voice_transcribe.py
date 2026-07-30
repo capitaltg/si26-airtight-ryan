@@ -12,7 +12,7 @@ import pytest
 
 import app.voice.transcribe as transcribe_module
 from app.voice import TranscriptionError
-from app.voice.transcribe import transcribe_audio
+from app.voice.transcribe import duration_seconds, transcribe_audio
 
 
 def _result(transcript: str, *, is_partial: bool) -> SimpleNamespace:
@@ -94,9 +94,10 @@ def test_transcribe_audio_joins_only_final_results(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(transcribe_module, "_client_factory", factory)
 
-    text = transcribe_audio(b"raw-audio", "audio/webm")
+    result = transcribe_audio(b"raw-audio", "audio/webm")
 
-    assert text == "hello there, how are you"
+    assert result.text == "hello there, how are you"
+    assert result.duration_seconds == 0.0
 
     # The SDK call was wired up with the configured language/sample rate and a
     # fixed PCM encoding, and the input stream was properly closed — an
@@ -127,3 +128,10 @@ def test_transcribe_audio_wraps_sdk_error(monkeypatch: pytest.MonkeyPatch) -> No
 
     with pytest.raises(TranscriptionError):
         transcribe_audio(b"raw-audio", "audio/webm")
+
+
+def test_duration_seconds_uses_pcm_frame_count() -> None:
+    rate = 16_000
+    assert duration_seconds(b"", rate) == 0
+    assert duration_seconds(b"\0" * (rate * 2 * 120), rate) == 120
+    assert duration_seconds(b"\0" * (rate * 2 * 120 + 2), rate) > 120

@@ -40,7 +40,7 @@ def test_app_boots_with_content_on_state():
         assert isinstance(content, Content)
         assert len(content.personas) == 3
         assert len(content.concerns) == 8
-        assert content.rubric.version == 1
+        assert content.rubric.version == 2
 
 
 class _FakeClient:
@@ -308,14 +308,25 @@ def test_content_rubric_is_disclosed(client: TestClient) -> None:
     r = client.get("/content/rubric")
     assert r.status_code == 200
     body = r.json()
-    assert body["version"] == 1
+    assert body["version"] == 2
     assert "cap_ceiling" not in body  # the cap now rides inside the red_line row
-    assert len(body["rows"]) == 7
+    assert len(body["rows"]) == 8
     red_line = next(row for row in body["rows"] if row["id"] == "red_line")
     assert red_line["cap"] == 25
     assert all(row["cap"] is None for row in body["rows"] if row["id"] != "red_line")
     assert len(body["concerns"]) == 8
     assert all(c["red_lines"] for c in body["concerns"])
+
+
+def test_content_tangent_limits_are_disclosed(client: TestClient) -> None:
+    response = client.get("/content/tangent-limits")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "text": {"warning": 225.0, "limit": 300.0, "unit": "words"},
+        "voice": {"warning": 90.0, "limit": 120.0, "unit": "seconds"},
+        "penalty": -1,
+    }
 
 
 def test_create_session_prompt_carries_the_opening_intro(client: TestClient) -> None:

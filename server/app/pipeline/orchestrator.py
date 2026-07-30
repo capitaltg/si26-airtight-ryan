@@ -32,15 +32,17 @@ from typing import cast
 
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.content.loader import Content
 from app.db import repo
 from app.db.models import RehearsalSession, Turn
 from app.pipeline.extraction import run_extraction
 from app.pipeline.reaction import run_clarification, run_reaction
-from app.pipeline.scoring import apply_to_meter, score_turn
+from app.pipeline.scoring import apply_limit_penalty, apply_to_meter, score_turn
 from app.schemas.content import Concern, PersonaDefinition
 from app.schemas.extraction import Addressed, Extraction
 from app.schemas.reaction import PersonaReaction
+from app.schemas.scoring import LimitKind, LimitMeasurement
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +84,7 @@ class AnswerAudio:
     data: bytes
     content_type: str
     transcript: str
+    duration_seconds: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -278,14 +281,15 @@ def submit_answer_events(
     prior_claims = repo.get_claims(db, session.id)
     yield {"stage": "extracting"}
     extraction_start = time.perf_counter()
-    extraction = run_extraction(
+    extraction_result = run_extraction(
         answer=answer,
         concern=concern,
         persona=persona,
         content=content,
         prior_claims=prior_claims,
         client=client,  # type: ignore[arg-type]
-    ).extraction
+    )
+    extraction = extraction_result.extraction
     logger.info(
         "extraction (%s) took %.0f ms",
         persona.id,
@@ -293,8 +297,41 @@ def submit_answer_events(
     )
 
     yield {"stage": "scoring"}
-    score = score_turn(extraction, content.rubric)
+    limit = (
+        LimitMeasurement(
+            kind=LimitKind.voice_seconds,
+            measured=audio.duration_seconds,
+            warning_threshold=settings.voice_answer_warning_seconds,
+            limit_threshold=settings.voice_answer_limit_seconds,
+        )
+        if audio is not None
+        else LimitMeasurement(
+            kind=LimitKind.text_words,
+            measured=extraction_result.conciseness.word_count,
+            warning_threshold=settings.text_answer_warning_words,
+            limit_threshold=settings.text_answer_limit_words,
+        )
+    )
+    semantic_score = score_turn(extraction, content.rubric)
 
+    # Reaction sees semantic code score only. The objective duration/word
+    # adjustment is deliberately applied after this model call.
+    yield {"stage": "reacting"}
+    reaction_start = time.perf_counter()
+    reaction = run_reaction(
+        persona=persona,
+        concern=concern,
+        extraction=extraction,
+        score=semantic_score,
+        client=client,  # type: ignore[arg-type]
+    )
+    logger.info(
+        "reaction (%s) took %.0f ms",
+        persona.id,
+        (time.perf_counter() - reaction_start) * 1000,
+    )
+
+    score = apply_limit_penalty(semantic_score, content.rubric, limit)
     meter_row = repo.get_meter(db, session.id, persona.id)
     current_support = meter_row.support if meter_row is not None else 50
     already_capped = meter_row.capped if meter_row is not None else False
@@ -304,22 +341,6 @@ def submit_answer_events(
         score.capped,
         content.rubric.cap_ceiling,
         already_capped,
-    )
-
-    # Reaction runs only after the number is locked; it can never move it.
-    yield {"stage": "reacting"}
-    reaction_start = time.perf_counter()
-    reaction = run_reaction(
-        persona=persona,
-        concern=concern,
-        extraction=extraction,
-        score=score,
-        client=client,  # type: ignore[arg-type]
-    )
-    logger.info(
-        "reaction (%s) took %.0f ms",
-        persona.id,
-        (time.perf_counter() - reaction_start) * 1000,
     )
 
     turn_index = len(repo.get_turns(db, session.id))

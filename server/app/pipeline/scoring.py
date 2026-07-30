@@ -27,7 +27,7 @@ from app.schemas.extraction import (
     Extraction,
     Verdict,
 )
-from app.schemas.scoring import ScoreOutput
+from app.schemas.scoring import LimitMeasurement, LimitResult, ScoreOutput
 
 # Canonical row order for matched_rows output. Mirrors rubric.yaml so the audit
 # trail is stable regardless of which signals fired.
@@ -39,6 +39,7 @@ _ROW_ORDER = [
     "contradiction",
     "approach_cited",
     "evidence_backed",
+    "over_limit",
 ]
 
 
@@ -46,7 +47,7 @@ def score_turn(extraction: Extraction, rubric: Rubric) -> ScoreOutput:
     """Score a single turn from its validated extraction. Pure, deterministic."""
     values = {row.id: row.support_value for row in rubric.rows}
 
-    # Red line fires first and forces the cap, ignoring all other rows.
+    # Red line fires first and forces the cap, ignoring other semantic rows.
     if extraction.red_line_hits:
         return ScoreOutput(
             support_delta=values["red_line"],
@@ -101,6 +102,36 @@ def score_turn(extraction: Extraction, rubric: Rubric) -> ScoreOutput:
     delta = max(-2, min(2, delta))
     ordered = [row for row in _ROW_ORDER if row in matched]
     return ScoreOutput(support_delta=delta, matched_rows=ordered, capped=False)
+
+
+def apply_limit_penalty(
+    score: ScoreOutput, rubric: Rubric, limit: LimitMeasurement
+) -> ScoreOutput:
+    """Apply one objective limit adjustment after the evaluator reaction.
+
+    ``score`` is the semantic result already shown to the model. This pure
+    function owns the later adjustment; the model neither sees nor computes it.
+    """
+    values = {row.id: row.support_value for row in rubric.rows}
+    exceeded = limit.measured > limit.limit_threshold
+    penalty = values["over_limit"] if exceeded else 0
+    result = LimitResult(
+        **limit.model_dump(),
+        exceeded=exceeded,
+        penalty_applied=exceeded,
+        penalty_value=penalty,
+    )
+    if not exceeded:
+        return score.model_copy(update={"limit": result})
+
+    matched = set(score.matched_rows)
+    matched.add("over_limit")
+    return ScoreOutput(
+        support_delta=score.support_delta + penalty,
+        matched_rows=[row for row in _ROW_ORDER if row in matched],
+        capped=score.capped,
+        limit=result,
+    )
 
 
 def apply_to_meter(

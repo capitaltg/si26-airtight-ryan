@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from amazon_transcribe.client import TranscribeStreamingClient
@@ -24,6 +25,17 @@ from app.voice.audio import to_pcm16
 logger = logging.getLogger(__name__)
 
 _CHUNK_BYTES = 8 * 1024
+
+
+@dataclass(frozen=True)
+class TranscriptionResult:
+    text: str
+    duration_seconds: float
+
+
+def duration_seconds(pcm: bytes, sample_rate: int) -> float:
+    """Duration of decoded mono signed-16-bit PCM, without display rounding."""
+    return len(pcm) / (sample_rate * 2)
 
 
 class _StreamingClient(Protocol):
@@ -74,6 +86,11 @@ async def _transcribe(pcm: bytes) -> str:
         raise TranscriptionError("speech-to-text failed") from exc
 
 
-def transcribe_audio(audio: bytes, content_type: str) -> str:
+def transcribe_audio(audio: bytes, content_type: str) -> TranscriptionResult:
     """Decode `audio` and return the joined final transcript. Raises TranscriptionError."""
-    return asyncio.run(_transcribe(to_pcm16(audio, content_type)))
+    pcm = to_pcm16(audio, content_type)
+    text = asyncio.run(_transcribe(pcm))
+    return TranscriptionResult(
+        text=text,
+        duration_seconds=round(duration_seconds(pcm, settings.transcribe_sample_rate), 3),
+    )

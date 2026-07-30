@@ -10,6 +10,10 @@ export function prettify(id: string): string {
     .join(" ")
 }
 
+export function countWords(text: string): number {
+  return text.trim() ? text.trim().split(/\s+/).length : 0
+}
+
 // Chat-bubble class strings shared by a scored turn (ChatTurn) and the pending
 // placeholder (PendingTurn) so the two stay visually identical as styles evolve.
 export const PRESENTER_BUBBLE =

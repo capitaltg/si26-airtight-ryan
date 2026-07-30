@@ -6,7 +6,7 @@ sticky per-persona cap.
 """
 
 from app.content.loader import load_content
-from app.pipeline.scoring import apply_to_meter, score_turn
+from app.pipeline.scoring import apply_limit_penalty, apply_to_meter, score_turn
 from app.schemas.content import Rubric, RubricRow
 from app.schemas.extraction import (
     Addressed,
@@ -23,6 +23,7 @@ from app.schemas.extraction import (
     SubQuestionCoverage,
     Verdict,
 )
+from app.schemas.scoring import LimitKind, LimitMeasurement
 
 
 def _rubric():
@@ -124,6 +125,66 @@ def test_empty_extraction_is_unsubstantiated_zero():
     assert out.support_delta == 0
     assert out.matched_rows == ["unsubstantiated"]
     assert out.capped is False
+
+
+def test_over_limit_penalty_is_once_and_strictly_above_limit():
+    extraction = Extraction()
+    semantic = score_turn(extraction, _rubric())
+    exact = apply_limit_penalty(
+        semantic,
+        _rubric(),
+        LimitMeasurement(
+            kind=LimitKind.text_words,
+            measured=300,
+            warning_threshold=225,
+            limit_threshold=300,
+        ),
+    )
+    over = apply_limit_penalty(
+        semantic,
+        _rubric(),
+        LimitMeasurement(
+            kind=LimitKind.text_words,
+            measured=301,
+            warning_threshold=225,
+            limit_threshold=300,
+        ),
+    )
+
+    assert exact.limit is not None and not exact.limit.penalty_applied
+    assert "over_limit" not in exact.matched_rows
+    assert over.support_delta == -1
+    assert over.limit is not None and over.limit.penalty_applied
+    assert over.matched_rows == ["unsubstantiated", "over_limit"]
+
+
+def test_over_limit_penalty_stacks_below_semantic_floor():
+    semantic = score_turn(
+        Extraction(
+            dodges=[
+                Dodge(
+                    sub_question_id="staffing",
+                    type=DodgeType.non_commitment,
+                    evidence="answered with enthusiasm but no name",
+                )
+            ]
+        ),
+        _rubric(),
+    )
+    final = apply_limit_penalty(
+        semantic,
+        _rubric(),
+        LimitMeasurement(
+            kind=LimitKind.text_words,
+            measured=301,
+            warning_threshold=225,
+            limit_threshold=300,
+        ),
+    )
+
+    assert semantic.support_delta == -2
+    assert final.support_delta == -3
+    assert final.matched_rows == ["dodge", "over_limit"]
 
 
 # --- combinations & clamping ------------------------------------------------

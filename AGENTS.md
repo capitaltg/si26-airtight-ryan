@@ -94,6 +94,7 @@ airtight/
 │  │  ├─ mic-check.spec.ts       # device pickers, level meter, loopback (fake media project)
 │  │  ├─ persona-intro.spec.ts
 │  │  ├─ session-history.spec.ts # past-rehearsals list and archive view
+│  │  ├─ tangent-limits.spec.ts  # live answer-limit disclosure and warnings
 │  │  └─ voice-prompt-audio.spec.ts
 │  ├─ .gitignore
 │  ├─ package-lock.json
@@ -220,6 +221,7 @@ airtight/
 │  │  ├─ test_api_voice.py
 │  │  ├─ test_bedrock_client.py
 │  │  ├─ test_conciseness.py
+│  │  ├─ test_config.py
 │  │  ├─ test_consistency_check.py
 │  │  ├─ test_content_loader.py
 │  │  ├─ test_contradiction_grounding.py

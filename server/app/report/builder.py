@@ -35,6 +35,7 @@ from app.schemas.extraction import (
 from app.schemas.report import (
     ClarificationLine,
     CoverageCounts,
+    LimitFinding,
     NarrativeSection,
     PersonaLine,
     RateStats,
@@ -129,6 +130,7 @@ def build_scored_report(
     contradiction_count = 0
     dodge_count = 0
     findings: list[ScoredFinding] = []
+    limit_findings: list[LimitFinding] = []
 
     for turn, extraction, score in zip(turns, extractions, scores, strict=True):
         for cov in extraction.sub_question_coverage:
@@ -143,6 +145,18 @@ def build_scored_report(
             dodge_count += 1
         contradiction_count += len(extraction.consistency_flags)
         findings.extend(_turn_findings(turn, extraction, score, values))
+        if score.limit is not None and score.limit.penalty_applied:
+            limit_findings.append(
+                LimitFinding(
+                    turn_index=turn.turn_index,
+                    persona_id=turn.persona_id,
+                    concern_id=turn.concern_id,
+                    kind=score.limit.kind,
+                    measured=score.limit.measured,
+                    limit_threshold=score.limit.limit_threshold,
+                    penalty=score.limit.penalty_value,
+                )
+            )
 
     total_turns = len(turns)
     concerns_total = len(concern_statuses)
@@ -171,6 +185,7 @@ def build_scored_report(
         dodge_counts_by_type=dict(sorted(dodge_types.items())),
         contradiction_count=contradiction_count,
         findings=findings,
+        limit_findings=limit_findings,
         clarifications=[
             ClarificationLine(
                 persona_id=c.persona_id,

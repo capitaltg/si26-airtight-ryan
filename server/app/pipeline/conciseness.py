@@ -47,6 +47,11 @@ _ABBREVIATIONS: frozenset[str] = frozenset(
 _TRAILING_WORD = re.compile(r"([A-Za-z]+)$")
 
 
+def count_words(text: str) -> int:
+    """Count whitespace-delimited words using the disclosed server rule."""
+    return len(text.split())
+
+
 def _is_decimal_point(text: str, idx: int) -> bool:
     before, after = text[:idx], text[idx + 1 :]
     return bool(before) and before[-1].isdigit() and bool(after) and after[0].isdigit()
@@ -72,7 +77,7 @@ def _split_sentences(text: str) -> list[str]:
 
 def compute_conciseness(answer_text: str, extraction: Extraction) -> Conciseness:
     tokens = answer_text.split()
-    word_count = len(tokens)
+    word_count = count_words(answer_text)
 
     if word_count:
         filler_hits = sum(1 for t in tokens if t.strip(_STRIP).lower() in FILLER)
