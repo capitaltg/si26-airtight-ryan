@@ -95,7 +95,8 @@ airtight/
 │  │  ├─ persona-intro.spec.ts
 │  │  ├─ session-history.spec.ts # past-rehearsals list and archive view
 │  │  ├─ tangent-limits.spec.ts  # live answer-limit disclosure and warnings
-│  │  └─ voice-prompt-audio.spec.ts
+│  │  ├─ voice-prompt-audio.spec.ts
+│  │  └─ voice-transcript-edit.spec.ts # review and edit a voice transcript before scoring
 │  ├─ .gitignore
 │  ├─ package-lock.json
 │  ├─ package.json
