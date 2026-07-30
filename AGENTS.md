@@ -91,6 +91,7 @@ airtight/
 │  ├─ tests/
 │  │  ├─ a11y-contrast.spec.ts   # axe-core WCAG 2.1 AA color-contrast check
 │  │  ├─ health.spec.ts
+│  │  ├─ mic-check.spec.ts       # device pickers, level meter, loopback (fake media project)
 │  │  ├─ persona-intro.spec.ts
 │  │  ├─ session-history.spec.ts # past-rehearsals list and archive view
 │  │  └─ voice-prompt-audio.spec.ts
