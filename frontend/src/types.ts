@@ -50,9 +50,26 @@ export interface AnswerResponse {
   matched_rows: string[]
   meter: number
   capped: boolean
+  limit: LimitResult | null
   meters: Meter[]
   next_prompt: Prompt | null
   done: boolean
+}
+
+export interface TangentLimits {
+  text: { warning: number; limit: number; unit: "words" }
+  voice: { warning: number; limit: number; unit: "seconds" }
+  penalty: number
+}
+
+export interface LimitResult {
+  kind: "text_words" | "voice_seconds"
+  measured: number
+  warning_threshold: number
+  limit_threshold: number
+  exceeded: boolean
+  penalty_applied: boolean
+  penalty_value: number
 }
 
 // Voice mode's answer response: everything AnswerResponse carries, plus what
@@ -153,8 +170,19 @@ export interface Report {
   dodge_counts_by_type: Record<string, number>
   contradiction_count: number
   findings: ScoredFinding[]
+  limit_findings: LimitFinding[]
   clarifications: ClarificationLine[]
   narrative: NarrativeSection
+}
+
+export interface LimitFinding {
+  turn_index: number
+  persona_id: string
+  concern_id: string
+  kind: "text_words" | "voice_seconds"
+  measured: number
+  limit_threshold: number
+  penalty: number
 }
 
 // A single completed exchange as accumulated client-side for the transcript.
@@ -176,6 +204,7 @@ export interface TranscriptTurn {
   supportDelta: number
   matchedRows: string[]
   capped: boolean
+  limit?: LimitResult | null
   // A clarification turn is not scored: ChatTurn branches on this to suppress the
   // delta badge and rubric chips. Absent/true means a normal scored turn.
   scored?: boolean
@@ -218,6 +247,7 @@ export interface ArchivedTurn {
   capped: boolean
   scored: boolean
   transcript: string | null
+  limit: LimitResult | null
 }
 
 export interface ArchivedTranscript {

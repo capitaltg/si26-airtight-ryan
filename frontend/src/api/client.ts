@@ -14,6 +14,7 @@ import type {
   RubricDisclosure,
   SessionState,
   Stage,
+  TangentLimits,
   VoiceAnswerResponse,
 } from "../types"
 
@@ -128,6 +129,7 @@ export const api = {
       body: JSON.stringify({ question }),
     }),
   getRubric: () => request<RubricDisclosure>("/content/rubric"),
+  getTangentLimits: () => request<TangentLimits>("/content/tangent-limits"),
   getReport: (id: string) => request<Report>(`/sessions/${id}/report`),
   getHistory: () => request<HistorySummary[]>("/sessions/history"),
   getTranscript: (id: string) => request<ArchivedTranscript>(`/sessions/${id}/transcript`),
@@ -191,6 +193,14 @@ export function useRubric() {
   return useQuery({
     queryKey: ["rubric"],
     queryFn: api.getRubric,
+    staleTime: Infinity,
+  })
+}
+
+export function useTangentLimits() {
+  return useQuery({
+    queryKey: ["tangent-limits"],
+    queryFn: api.getTangentLimits,
     staleTime: Infinity,
   })
 }

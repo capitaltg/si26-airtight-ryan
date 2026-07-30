@@ -111,6 +111,34 @@ function ReportBody({ report }: { report: Report }) {
         </div>
       </section>
 
+      {report.limit_findings.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Answer limits
+          </h2>
+          <div className="space-y-2">
+            {report.limit_findings.map((finding) => {
+              const isText = finding.kind === "text_words"
+              const measured = isText ? finding.measured.toFixed(0) : finding.measured.toFixed(1)
+              const unit = isText ? "words" : "seconds"
+              return (
+                <div
+                  key={`${finding.turn_index}-${finding.kind}`}
+                  className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-900 print:border-orange-400"
+                >
+                  Turn {finding.turn_index + 1} · {prettify(finding.persona_id)} ·{" "}
+                  {prettify(finding.concern_id)}
+                  <div className="text-xs">
+                    {isText ? "Text length" : "Voice duration"}: {measured} {unit} (
+                    {finding.limit_threshold} {unit} limit) · {finding.penalty}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
       <div className="grid gap-6 md:grid-cols-[1fr_18rem]">
         <div className="space-y-6">
           {/* breakdown counts */}

@@ -1,7 +1,7 @@
 # Scoring rubric v1. Row ids are a contract the scoring engine (#5) matches on via
 # matched_rows; keep them stable. Mirrors docs/ideation/2-scoring-and-drift.md:43-51.
 
-version: 1
+version: 2
 rows:
   - id: red_line
     support_value: -2
@@ -21,6 +21,9 @@ rows:
   - id: contradiction
     support_value: -1
     description: Contradicted an earlier answer or the written proposal.
+  - id: over_limit
+    support_value: -1
+    description: Answer exceeds the configured word or voice-duration limit.
   - id: unsubstantiated
     support_value: 0
     description: Unsubstantiated claim or generic reassurance.

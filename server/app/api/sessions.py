@@ -41,9 +41,10 @@ from app.pipeline.orchestrator import AnswerAudio, ClarificationCapReached, Sess
 from app.report.builder import build_report
 from app.schemas.reaction import PersonaReaction
 from app.schemas.report import Report
-from app.schemas.scoring import ScoreOutput
+from app.schemas.scoring import LimitResult, ScoreOutput
 from app.session_archive import archive_session
 from app.voice import SynthesisError, TranscriptionError
+from app.voice.transcribe import TranscriptionResult
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +122,7 @@ class AnswerResponse(BaseModel):
     matched_rows: list[str]
     meter: int
     capped: bool
+    limit: LimitResult | None
     meters: list[MeterDTO]
     next_prompt: PromptDTO | None
     done: bool
@@ -181,6 +183,7 @@ class ArchivedTurnDTO(BaseModel):
     capped: bool
     scored: bool  # False for a clarification exchange
     transcript: str | None  # voice turns only
+    limit: LimitResult | None = None
 
 
 class TranscriptDTO(BaseModel):
@@ -297,6 +300,7 @@ def _archived_turns(
                     capped=score.capped,
                     scored=True,
                     transcript=row.transcript,
+                    limit=score.limit,
                 )
             )
         else:
@@ -316,6 +320,7 @@ def _archived_turns(
                     capped=False,
                     scored=False,
                     transcript=None,
+                    limit=None,
                 )
             )
     return out
@@ -337,6 +342,7 @@ def _answer_payload(
         matched_rows=result.matched_rows,
         meter=result.meter,
         capped=result.capped,
+        limit=ScoreOutput.model_validate(result.turn.score_json).limit,
         meters=_meters(db, session_id),
         next_prompt=_prompt_dto(result.next),
         done=result.done,
@@ -469,13 +475,17 @@ def submit_answer_audio(
 
     content_type = _safe_audio_content_type(audio.content_type or "audio/webm")
     try:
-        transcript = transcriber(data, content_type)
+        transcription = transcriber(data, content_type)
     except TranscriptionError:
         logger.exception("transcription failed for session %s", session_id)
         raise HTTPException(
             status_code=422, detail="Could not transcribe the recording"
         ) from None
-    if not transcript.strip():
+    # Compatibility for dependency overrides written before duration became
+    # authoritative. Production transcribers always return TranscriptionResult.
+    if isinstance(transcription, str):
+        transcription = TranscriptionResult(text=transcription, duration_seconds=0.0)
+    if not transcription.text.strip():
         raise HTTPException(status_code=422, detail="Could not transcribe the recording")
 
     try:
@@ -484,8 +494,13 @@ def submit_answer_audio(
             content,
             client,
             session,
-            transcript,
-            audio=AnswerAudio(data=data, content_type=content_type, transcript=transcript),
+            transcription.text,
+            audio=AnswerAudio(
+                data=data,
+                content_type=content_type,
+                transcript=transcription.text,
+                duration_seconds=transcription.duration_seconds,
+            ),
         )
     except SessionComplete as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -508,7 +523,7 @@ def submit_answer_audio(
 
     return VoiceAnswerResponse(
         **_answer_payload(db, session.id, result).model_dump(),
-        transcript=transcript,
+        transcript=transcription.text,
         reply_audio=reply_audio,
         next_prompt_audio=next_prompt_audio,
     )

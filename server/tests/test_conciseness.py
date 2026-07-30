@@ -1,4 +1,4 @@
-from app.pipeline.conciseness import FILLER, compute_conciseness
+from app.pipeline.conciseness import FILLER, compute_conciseness, count_words
 from app.schemas.extraction import Extraction
 
 
@@ -19,6 +19,12 @@ def test_empty_string_returns_all_zeros() -> None:
     assert result.word_count == 0
     assert result.filler_ratio == 0.0
     assert result.density == 0.0
+
+
+def test_count_words_uses_whitespace_tokens() -> None:
+    assert count_words("") == 0
+    assert count_words(" \t\n ") == 0
+    assert count_words("hello, 世界\nnext") == 3
 
 
 def test_no_filler_gives_zero_ratio() -> None:

@@ -13,6 +13,8 @@ import uuid
 
 from pydantic import BaseModel, Field
 
+from app.schemas.scoring import LimitKind
+
 
 class PersonaLine(BaseModel):
     """A persona's final support and whether a red line pinned it."""
@@ -68,6 +70,16 @@ class ClarificationLine(BaseModel):
     reply: str
 
 
+class LimitFinding(BaseModel):
+    turn_index: int
+    persona_id: str
+    concern_id: str
+    kind: LimitKind
+    measured: float
+    limit_threshold: float
+    penalty: int
+
+
 class NarrativeSection(BaseModel):
     """The one model-authored recap. Explicitly not scored; it never feeds a number."""
 
@@ -87,6 +99,7 @@ class ScoredReport(BaseModel):
     dodge_counts_by_type: dict[str, int] = Field(default_factory=dict)
     contradiction_count: int
     findings: list[ScoredFinding] = Field(default_factory=list)
+    limit_findings: list[LimitFinding] = Field(default_factory=list)
     clarifications: list[ClarificationLine] = Field(default_factory=list)
 
 

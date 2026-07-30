@@ -18,7 +18,7 @@ from app.bedrock.client import BedrockClient
 from app.content.loader import Content
 from app.db.session import SessionLocal, get_db  # re-exported for routers to depend on
 from app.voice.polly import synthesize_speech
-from app.voice.transcribe import transcribe_audio
+from app.voice.transcribe import TranscriptionResult, transcribe_audio
 
 __all__ = [
     "get_db",
@@ -53,7 +53,7 @@ def get_session_factory() -> sessionmaker[Session]:
 
 
 class Transcriber(Protocol):
-    def __call__(self, audio: bytes, content_type: str) -> str: ...
+    def __call__(self, audio: bytes, content_type: str) -> TranscriptionResult: ...
 
 
 class Synthesizer(Protocol):

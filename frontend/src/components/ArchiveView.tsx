@@ -28,6 +28,7 @@ function toTranscriptTurn(turn: ArchivedTurn, index: number): TranscriptTurn {
     supportDelta: turn.support_delta,
     matchedRows: turn.matched_rows,
     capped: turn.capped,
+    limit: turn.limit,
     scored: turn.scored,
   }
 }

@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.api.deps import get_content
+from app.config import settings
 from app.content.loader import Content
 from app.schemas.content import RubricRow
 
@@ -30,6 +31,18 @@ class RubricDisclosureDTO(BaseModel):
     concerns: list[ConcernDisclosureDTO]
 
 
+class TangentLimitDTO(BaseModel):
+    warning: float
+    limit: float
+    unit: str
+
+
+class TangentLimitsDTO(BaseModel):
+    text: TangentLimitDTO
+    voice: TangentLimitDTO
+    penalty: int
+
+
 @router.get("/rubric", response_model=RubricDisclosureDTO)
 def get_rubric(content: Content = Depends(get_content)) -> RubricDisclosureDTO:
     return RubricDisclosureDTO(
@@ -44,4 +57,24 @@ def get_rubric(content: Content = Depends(get_content)) -> RubricDisclosureDTO:
             )
             for c in content.concerns.values()
         ],
+    )
+
+
+@router.get("/tangent-limits", response_model=TangentLimitsDTO)
+def get_tangent_limits(content: Content = Depends(get_content)) -> TangentLimitsDTO:
+    row = next((row for row in content.rubric.rows if row.id == "over_limit"), None)
+    if row is None:
+        raise RuntimeError("rubric is missing required over_limit row")
+    return TangentLimitsDTO(
+        text=TangentLimitDTO(
+            warning=settings.text_answer_warning_words,
+            limit=settings.text_answer_limit_words,
+            unit="words",
+        ),
+        voice=TangentLimitDTO(
+            warning=settings.voice_answer_warning_seconds,
+            limit=settings.voice_answer_limit_seconds,
+            unit="seconds",
+        ),
+        penalty=row.support_value,
     )

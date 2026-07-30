@@ -96,6 +96,15 @@ export function ChatTurn({ turn }: { turn: TranscriptTurn }) {
               </>
             )}
           </div>
+          {turn.limit && (
+            <p className="text-xs text-slate-500">
+              {turn.limit.kind === "text_words"
+                ? `${turn.limit.measured} words`
+                : `${turn.limit.measured.toFixed(1)} seconds`}
+              {` / ${turn.limit.limit_threshold} ${turn.limit.kind === "text_words" ? "words" : "seconds"}`}
+              {turn.limit.penalty_applied && ` · ${turn.limit.penalty_value} over-limit penalty`}
+            </p>
+          )}
           <p className="text-sm text-slate-800">{turn.reply}</p>
           {turn.rationale && (
             <p className="border-t border-slate-100 pt-2 text-xs italic text-slate-500">
