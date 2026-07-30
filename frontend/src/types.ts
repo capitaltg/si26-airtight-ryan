@@ -80,6 +80,11 @@ export interface VoiceAnswerResponse extends AnswerResponse {
   next_prompt_audio: string | null
 }
 
+export interface TranscribeResponse {
+  transcript: string
+  duration_seconds: number
+}
+
 // A clarification is a non-scored turn: the evaluator answers a clarifying
 // question, the meter does not move, and the same prompt stays active.
 export interface ClarifyResponse {
