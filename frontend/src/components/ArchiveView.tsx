@@ -9,10 +9,9 @@ import { AfterActionReport } from "./AfterActionReport"
 import { ChatTurn } from "./ChatTurn"
 
 // `key` is client-only (React list order) and `audioUrl` has nothing to point at:
-// the recording is dropped when the session is archived. `transcript` is left
-// unset for the same reason, since ChatTurn's transcript branch renders an
-// <audio> element. The spoken text itself is already in `answer`, which the
-// server fills from the transcript for a voice turn.
+// the recording is dropped when the session is archived. The original
+// transcription remains available behind ChatTurn's disclosure when it differs
+// from the answer the scorer received.
 function toTranscriptTurn(turn: ArchivedTurn, index: number): TranscriptTurn {
   return {
     key: index,
@@ -23,6 +22,7 @@ function toTranscriptTurn(turn: ArchivedTurn, index: number): TranscriptTurn {
     prompt: turn.prompt,
     intro: turn.intro,
     answer: turn.answer,
+    transcript: turn.transcript ?? undefined,
     reply: turn.reply,
     rationale: turn.rationale,
     supportDelta: turn.support_delta,
