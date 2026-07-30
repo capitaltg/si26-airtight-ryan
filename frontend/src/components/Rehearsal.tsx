@@ -95,6 +95,9 @@ export function Rehearsal() {
   const recorder = useRecorder(inputId)
   const submitAudio = useSubmitAnswerAudio(sessionId)
   const transcribeAudio = useTranscribeAudio(sessionId)
+  // Once a voice recording is released, it stays attached to this prompt until
+  // transcription either fails (so it can be retaken) or opens the review card.
+  const voiceAnswerLocked = transcribeAudio.isPending || review !== null
   const speakPrompt = useSpeakPrompt(sessionId)
   const queryClient = useQueryClient()
   // Mirrors `submitAudio.isPending` for the `speakPrompt.onSuccess` closure in
@@ -134,10 +137,10 @@ export function Rehearsal() {
   useEffect(() => {
     if (recorder.error) {
       recordingActiveRef.current = false
-      setMode("text")
+      if (!voiceAnswerLocked) setMode("text")
       setVoiceError(recorder.error)
     }
-  }, [recorder.error])
+  }, [recorder.error, voiceAnswerLocked])
 
   // Route persona replies and spoken prompts to the chosen output. Keyed on the
   // id so a change made in either mic check placement applies at once. A
@@ -228,7 +231,7 @@ export function Rehearsal() {
 
   function sendAnswer() {
     const answer = draft.trim()
-    if (!answer || !prompt || submit.isPending) return
+    if (!answer || !prompt || submit.isPending || voiceAnswerLocked) return
     const asked = prompt // capture the prompt this answer responds to
     // Show the answer immediately with a stepper starting at the first stage;
     // `onStage` advances it as the SSE stream reports each pipeline boundary.
@@ -274,7 +277,8 @@ export function Rehearsal() {
 
   function sendClarification() {
     const question = draft.trim()
-    if (!question || !prompt || clarify.isPending || clarifyRemaining === 0) return
+    if (!question || !prompt || clarify.isPending || clarifyRemaining === 0 || voiceAnswerLocked)
+      return
     const asked = prompt
     // Same optimistic placeholder as a scored answer: the question lands
     // immediately with a live spinner while the evaluator replies.
@@ -325,6 +329,7 @@ export function Rehearsal() {
   // presenter from entering voice mode. This matches `playSequence`, which
   // already swallows blocked and failed clips.
   function enterVoiceMode() {
+    if (voiceAnswerLocked) return
     const wasText = mode === "text"
     setVoiceError(null)
     setMode("voice")
@@ -530,7 +535,7 @@ export function Rehearsal() {
   // it would otherwise also fire the window listener and start a rehearsal
   // recording behind the modal.
   const pushToTalkEnabled =
-    mode === "voice" && !done && prompt !== null && !micCheckOpen && review === null
+    mode === "voice" && !done && prompt !== null && !micCheckOpen && !voiceAnswerLocked
   useEffect(() => {
     if (!pushToTalkEnabled) return
     // Space is a normal character in a text field; never steal it from one.
@@ -755,7 +760,7 @@ export function Rehearsal() {
                     <button
                       type="button"
                       onClick={() => setMicCheckOpen(true)}
-                      disabled={review !== null}
+                      disabled={voiceAnswerLocked}
                       className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
                     >
                       Mic check
@@ -766,8 +771,10 @@ export function Rehearsal() {
                     <div className="flex overflow-hidden rounded-md border border-slate-300 text-xs font-semibold">
                       <button
                         type="button"
-                        onClick={() => setMode("text")}
-                        disabled={review !== null}
+                        onClick={() => {
+                          if (!voiceAnswerLocked) setMode("text")
+                        }}
+                        disabled={voiceAnswerLocked}
                         className={`px-2.5 py-1 transition ${
                           mode === "text"
                             ? "bg-slate-900 text-white"
@@ -779,7 +786,7 @@ export function Rehearsal() {
                       <button
                         type="button"
                         onClick={enterVoiceMode}
-                        disabled={review !== null}
+                        disabled={voiceAnswerLocked}
                         className={`px-2.5 py-1 transition ${
                           mode === "voice"
                             ? "bg-slate-900 text-white"
@@ -805,7 +812,7 @@ export function Rehearsal() {
                       rows={4}
                       placeholder="Your answer… (⌘/Ctrl+Enter to submit)"
                       className="w-full resize-y rounded-md border border-slate-300 p-3 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
-                      disabled={submit.isPending || clarify.isPending}
+                      disabled={submit.isPending || clarify.isPending || voiceAnswerLocked}
                     />
                     {tangentLimits.data &&
                       (() => {
@@ -845,6 +852,7 @@ export function Rehearsal() {
                             submit.isPending ||
                             clarify.isPending ||
                             clarifyRemaining === 0 ||
+                            voiceAnswerLocked ||
                             !draft.trim()
                           }
                           title="Ask the evaluator what they mean, without being scored"
@@ -854,7 +862,12 @@ export function Rehearsal() {
                         </button>
                         <button
                           onClick={sendAnswer}
-                          disabled={submit.isPending || clarify.isPending || !draft.trim()}
+                          disabled={
+                            submit.isPending ||
+                            clarify.isPending ||
+                            voiceAnswerLocked ||
+                            !draft.trim()
+                          }
                           className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:opacity-50"
                         >
                           {submit.isPending ? "Scoring…" : "Submit"}
