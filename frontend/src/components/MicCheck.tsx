@@ -6,7 +6,13 @@
 
 import { useEffect, useRef, useState } from "react"
 
-import { openAudioStream, outputSelectionSupported, playTestTone, useRecorder } from "../audio"
+import {
+  openAudioStream,
+  outputSelectionSupported,
+  playTestTone,
+  setOutputDevice,
+  useRecorder,
+} from "../audio"
 import { LEVEL_THRESHOLD, resolveDeviceId, useAudioDevices, useInputLevel } from "../devices"
 import type { AudioDevice } from "../devices"
 
@@ -88,6 +94,20 @@ export function MicCheck({
   // choice still being in effect.
   const inputMissing = inputId !== null && resolvedInput === null && labelsVisible
   const outputMissing = outputId !== null && resolvedOutput === null && labelsVisible
+
+  // Re-apply the resolved output to the shared playback element whenever it
+  // changes. `Rehearsal` already applies it once at mount, but that is not
+  // enough on its own: `setSinkId` silently no-ops until the page holds
+  // device-info permission (audio.ts's swallow-on-reject is deliberate), so a
+  // stored non-default output only takes effect once permission is granted —
+  // which happens here, inside the panel, after Rehearsal's mount-time effect
+  // already ran. Re-firing here on every resolution change (including the one
+  // triggered by a `devicechange` re-enumeration) is what keeps the picker's
+  // displayed choice and the shared element's actual sink from silently
+  // diverging.
+  useEffect(() => {
+    void setOutputDevice(resolvedOutput)
+  }, [resolvedOutput, labelsVisible])
 
   // Metering starts only once labels are visible, i.e. permission is granted:
   // opening the metering stream *is* the prompt, and the panel offers an

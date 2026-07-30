@@ -42,24 +42,39 @@ test("the level meter reports sound from the fake input", async ({ page }) => {
   })
 })
 
-test("the selected input survives a reload", async ({ page }) => {
+test("the selected input and output survive a reload", async ({ page }) => {
   await page.goto("/")
   await openLandingPanel(page)
 
   // Chromium's fake device flags only give a stable id ("default") to the
-  // default fake input; the extra named inputs ("Fake Audio Input 1", "Fake
-  // Audio Input 2") get a fresh random deviceId every navigation, which would
-  // make this test fail on the id itself rather than on persistence. "default"
-  // is still a real, non-empty choice distinct from "System default" (value
-  // ""), so selecting it still exercises the same localStorage round-trip.
+  // default fake input/output; the extra named devices ("Fake Audio Input 1",
+  // "Fake Audio Input 2") get a fresh random deviceId every navigation, which
+  // would make this test fail on the id itself rather than on persistence.
+  // "default" is still a real, non-empty choice distinct from "System
+  // default" (value ""), so selecting it still exercises the same
+  // localStorage round-trip.
   const select = page.getByTestId("mic-input-select")
-  const stableInput = await select.locator('option[value="default"]').getAttribute("value")
-  expect(stableInput).toBe("default")
+  await expect(select.locator('option[value="default"]')).toHaveCount(1)
   await select.selectOption("default")
+
+  const outputSelect = page.getByTestId("mic-output-select")
+  await expect(outputSelect.locator('option[value="default"]')).toHaveCount(1)
+  await outputSelect.selectOption("default")
+
+  // Pins the exact key names the plan mandates, not just the resulting
+  // picker state — a rename of either key would pass on the picker alone
+  // (the picker only reflects what got read back) but fail here.
+  await expect(page.evaluate(() => localStorage.getItem("airtight.audio.input"))).resolves.toBe(
+    "default",
+  )
+  await expect(page.evaluate(() => localStorage.getItem("airtight.audio.output"))).resolves.toBe(
+    "default",
+  )
 
   await page.reload()
   await openLandingPanel(page)
   await expect(page.getByTestId("mic-input-select")).toHaveValue("default")
+  await expect(page.getByTestId("mic-output-select")).toHaveValue("default")
 })
 
 test("a test recording plays back", async ({ page }) => {
