@@ -6,7 +6,7 @@ the voice path must score byte-identically to the text path, proving tasks
 
 import base64
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,6 +15,7 @@ from app.api.deps import get_session_factory, get_synthesizer, get_transcriber
 from app.config import settings
 from app.db import repo
 from app.voice import SynthesisError, TranscriptionError
+from app.voice.transcribe import TranscriptionResult
 from tests.test_api import client, db_factory  # noqa: F401  (reused fixtures)
 
 # Fields shared by AnswerResponse and VoiceAnswerResponse; the equivalence test
@@ -34,6 +35,15 @@ _SHARED_ANSWER_FIELDS = [
 def _fake_transcribe(transcript: str):
     def _transcribe(audio: bytes, content_type: str) -> str:
         return transcript
+
+    return _transcribe
+
+
+def _fake_transcribe_result(
+    transcript: str, duration: float
+) -> Callable[[bytes, str], TranscriptionResult]:
+    def _transcribe(audio: bytes, content_type: str) -> TranscriptionResult:
+        return TranscriptionResult(text=transcript, duration_seconds=duration)
 
     return _transcribe
 
@@ -69,6 +79,95 @@ def voice_client(client: TestClient) -> Iterator[TestClient]:  # noqa: F811
     )
     client.app.dependency_overrides[get_synthesizer] = lambda: _fake_synthesize()
     yield client
+
+
+def test_transcribe_audio_returns_transcript_without_changing_session(
+    voice_client: TestClient,
+) -> None:
+    session_id = voice_client.post("/sessions").json()["id"]
+    before = voice_client.get(f"/sessions/{session_id}").json()
+    voice_client.app.dependency_overrides[get_transcriber] = lambda: _fake_transcribe_result(
+        "Here is the architecture.", 72.5
+    )
+
+    response = voice_client.post(
+        f"/sessions/{session_id}/transcribe_audio",
+        files={"audio": ("recording.webm", b"fake-audio-bytes", "audio/webm")},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"transcript": "Here is the architecture.", "duration_seconds": 72.5}
+    assert voice_client.get(f"/sessions/{session_id}").json() == before
+    session_factory = voice_client.app.dependency_overrides[get_session_factory]()
+    with session_factory() as db:
+        assert repo.get_turns(db, uuid.UUID(session_id)) == []
+
+
+def test_transcribe_audio_allows_a_whitespace_transcript(voice_client: TestClient) -> None:
+    session_id = voice_client.post("/sessions").json()["id"]
+    voice_client.app.dependency_overrides[get_transcriber] = lambda: _fake_transcribe_result(
+        "   ", 1.5
+    )
+
+    response = voice_client.post(
+        f"/sessions/{session_id}/transcribe_audio",
+        files={"audio": ("recording.webm", b"fake-audio-bytes", "audio/webm")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["transcript"] == ""
+
+
+def test_transcribe_audio_returns_422_when_transcription_fails(voice_client: TestClient) -> None:
+    session_id = voice_client.post("/sessions").json()["id"]
+    voice_client.app.dependency_overrides[get_transcriber] = lambda: _raising_transcribe(
+        TranscriptionError("boom")
+    )
+
+    response = voice_client.post(
+        f"/sessions/{session_id}/transcribe_audio",
+        files={"audio": ("recording.webm", b"fake-audio-bytes", "audio/webm")},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Could not transcribe the recording"}
+
+
+def test_transcribe_audio_rejects_an_empty_upload(voice_client: TestClient) -> None:
+    session_id = voice_client.post("/sessions").json()["id"]
+
+    response = voice_client.post(
+        f"/sessions/{session_id}/transcribe_audio",
+        files={"audio": ("recording.webm", b"", "audio/webm")},
+    )
+
+    assert response.status_code == 422
+
+
+def test_transcribe_audio_rejects_a_too_large_upload(
+    voice_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "max_answer_audio_bytes", 10)
+    session_id = voice_client.post("/sessions").json()["id"]
+
+    response = voice_client.post(
+        f"/sessions/{session_id}/transcribe_audio",
+        files={"audio": ("recording.webm", b"this payload is well over ten bytes", "audio/webm")},
+    )
+
+    assert response.status_code == 413
+
+
+def test_transcribe_audio_rejects_an_ended_session(voice_client: TestClient) -> None:
+    session_id = voice_client.post("/sessions").json()["id"]
+    voice_client.post(f"/sessions/{session_id}/end")
+
+    response = voice_client.post(
+        f"/sessions/{session_id}/transcribe_audio",
+        files={"audio": ("recording.webm", b"fake-audio-bytes", "audio/webm")},
+    )
+
+    assert response.status_code == 409
 
 
 def test_answer_audio_scores_identically_to_text_answer(voice_client: TestClient) -> None:

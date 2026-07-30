@@ -134,6 +134,11 @@ class VoiceAnswerResponse(AnswerResponse):
     next_prompt_audio: str | None  # base64 mp3, null at end of session or on failure
 
 
+class TranscribeResponse(BaseModel):
+    transcript: str
+    duration_seconds: float
+
+
 class ClarifyRequest(BaseModel):
     question: str
 
@@ -444,6 +449,41 @@ def submit_answer(
     if result.done:
         archive_session(db, content, client, session)
     return _answer_payload(db, session.id, result)
+
+
+@router.post("/{session_id}/transcribe_audio", response_model=TranscribeResponse)
+def transcribe_audio(
+    session_id: uuid.UUID,
+    audio: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    transcriber: Transcriber = Depends(get_transcriber),
+) -> TranscribeResponse:
+    """Return a recording's transcript for presenter review without scoring it."""
+    _require_live_session(db, session_id)
+
+    data = audio.file.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="empty audio upload")
+    if len(data) > settings.max_answer_audio_bytes:
+        raise HTTPException(status_code=413, detail="audio upload too large")
+
+    content_type = _safe_audio_content_type(audio.content_type or "audio/webm")
+    try:
+        transcription = transcriber(data, content_type)
+    except TranscriptionError:
+        logger.exception("transcription failed for session %s", session_id)
+        raise HTTPException(
+            status_code=422, detail="Could not transcribe the recording"
+        ) from None
+    # Compatibility for dependency overrides written before duration became
+    # authoritative. Production transcribers always return TranscriptionResult.
+    if isinstance(transcription, str):
+        transcription = TranscriptionResult(text=transcription, duration_seconds=0.0)
+
+    return TranscribeResponse(
+        transcript=transcription.text.strip(),
+        duration_seconds=transcription.duration_seconds,
+    )
 
 
 @router.post("/{session_id}/answer_audio", response_model=VoiceAnswerResponse)
