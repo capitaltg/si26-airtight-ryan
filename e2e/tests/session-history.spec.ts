@@ -61,6 +61,17 @@ const REPORT = {
   dodge_counts_by_type: { non_commitment: 1 },
   contradiction_count: 0,
   findings: [],
+  limit_findings: [
+    {
+      turn_index: 3,
+      persona_id: "technical_evaluator",
+      concern_id: "technical_approach",
+      kind: "text_words",
+      measured: 240,
+      limit_threshold: 200,
+      penalty: 1,
+    },
+  ],
   clarifications: [],
   narrative: { scored: false, header: "Not scored", text: "You held the technical line." },
 }
@@ -116,6 +127,9 @@ test("opening a past rehearsal shows its transcript and its report", async ({ pa
   // The archived report renders below the transcript.
   await expect(page.getByRole("heading", { name: "After-action report" })).toBeVisible()
   await expect(archive).toContainText("You held the technical line.")
+  // Over-limit turns keep their own section in the archived report.
+  await expect(archive).toContainText("Answer limits")
+  await expect(archive).toContainText("240 words (200 words limit)")
 
   await page.getByRole("button", { name: "← Back" }).click()
   await expect(page.getByRole("button", { name: "Start rehearsal" })).toBeVisible()
