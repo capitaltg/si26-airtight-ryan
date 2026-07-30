@@ -36,6 +36,7 @@ e2e/playwright/.cache/
 
 # --- Local agent artifacts ---
 docs/
+.superpowers/
 
 # --- Docker (local-only compose overrides) ---
 docker-compose.override.yml

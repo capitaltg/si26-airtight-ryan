@@ -8,28 +8,28 @@ version = "0.1.0"
 description = "Airtight POC server — federal-orals rehearsal with a deterministic, code-owned scoring engine"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.32",
-    "anthropic[bedrock]>=0.40",
-    "sqlalchemy>=2.0",
-    "alembic>=1.13",
-    "psycopg[binary]>=3.2",
-    "pydantic-settings>=2.5",
-    "pyyaml>=6.0",
-    "python-frontmatter>=1.1",
-    "amazon-transcribe>=0.6",   # streaming SDK; boto3 has no streaming transcription
-    "boto3>=1.35",              # Polly
-    "python-multipart>=0.0.9",  # FastAPI UploadFile
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "anthropic[bedrock]>=0.40",
+  "sqlalchemy>=2.0",
+  "alembic>=1.13",
+  "psycopg[binary]>=3.2",
+  "pydantic-settings>=2.5",
+  "pyyaml>=6.0",
+  "python-frontmatter>=1.1",
+  "amazon-transcribe>=0.6", # streaming SDK; boto3 has no streaming transcription
+  "boto3>=1.35", # Polly
+  "python-multipart>=0.0.9", # FastAPI UploadFile
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0",
-    "httpx>=0.27",   # required by fastapi.testclient.TestClient
-    "ruff>=0.7",
-    "mypy>=1.11",
-    "types-PyYAML>=6.0",
-    "boto3-stubs[polly]>=1.35",
+  "pytest>=8.0",
+  "httpx>=0.27", # required by fastapi.testclient.TestClient
+  "ruff>=0.7",
+  "mypy>=1.11",
+  "types-PyYAML>=6.0",
+  "boto3-stubs[polly]>=1.35",
 ]
 
 [tool.setuptools.packages.find]
@@ -40,9 +40,7 @@ include = ["app*"]
 # outside the app package) can be unit-tested from here.
 pythonpath = [".", "../scripts"]
 testpaths = ["tests"]
-markers = [
-    "golden: live-Bedrock golden-set regression (skips without AWS credentials)",
-]
+markers = ["golden: live-Bedrock golden-set regression (skips without AWS credentials)"]
 
 [tool.ruff]
 line-length = 100
