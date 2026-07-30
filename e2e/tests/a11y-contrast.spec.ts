@@ -13,6 +13,13 @@ test("home page has no WCAG 2.1 AA contrast violations", async ({ page }) => {
   // Wait for steady state so transient loading text is not what gets scanned.
   await expect(page.getByRole("heading", { name: "Airtight" })).toBeVisible()
 
+  // Expand the mic check so its controls are inside the sweep. This project
+  // runs without fake media or granted permission, so the panel shows its
+  // "Allow microphone access" state — deliberately not clicked, since the point
+  // here is contrast, not devices.
+  await page.getByTestId("mic-check-toggle").click()
+  await expect(page.getByTestId("mic-check")).toBeVisible()
+
   const results = await new AxeBuilder({ page }).withRules(["color-contrast"]).analyze()
 
   expect(results.violations).toEqual([])

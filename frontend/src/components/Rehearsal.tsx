@@ -16,7 +16,8 @@ import {
   useSubmitAnswer,
   useSubmitAnswerAudio,
 } from "../api/client"
-import { playSequence, primePlayback, useRecorder } from "../audio"
+import { playSequence, primePlayback, setOutputDevice, useRecorder } from "../audio"
+import { useDevicePreferences } from "../devices"
 import { prettify } from "../lib"
 import type { Meter, Prompt, Stage, TranscriptTurn } from "../types"
 import { AfterActionReport } from "./AfterActionReport"
@@ -24,6 +25,7 @@ import { ArchiveView } from "./ArchiveView"
 import { ChatTurn } from "./ChatTurn"
 import { HistoryList } from "./HistoryList"
 import { MeterPanel } from "./MeterBar"
+import { MicCheck } from "./MicCheck"
 import { PendingTurn } from "./PendingTurn"
 import { PromptIntro } from "./PromptIntro"
 import { RubricPanel } from "./RubricPanel"
@@ -37,6 +39,11 @@ export function Rehearsal() {
   const [draft, setDraft] = useState("")
   const [rubricOpen, setRubricOpen] = useState(false)
   const [showReport, setShowReport] = useState(false)
+  // The in-session mic check modal, and the collapsible landing section. Both
+  // start closed: the landing screen keeps one call to action, and the modal is
+  // opened deliberately.
+  const [micCheckOpen, setMicCheckOpen] = useState(false)
+  const [micPanelOpen, setMicPanelOpen] = useState(false)
   // A past rehearsal the presenter opened read-only. Non-null replaces the whole
   // screen with the archive view; null is the normal rehearsal flow.
   const [viewingSessionId, setViewingSessionId] = useState<string | null>(null)
@@ -70,7 +77,10 @@ export function Rehearsal() {
   const create = useCreateSession()
   const submit = useSubmitAnswer(sessionId)
   const clarify = useAskClarification(sessionId)
-  const recorder = useRecorder()
+  // Single owner of the device choice for the whole screen: the same ids the
+  // mic check panel edits are the ids this rehearsal records and plays with.
+  const { inputId, outputId, setInputId, setOutputId } = useDevicePreferences()
+  const recorder = useRecorder(inputId)
   const submitAudio = useSubmitAnswerAudio(sessionId)
   const speakPrompt = useSpeakPrompt(sessionId)
   const queryClient = useQueryClient()
@@ -115,6 +125,14 @@ export function Rehearsal() {
       setVoiceError(recorder.error)
     }
   }, [recorder.error])
+
+  // Route persona replies and spoken prompts to the chosen output. Keyed on the
+  // id so a change made in either mic check placement applies at once. A
+  // browser without setSinkId, or an id that no longer resolves, is a no-op
+  // inside setOutputDevice.
+  useEffect(() => {
+    void setOutputDevice(outputId)
+  }, [outputId])
 
   // Revoke the recorded-answer object URLs on unmount only (not on every
   // transcript change — the turns still reference them for playback until
@@ -462,7 +480,10 @@ export function Rehearsal() {
   // Only while voice mode is actually offering a prompt to answer. Both
   // handlers below are still no-ops if a submission is in flight — that's
   // `beginRecording`'s own guard, read live through the ref.
-  const pushToTalkEnabled = mode === "voice" && !done && prompt !== null
+  // `!micCheckOpen`: the panel has its own Record button, and Space pressed on
+  // it would otherwise also fire the window listener and start a rehearsal
+  // recording behind the modal.
+  const pushToTalkEnabled = mode === "voice" && !done && prompt !== null && !micCheckOpen
   useEffect(() => {
     if (!pushToTalkEnabled) return
     // Space is a normal character in a text field; never steal it from one.
@@ -504,6 +525,17 @@ export function Rehearsal() {
     }
   }, [pushToTalkEnabled])
 
+  // Escape closes the mic check modal. Registered only while it is open, so it
+  // never competes with anything else on the screen.
+  useEffect(() => {
+    if (!micCheckOpen) return
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setMicCheckOpen(false)
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [micCheckOpen])
+
   // A past rehearsal is open: it owns the whole screen. Checked before the
   // landing and report branches so opening a card works from either one.
   if (viewingSessionId) {
@@ -535,6 +567,33 @@ export function Rehearsal() {
         {create.isError && (
           <p className="text-sm text-red-700">{(create.error as Error).message}</p>
         )}
+        <section className="w-full max-w-2xl text-left">
+          <button
+            type="button"
+            data-testid="mic-check-toggle"
+            aria-expanded={micPanelOpen}
+            aria-controls="mic-check-panel"
+            onClick={() => setMicPanelOpen((open) => !open)}
+            className="text-sm font-semibold text-slate-700 underline decoration-slate-400 underline-offset-4 hover:text-slate-900"
+          >
+            Test your mic and speakers
+          </button>
+          {/* Rendered only while expanded, so collapsing the section unmounts
+              the panel and closes the metering stream with it. */}
+          {micPanelOpen && (
+            <div
+              id="mic-check-panel"
+              className="mt-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+            >
+              <MicCheck
+                inputId={inputId}
+                outputId={outputId}
+                onInputChange={setInputId}
+                onOutputChange={setOutputId}
+              />
+            </div>
+          )}
+        </section>
         <HistoryList onSelect={setViewingSessionId} />
       </div>
     )
@@ -646,32 +705,41 @@ export function Rehearsal() {
                       </span>
                     )}
                   </div>
-                  {/* Text/voice segmented toggle. Text is the default and the
-                      only path with server tests; switching to voice never
-                      changes text-mode behavior. */}
-                  <div className="flex overflow-hidden rounded-md border border-slate-300 text-xs font-semibold">
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setMode("text")}
-                      className={`px-2.5 py-1 transition ${
-                        mode === "text"
-                          ? "bg-slate-900 text-white"
-                          : "bg-white text-slate-600 hover:bg-slate-50"
-                      }`}
+                      onClick={() => setMicCheckOpen(true)}
+                      className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50"
                     >
-                      Text
+                      Mic check
                     </button>
-                    <button
-                      type="button"
-                      onClick={enterVoiceMode}
-                      className={`px-2.5 py-1 transition ${
-                        mode === "voice"
-                          ? "bg-slate-900 text-white"
-                          : "bg-white text-slate-600 hover:bg-slate-50"
-                      }`}
-                    >
-                      Voice
-                    </button>
+                    {/* Text/voice segmented toggle. Text is the default and the
+                        only path with server tests; switching to voice never
+                        changes text-mode behavior. */}
+                    <div className="flex overflow-hidden rounded-md border border-slate-300 text-xs font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => setMode("text")}
+                        className={`px-2.5 py-1 transition ${
+                          mode === "text"
+                            ? "bg-slate-900 text-white"
+                            : "bg-white text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        Text
+                      </button>
+                      <button
+                        type="button"
+                        onClick={enterVoiceMode}
+                        className={`px-2.5 py-1 transition ${
+                          mode === "voice"
+                            ? "bg-slate-900 text-white"
+                            : "bg-white text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        Voice
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <PromptIntro intro={prompt.intro} />
@@ -774,6 +842,29 @@ export function Rehearsal() {
       </div>
 
       <RubricPanel open={rubricOpen} onClose={() => setRubricOpen(false)} />
+
+      {micCheckOpen && (
+        // Native <dialog> (open, not showModal — same as RubricPanel above)
+        // rather than a plain div with role="dialog": it carries the dialog
+        // semantics for free and satisfies the linter's prefer-tag-over-role
+        // rule without a suppression comment.
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 p-4">
+          <dialog
+            open
+            aria-modal="true"
+            aria-label="Mic check"
+            className="relative m-0 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-4 shadow-lg"
+          >
+            <MicCheck
+              inputId={inputId}
+              outputId={outputId}
+              onInputChange={setInputId}
+              onOutputChange={setOutputId}
+              onClose={() => setMicCheckOpen(false)}
+            />
+          </dialog>
+        </div>
+      )}
     </div>
   )
 }

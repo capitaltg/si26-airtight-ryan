@@ -25,8 +25,8 @@ cp .env.example .env      # then fill in AWS creds if running Bedrock locally
 docker compose up --build
 ```
 
-- API:  http://localhost:8000/health → `{"status":"ok"}`
-- Web:  http://localhost:5173 (shows live API health via the `/api` proxy)
+- API: http://localhost:8000/health → `{"status":"ok"}`
+- Web: http://localhost:5173 (shows live API health via the `/api` proxy)
 
 ## Dev container commands
 
@@ -72,9 +72,11 @@ pytest suite never touches the network, so it passes without any of this.
 The `/answer` endpoint supports optional audio input via the `/api/sessions/{session_id}/answer_audio` route. To enable voice transcription and synthesis locally:
 
 1. Install `ffmpeg`:
+
    ```bash
    brew install ffmpeg
    ```
+
    (Docker includes it automatically via the `server/Dockerfile`.)
 
 2. Your AWS credentials need two additional IAM permissions beyond Bedrock:

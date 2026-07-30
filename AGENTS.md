@@ -91,6 +91,7 @@ airtight/
 │  ├─ tests/
 │  │  ├─ a11y-contrast.spec.ts   # axe-core WCAG 2.1 AA color-contrast check
 │  │  ├─ health.spec.ts
+│  │  ├─ mic-check.spec.ts       # device pickers, level meter, loopback (fake media project)
 │  │  ├─ persona-intro.spec.ts
 │  │  ├─ session-history.spec.ts # past-rehearsals list and archive view
 │  │  └─ voice-prompt-audio.spec.ts
@@ -109,6 +110,7 @@ airtight/
 │  │  │  ├─ ChatTurn.tsx
 │  │  │  ├─ HistoryList.tsx
 │  │  │  ├─ MeterBar.tsx
+│  │  │  ├─ MicCheck.tsx
 │  │  │  ├─ PendingTurn.tsx
 │  │  │  ├─ PromptIntro.tsx
 │  │  │  ├─ Rehearsal.tsx
@@ -116,6 +118,7 @@ airtight/
 │  │  │  └─ StageStepper.tsx
 │  │  ├─ App.tsx
 │  │  ├─ audio.ts
+│  │  ├─ devices.ts              # audio device list, stored choice, level meter
 │  │  ├─ index.css
 │  │  ├─ lib.ts
 │  │  ├─ main.tsx

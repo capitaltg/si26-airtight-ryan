@@ -14,13 +14,39 @@ function pickMimeType(): string | undefined {
   return MIME_CANDIDATES.find((t) => MediaRecorder.isTypeSupported(t))
 }
 
+// Opens a capture stream on a specific input, or the system default when
+// `deviceId` is null. `exact` rather than `ideal` so a stored id that no longer
+// resolves fails loudly instead of silently recording from a different
+// microphone — a wrong-device capture produces a bad answer with a real score
+// attached, which is worse than an error. Over-constrained is retried once
+// against the default; Chrome reports that as either OverconstrainedError or
+// NotFoundError depending on version, so both names retry.
+const FALLBACK_ERRORS = new Set(["OverconstrainedError", "NotFoundError"])
+
+export async function openAudioStream(deviceId?: string | null): Promise<MediaStream> {
+  const constraints: MediaStreamConstraints = {
+    audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+  }
+  try {
+    return await navigator.mediaDevices.getUserMedia(constraints)
+  } catch (err) {
+    const name = (err as { name?: string } | null)?.name
+    if (deviceId && name && FALLBACK_ERRORS.has(name)) {
+      return await navigator.mediaDevices.getUserMedia({ audio: true })
+    }
+    throw err
+  }
+}
+
 // Records one hold-to-talk answer. `start`/`stop` bracket a single recording;
 // calling `start` again after `stop` begins a fresh one. Permission denial (or
 // any other getUserMedia failure) surfaces through `error`, not a rejected
 // promise the caller must try/catch — this mirrors how the rest of this
 // codebase's hooks expose failures as state (see `useSubmitAnswer` /
 // `useCreateSession` in api/client.ts) rather than thrown exceptions.
-export function useRecorder(): {
+// `deviceId` selects the input to record from; null/undefined records from the
+// system default, so existing call sites keep working untouched.
+export function useRecorder(deviceId?: string | null): {
   recording: boolean
   start: () => Promise<void>
   stop: () => Promise<Blob>
@@ -44,7 +70,7 @@ export function useRecorder(): {
   async function start() {
     setError(null)
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await openAudioStream(deviceId)
       streamRef.current = stream
       const mimeType = pickMimeType()
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
@@ -179,4 +205,93 @@ export function playSequence(sources: string[]): Promise<void> {
       ),
     Promise.resolve(),
   )
+}
+
+// `setSinkId` is Chromium-only and is not in TypeScript 5.6's DOM lib, so the
+// element is narrowed through this optional-method type rather than `any`.
+type SinkCapableMedia = HTMLMediaElement & { setSinkId?: (deviceId: string) => Promise<void> }
+
+// Routes everything that plays on the shared element — persona replies, spoken
+// prompts, the test tone — to `deviceId`. An empty string means "system
+// default". A rejected setSinkId resolves rather than throws: an unroutable
+// output should not break the caller's effect, and the reply still plays on
+// whatever the browser falls back to.
+export async function setOutputDevice(deviceId: string | null): Promise<void> {
+  const el = playbackEl as SinkCapableMedia
+  if (typeof el.setSinkId !== "function") return
+  try {
+    await el.setSinkId(deviceId ?? "")
+  } catch {
+    // Deliberately swallowed — see above.
+  }
+}
+
+// Whether an output picker is a real control or dead UI on this browser.
+export function outputSelectionSupported(): boolean {
+  return "setSinkId" in HTMLMediaElement.prototype
+}
+
+const TONE_HZ = 440
+const TONE_SAMPLE_RATE = 8000
+const TONE_SECONDS = 0.6
+// Samples to ramp in and out over, so the tone does not start or end on a click.
+const TONE_FADE_SAMPLES = 40
+
+// An 8-bit unsigned mono PCM WAV built in JS: the same header shape as
+// SILENT_CLIP_DATA_URL above, with real sample data. Generated rather than
+// shipped as an asset so the bundle stays free of binary audio. Built once and
+// cached — the bytes never change.
+let toneUrl: string | null = null
+
+function toneDataUrl(): string {
+  if (toneUrl) return toneUrl
+  const sampleCount = Math.floor(TONE_SAMPLE_RATE * TONE_SECONDS)
+  const bytes = new Uint8Array(44 + sampleCount)
+  const view = new DataView(bytes.buffer)
+  function ascii(offset: number, text: string) {
+    for (let i = 0; i < text.length; i += 1) view.setUint8(offset + i, text.charCodeAt(i))
+  }
+  ascii(0, "RIFF")
+  view.setUint32(4, 36 + sampleCount, true)
+  ascii(8, "WAVEfmt ")
+  view.setUint32(16, 16, true) // fmt chunk size
+  view.setUint16(20, 1, true) // format: PCM
+  view.setUint16(22, 1, true) // channels: mono
+  view.setUint32(24, TONE_SAMPLE_RATE, true)
+  view.setUint32(28, TONE_SAMPLE_RATE, true) // byte rate: 1 byte per sample, mono
+  view.setUint16(32, 1, true) // block align
+  view.setUint16(34, 8, true) // bits per sample
+  ascii(36, "data")
+  view.setUint32(40, sampleCount, true)
+  for (let i = 0; i < sampleCount; i += 1) {
+    const fade = Math.min(1, i / TONE_FADE_SAMPLES, (sampleCount - i) / TONE_FADE_SAMPLES)
+    const sample = Math.sin((2 * Math.PI * TONE_HZ * i) / TONE_SAMPLE_RATE) * fade
+    view.setUint8(44 + i, Math.round(128 + sample * 100))
+  }
+  let binary = ""
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  toneUrl = `data:audio/wav;base64,${btoa(binary)}`
+  return toneUrl
+}
+
+// Plays a short tone through the shared element so the presenter can confirm
+// the selected output actually reaches their ears. Claims `playbackEl` under
+// the same `playbackGeneration` protocol `playSequence` uses, so a tone and an
+// in-flight reply sequence cannot fight over the element: bumping the counter
+// tells any live sequence its turn is over. Resolves (never rejects) when the
+// clip ends, errors, or is blocked, matching `playSequence`.
+export function playTestTone(): Promise<void> {
+  playbackGeneration += 1
+  return new Promise<void>((resolve) => {
+    function settle() {
+      playbackEl.removeEventListener("ended", settle)
+      playbackEl.removeEventListener("error", settle)
+      resolve()
+    }
+    playbackEl.addEventListener("ended", settle, { once: true })
+    playbackEl.addEventListener("error", settle, { once: true })
+    playbackEl.muted = false
+    playbackEl.src = toneDataUrl()
+    playbackEl.play().catch(settle)
+  })
 }

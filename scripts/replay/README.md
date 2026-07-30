@@ -24,11 +24,11 @@ Point at a non-default API with `--base-url` or `AIRTIGHT_API_URL`.
 
 ## Scenarios
 
-| file | what it exercises |
-|---|---|
-| `scenario-mixed.json` | a believable full rehearsal: a clarify, clean passes, a coverage-gap follow-up that recovers, an over-claim, a concern that closes failed |
+| file                          | what it exercises                                                                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `scenario-mixed.json`         | a believable full rehearsal: a clarify, clean passes, a coverage-gap follow-up that recovers, an over-claim, a concern that closes failed        |
 | `scenario-contradiction.json` | Tier-0 `contradiction`: four conflicts between two things the presenter said, on facts absent from the RFP and proposal so nothing else can fire |
-| `scenario-false-fact.json` | Tier-1 `false_fact`: six claims refutable against the RFP or written proposal, chosen to stay off the authored red lines |
+| `scenario-false-fact.json`    | Tier-1 `false_fact`: six claims refutable against the RFP or written proposal, chosen to stay off the authored red lines                         |
 
 A scenario may declare `"expect_rows": ["contradiction"]` — the rubric rows that
 must fire somewhere in the run. `consistency_check.py` treats an expected row
@@ -71,21 +71,21 @@ comparison logic is unit-tested in
 
 The engine walks a **fixed agenda**, one owner per concern:
 
-| # | concern | persona |
-|---|---------|---------|
-| 1 | technical_approach  | technical_evaluator |
-| 2 | key_personnel       | technical_evaluator |
-| 3 | transition          | technical_evaluator |
-| 4 | risk                | technical_evaluator |
-| 5 | compliance_security | contracting_officer |
-| 6 | cost_realism        | contracting_officer |
-| 7 | past_performance    | contracting_officer |
-| 8 | operational_impact  | program_rep |
+| #   | concern             | persona             |
+| --- | ------------------- | ------------------- |
+| 1   | technical_approach  | technical_evaluator |
+| 2   | key_personnel       | technical_evaluator |
+| 3   | transition          | technical_evaluator |
+| 4   | risk                | technical_evaluator |
+| 5   | compliance_security | contracting_officer |
+| 6   | cost_realism        | contracting_officer |
+| 7   | past_performance    | contracting_officer |
+| 8   | operational_impact  | program_rep         |
 
 A scenario supplies one answer **per concern**; the runner feeds whichever answer
 matches the concern the engine says is active. This is why it can't just be a flat
 list of answers — the worked "sessions" in `docs/examples/example-sessions.md` are
-curated *slices* of specific concern interactions, not contiguous runnable
+curated _slices_ of specific concern interactions, not contiguous runnable
 sessions.
 
 ## Scenario format
