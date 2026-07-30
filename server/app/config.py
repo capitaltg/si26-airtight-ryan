@@ -23,8 +23,8 @@ class Settings(BaseSettings):
 
     text_answer_warning_words: int = 225
     text_answer_limit_words: int = 300
-    voice_answer_warning_seconds: float = 90
-    voice_answer_limit_seconds: float = 120
+    voice_answer_warning_seconds: float = 45
+    voice_answer_limit_seconds: float = 60
 
     # History retention. `POST /sessions` prunes: it keeps the `history_keep`
     # newest archived sessions and deletes any non-archived session older than

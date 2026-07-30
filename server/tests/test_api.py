@@ -324,7 +324,7 @@ def test_content_tangent_limits_are_disclosed(client: TestClient) -> None:
     assert response.status_code == 200
     assert response.json() == {
         "text": {"warning": 225.0, "limit": 300.0, "unit": "words"},
-        "voice": {"warning": 90.0, "limit": 120.0, "unit": "seconds"},
+        "voice": {"warning": 45.0, "limit": 60.0, "unit": "seconds"},
         "penalty": -1,
     }
 

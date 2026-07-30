@@ -7,7 +7,7 @@ from app.config import Settings
 def test_tangent_limit_defaults() -> None:
     settings = Settings()
     assert (settings.text_answer_warning_words, settings.text_answer_limit_words) == (225, 300)
-    assert (settings.voice_answer_warning_seconds, settings.voice_answer_limit_seconds) == (90, 120)
+    assert (settings.voice_answer_warning_seconds, settings.voice_answer_limit_seconds) == (45, 60)
 
 
 @pytest.mark.parametrize(
