@@ -109,6 +109,12 @@ export function Rehearsal() {
   useEffect(() => {
     submitAudioPendingRef.current = submitAudio.isPending
   }, [submitAudio.isPending])
+  // The spoken-prompt callback is created before recording begins, so it needs
+  // the current lock state rather than the render-time value it closed over.
+  const voiceAnswerLockedRef = useRef(voiceAnswerLocked)
+  useEffect(() => {
+    voiceAnswerLockedRef.current = voiceAnswerLocked
+  }, [voiceAnswerLocked])
   // Guards the hold-to-talk button's pointerup/pointercancel/blur handlers
   // (any of which can fire for a single press-and-release) against submitting
   // more than once per recording, independent of React's state-update timing.
@@ -215,6 +221,7 @@ export function Rehearsal() {
         setMode("text")
         setVoiceError(null)
         setReview(null)
+        voiceAnswerLockedRef.current = false
       },
     })
   }
@@ -350,7 +357,8 @@ export function Rehearsal() {
           recordingActiveRef.current ||
           stopInFlightRef.current ||
           modeRef.current !== "voice" ||
-          submitAudioPendingRef.current
+          submitAudioPendingRef.current ||
+          voiceAnswerLockedRef.current
         ) {
           return
         }
@@ -441,6 +449,9 @@ export function Rehearsal() {
         // to submit — but the recorder above has already been stopped and the
         // mic released either way.
         if (blob.size === 0 || !asked) return
+        // React has not necessarily rendered the mutation's pending state when
+        // a prompt-audio response arrives, so lock the callback path now.
+        voiceAnswerLockedRef.current = true
         transcribeAudio.mutate(blob, {
           onSuccess: (res) => {
             setReview({
@@ -450,6 +461,9 @@ export function Rehearsal() {
               text: res.transcript,
               durationSeconds: res.duration_seconds,
             })
+          },
+          onError: () => {
+            voiceAnswerLockedRef.current = false
           },
         })
       })
