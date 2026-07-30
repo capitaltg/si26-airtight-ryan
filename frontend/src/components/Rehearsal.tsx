@@ -124,6 +124,10 @@ export function Rehearsal() {
   // start promise lets stopRecording wait for it before deciding whether there's
   // anything to stop.
   const startPromiseRef = useRef<Promise<void> | null>(null)
+  // React Query's `isPending` only updates after React renders. Keep an
+  // immediate lock around review submission so two clicks in the same event
+  // turn cannot send the recorded answer twice.
+  const reviewSubmittingRef = useRef(false)
   // Guards re-entry into `stopRecording` itself: pointerup/pointercancel/blur/
   // keyup can all fire for a single press-and-release, and `recordingActiveRef`
   // alone no longer catches a second one landing while the first `stop()` call
@@ -201,6 +205,7 @@ export function Rehearsal() {
   }, [recorder.recording])
 
   function startSession() {
+    reviewSubmittingRef.current = false
     create.mutate(undefined, {
       onSuccess: (s) => {
         // Revoke the previous session's recorded-answer object URLs before
@@ -479,7 +484,9 @@ export function Rehearsal() {
   }
 
   function submitReview() {
-    if (!review || submitAudio.isPending || !review.text.trim()) return
+    if (!review || reviewSubmittingRef.current || submitAudio.isPending || !review.text.trim())
+      return
+    reviewSubmittingRef.current = true
     const { asked, blob, rawTranscript, text } = review
     primePlayback()
     setPending({ prompt: asked, answer: text, kind: "answer" })
@@ -516,6 +523,7 @@ export function Rehearsal() {
           if (res.done) void queryClient.invalidateQueries({ queryKey: ["history"] })
           setPending(null)
           setReview(null)
+          reviewSubmittingRef.current = false
           // Play the persona's spoken reply, then the next prompt's spoken
           // read-aloud, back to back. A rejected/blocked clip is swallowed by
           // playSequence itself; the transcript's <audio controls> is the
@@ -524,7 +532,10 @@ export function Rehearsal() {
             [res.reply_audio, res.next_prompt_audio].filter((s): s is string => s != null),
           )
         },
-        onError: () => setPending(null),
+        onError: () => {
+          setPending(null)
+          reviewSubmittingRef.current = false
+        },
       },
     )
   }
