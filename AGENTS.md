@@ -117,7 +117,8 @@ airtight/
 │  │  │  ├─ PromptIntro.tsx
 │  │  │  ├─ Rehearsal.tsx
 │  │  │  ├─ RubricPanel.tsx
-│  │  │  └─ StageStepper.tsx
+│  │  │  ├─ StageStepper.tsx
+│  │  │  └─ VoiceReview.tsx
 │  │  ├─ App.tsx
 │  │  ├─ audio.ts
 │  │  ├─ devices.ts              # audio device list, stored choice, level meter
