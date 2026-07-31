@@ -22,6 +22,8 @@ from app.pipeline.extraction import (
     build_extraction_static_prefix,
     run_extraction,
 )
+from app.pipeline.extraction_pin import InMemoryExtractionPin
+from app.pipeline.scoring import score_turn
 from app.schemas.extraction import Backing, Claim, ClaimType, Extraction
 
 
@@ -32,7 +34,7 @@ class FakeBedrockClient:
 
     def extract(
         self,
-        content: str | list,
+        content: str | list[Any],
         *,
         content_schema: type[BaseModel],
         tool_name: str,
@@ -487,3 +489,166 @@ def test_cold_call_leaves_the_models_own_span_untouched() -> None:
     result = _run(client, _ANCHOR_ANSWER)  # type: ignore[arg-type]
 
     assert result.extraction.claims[0].span == "Our PM has 12 years of federal work"
+
+
+class ScriptedBedrockClient:
+    """Returns a different extraction on each call, to prove the pin holds."""
+
+    def __init__(self, results: list[Extraction]) -> None:
+        self._results = list(results)
+        self.calls = 0
+
+    def extract(
+        self,
+        content: str | list[Any],
+        *,
+        content_schema: type[BaseModel],
+        tool_name: str,
+        max_tokens: int = 4096,
+        cache_key: CacheKeyInput | None = None,
+    ) -> BaseModel:
+        self.calls += 1
+        return self._results.pop(0)
+
+
+_GROUNDED_ANSWER = "We staff three named leads at contract start."
+
+
+def _clean_extraction() -> Extraction:
+    return Extraction(
+        claims=[
+            Claim(
+                text="Three named leads at contract start.",
+                type=ClaimType.commitment,
+                backing=Backing.backed,
+                span="three named leads at contract start",
+            )
+        ]
+    )
+
+
+def _harsher_extraction() -> Extraction:
+    """Same answer, but the model decided it was a bare promise this time."""
+    return Extraction(
+        claims=[
+            Claim(
+                text="Three named leads at contract start.",
+                type=ClaimType.commitment,
+                backing=Backing.bare,
+                span="three named leads at contract start",
+            )
+        ]
+    )
+
+
+def test_same_input_scores_the_same_when_the_model_disagrees_with_itself() -> None:
+    content, persona, concern = _fixture()
+    client = ScriptedBedrockClient([_clean_extraction(), _harsher_extraction()])
+    pin = InMemoryExtractionPin()
+
+    def once() -> int:
+        result = run_extraction(
+            answer=_GROUNDED_ANSWER,
+            concern=concern,
+            persona=persona,
+            content=content,
+            prior_claims=[],
+            client=client,  # type: ignore[arg-type]
+            pin=pin,
+        )
+        return score_turn(result.extraction, content.rubric).support_delta
+
+    first = once()
+    second = once()
+    assert first == second
+    assert client.calls == 1, "the second run must not reach the model"
+
+
+def test_whitespace_variant_of_the_same_answer_replays_the_pin() -> None:
+    content, persona, concern = _fixture()
+    client = ScriptedBedrockClient([_clean_extraction(), _harsher_extraction()])
+    pin = InMemoryExtractionPin()
+    run_extraction(
+        answer=_GROUNDED_ANSWER,
+        concern=concern,
+        persona=persona,
+        content=content,
+        prior_claims=[],
+        client=client,  # type: ignore[arg-type]
+        pin=pin,
+    )
+    run_extraction(
+        answer="  We  STAFF three named\nleads at contract start. ",
+        concern=concern,
+        persona=persona,
+        content=content,
+        prior_claims=[],
+        client=client,  # type: ignore[arg-type]
+        pin=pin,
+    )
+    assert client.calls == 1
+
+
+def test_a_rubric_change_rescores_without_touching_the_model() -> None:
+    content, persona, concern = _fixture()
+    client = ScriptedBedrockClient([_clean_extraction()])
+    pin = InMemoryExtractionPin()
+    result = run_extraction(
+        answer=_GROUNDED_ANSWER,
+        concern=concern,
+        persona=persona,
+        content=content,
+        prior_claims=[],
+        client=client,  # type: ignore[arg-type]
+        pin=pin,
+    )
+    baseline = score_turn(result.extraction, content.rubric).support_delta
+    bumped_rows = [
+        row.model_copy(update={"support_value": row.support_value - 1})
+        if row.id == "evidence_backed"
+        else row
+        for row in content.rubric.rows
+    ]
+    bumped = content.rubric.model_copy(update={"rows": bumped_rows})
+    assert score_turn(result.extraction, bumped).support_delta != baseline
+    assert client.calls == 1
+
+
+def test_run_extraction_grounds_before_scoring() -> None:
+    content, persona, concern = _fixture()
+    fabricated = Extraction(
+        claims=[
+            Claim(
+                text="invented",
+                type=ClaimType.commitment,
+                backing=Backing.backed,
+                span="a quote the presenter never typed",
+            )
+        ]
+    )
+    client = ScriptedBedrockClient([fabricated])
+    result = run_extraction(
+        answer=_GROUNDED_ANSWER,
+        concern=concern,
+        persona=persona,
+        content=content,
+        prior_claims=[],
+        client=client,  # type: ignore[arg-type]
+    )
+    assert result.extraction.claims == []
+    assert score_turn(result.extraction, content.rubric).support_delta == 0
+
+
+def test_pin_defaults_to_null_so_existing_callers_are_unpinned() -> None:
+    content, persona, concern = _fixture()
+    client = ScriptedBedrockClient([_clean_extraction(), _harsher_extraction()])
+    for _ in range(2):
+        run_extraction(
+            answer=_GROUNDED_ANSWER,
+            concern=concern,
+            persona=persona,
+            content=content,
+            prior_claims=[],
+            client=client,  # type: ignore[arg-type]
+        )
+    assert client.calls == 2

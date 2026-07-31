@@ -63,13 +63,19 @@ class _FakeClient:
                         text="Named architecture with committed leads.",
                         type=ClaimType.commitment,
                         backing=Backing.backed,
-                        span="named components, FedRAMP host, three integrations",
+                        span="architecture",
                     )
                 ],
                 sub_question_coverage=[
-                    SubQuestionCoverage(id="architecture", addressed=Addressed.full, span="x"),
-                    SubQuestionCoverage(id="hosting", addressed=Addressed.full, span="x"),
-                    SubQuestionCoverage(id="integrations", addressed=Addressed.full, span="x"),
+                    SubQuestionCoverage(
+                        id="architecture", addressed=Addressed.full, span="architecture"
+                    ),
+                    SubQuestionCoverage(
+                        id="hosting", addressed=Addressed.full, span="architecture"
+                    ),
+                    SubQuestionCoverage(
+                        id="integrations", addressed=Addressed.full, span="architecture"
+                    ),
                 ],
             )
         return PersonaReaction(in_character_reply="Concrete. Good.", rationale="+2 backed.")
@@ -92,7 +98,9 @@ class _PartialClient(_FakeClient):
         if content_schema is Extraction:
             return Extraction(
                 sub_question_coverage=[
-                    SubQuestionCoverage(id="architecture", addressed=Addressed.full, span="x")
+                    SubQuestionCoverage(
+                        id="architecture", addressed=Addressed.full, span="architecture"
+                    )
                 ]
             )
         return super().extract(

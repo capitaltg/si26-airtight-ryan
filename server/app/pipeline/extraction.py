@@ -22,9 +22,12 @@ from typing import Any
 
 from app.bedrock.cache import CacheKeyInput, normalize_answer
 from app.bedrock.client import BedrockClient
+from app.config import settings
 from app.content.loader import Content
 from app.db.models import ClaimLedger
 from app.pipeline.conciseness import compute_conciseness
+from app.pipeline.extraction_pin import ExtractionPin, NullExtractionPin, extraction_key
+from app.pipeline.grounding import drop_ungrounded
 from app.pipeline.span_anchor import reanchor_spans
 from app.schemas.content import Concern, PersonaDefinition
 from app.schemas.extraction import Conciseness, Extraction
@@ -256,44 +259,73 @@ def run_extraction(
     content: Content,
     prior_claims: Sequence[ClaimLedger],
     client: BedrockClient,
+    pin: ExtractionPin | None = None,
 ) -> ExtractionResult:
     """Build the prompt, force the ``Extraction`` schema through the tool, and
     attach code-computed conciseness.
 
     The prompt goes out as two content blocks: a cached static prefix (persona +
     RFP + proposal) and an uncached dynamic suffix (concern + ledger + answer).
-    The model sees the exact same text as a single string would produce, so the
-    extraction — and therefore the score — is unchanged. The cache key is hashed
-    from the same blocks rebuilt with the normalized answer, so whitespace- and
-    case-only variants of one answer replay the same cached extraction while the
-    model still sees the raw, verbatim answer. A replayed extraction quoted the
-    first phrasing, so its spans are re-anchored onto this answer before anything
-    persists them (see ``pipeline.span_anchor``); on a cold call that is a no-op.
+
+    ``pin`` makes the score a function of the input. The first extraction for a
+    given (normalized answer, persona, concern, ledger, content fingerprint) is
+    stored and replayed forever after, so the model cannot disagree with itself
+    across runs. It defaults to :class:`NullExtractionPin`, which keeps direct
+    callers — the golden suite above all — fully live.
+
+    Post-processing runs on the replay path too, and the order matters. A pinned
+    span was quoted out of an earlier phrasing, so ``reanchor_spans`` maps it onto
+    this answer first; then ``drop_ungrounded`` discards anything the answer does
+    not actually support; then ``drop_unanchored_flags`` handles Tier-0. Running
+    grounding before anchoring would throw out real findings whenever a presenter
+    retypes the same answer with different spacing.
     """
-    content_blocks = _blocks(
-        persona=persona,
-        content=content,
+    resolved_pin: ExtractionPin = pin if pin is not None else NullExtractionPin()
+    key = extraction_key(
         answer=answer,
-        concern=concern,
+        persona_id=persona.id,
+        concern_id=concern.concern_id,
         prior_claims=prior_claims,
+        extraction_fingerprint=content.extraction_fingerprint,
     )
-    normalized = normalize_answer(answer)
-    extraction = client.extract(
-        content_blocks,
-        content_schema=Extraction,
-        tool_name=TOOL_NAME,
-        cache_key=CacheKeyInput(
-            content=_blocks(
-                persona=persona,
-                content=content,
-                answer=normalized,
-                concern=concern,
-                prior_claims=prior_claims,
+
+    pinned = resolved_pin.get(key)
+    if pinned is not None:
+        extraction = Extraction.model_validate(pinned)
+    else:
+        content_blocks = _blocks(
+            persona=persona,
+            content=content,
+            answer=answer,
+            concern=concern,
+            prior_claims=prior_claims,
+        )
+        normalized = normalize_answer(answer)
+        extraction = client.extract(
+            content_blocks,
+            content_schema=Extraction,
+            tool_name=TOOL_NAME,
+            cache_key=CacheKeyInput(
+                content=_blocks(
+                    persona=persona,
+                    content=content,
+                    answer=normalized,
+                    concern=concern,
+                    prior_claims=prior_claims,
+                ),
+                normalized_answer=normalized,
             ),
-            normalized_answer=normalized,
-        ),
-    )
+        )
+        resolved_pin.put(
+            key,
+            tool_input=extraction.model_dump(mode="json"),
+            model_id=settings.bedrock_model_id,
+        )
+
     anchored = reanchor_spans(extraction, answer)
-    guarded = drop_unanchored_flags(anchored, prior_claims)
+    grounded = drop_ungrounded(
+        anchored, answer=answer, concern=concern, persona=persona
+    )
+    guarded = drop_unanchored_flags(grounded, prior_claims)
     conciseness = compute_conciseness(answer, guarded)
     return ExtractionResult(extraction=guarded, conciseness=conciseness)
