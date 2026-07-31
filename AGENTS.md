@@ -88,6 +88,10 @@ airtight/
 │  │  ├─ frontend.yml            # oxlint + oxfmt + build/typecheck (on frontend changes)
 │  │  └─ server.yml              # ruff + mypy + pytest (on server changes)
 │  └─ PULL_REQUEST_TEMPLATE.md
+├─ docs/
+│  └─ superpowers/
+│     └─ specs/
+│        └─ 2026-07-30-editable-voice-transcript-design.md
 ├─ e2e/                          # Playwright e2e smoke tests (boots stack via docker compose)
 │  ├─ tests/
 │  │  ├─ a11y-contrast.spec.ts   # axe-core WCAG 2.1 AA color-contrast check
