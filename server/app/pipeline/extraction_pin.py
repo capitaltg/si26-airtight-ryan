@@ -22,12 +22,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Sequence
 from typing import Any, Protocol
 
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import Session, sessionmaker
+
 from app.bedrock.cache import normalize_answer
-from app.db.models import ClaimLedger
+from app.db.models import ClaimLedger, ExtractionPinRow
 from app.schemas.extraction import Extraction
+
+logger = logging.getLogger(__name__)
 
 
 def extraction_key(
@@ -97,3 +103,47 @@ class InMemoryExtractionPin:
 
     def put(self, key: str, *, tool_input: dict[str, Any], model_id: str) -> None:
         self._rows.setdefault(key, dict(tool_input))
+
+
+class DbExtractionPin:
+    """An :class:`ExtractionPin` backed by the ``extraction_pin`` table.
+
+    Holds the session factory, not a session: each call opens and closes its own
+    short-lived session in the calling thread, which is what makes it safe from
+    the SSE worker thread and keeps the pin write independent of whether the
+    surrounding turn commits. Same shape as ``DbResponseCache``.
+
+    Every failure degrades to "no pin". A read error is a miss and a write error
+    is swallowed, so a database hiccup costs repeatability and never correctness:
+    a scored turn must not fail because the pin store is unhappy.
+    """
+
+    def __init__(self, session_factory: sessionmaker[Session]) -> None:
+        self._session_factory = session_factory
+
+    def get(self, key: str) -> dict[str, Any] | None:
+        try:
+            with self._session_factory() as db:
+                row = db.get(ExtractionPinRow, key)
+                return dict(row.tool_input) if row is not None else None
+        except SQLAlchemyError:
+            logger.warning("extraction pin read failed for %s; treating as a miss", key)
+            return None
+
+    def put(self, key: str, *, tool_input: dict[str, Any], model_id: str) -> None:
+        try:
+            with self._session_factory() as db:
+                if db.get(ExtractionPinRow, key) is not None:
+                    return
+                db.add(
+                    ExtractionPinRow(
+                        input_hash=key, tool_input=tool_input, model_id=model_id
+                    )
+                )
+                try:
+                    db.commit()
+                except IntegrityError:
+                    # A concurrent writer pinned this key first; theirs stands.
+                    db.rollback()
+        except SQLAlchemyError:
+            logger.warning("extraction pin write failed for %s; continuing uncached", key)

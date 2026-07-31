@@ -1,8 +1,13 @@
 """Extraction-pin key tests: what changes the key, and what must not."""
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
+
 from app.content.loader import load_content
-from app.db.models import ClaimLedger
+from app.db.models import Base, ClaimLedger, ExtractionPinRow
 from app.pipeline.extraction_pin import (
+    DbExtractionPin,
     InMemoryExtractionPin,
     NullExtractionPin,
     extraction_key,
@@ -78,3 +83,39 @@ def test_null_pin_never_stores() -> None:
     pin = NullExtractionPin()
     pin.put("k", tool_input={"claims": []}, model_id="m")
     assert pin.get("k") is None
+
+
+def _factory() -> sessionmaker[Session]:
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(engine)
+    return sessionmaker(bind=engine)
+
+
+def test_db_pin_round_trips_across_instances() -> None:
+    factory = _factory()
+    DbExtractionPin(factory).put("k", tool_input={"claims": []}, model_id="m")
+    assert DbExtractionPin(factory).get("k") == {"claims": []}
+
+
+def test_db_pin_is_first_write_wins() -> None:
+    factory = _factory()
+    pin = DbExtractionPin(factory)
+    pin.put("k", tool_input={"claims": ["first"]}, model_id="m")
+    pin.put("k", tool_input={"claims": ["second"]}, model_id="m")
+    assert pin.get("k") == {"claims": ["first"]}
+    with factory() as db:
+        assert db.query(ExtractionPinRow).count() == 1
+
+
+def test_db_pin_read_failure_is_a_miss_not_an_error() -> None:
+    engine = create_engine("sqlite://", poolclass=StaticPool)  # no tables created
+    pin = DbExtractionPin(sessionmaker(bind=engine))
+    assert pin.get("k") is None
+
+
+def test_db_pin_write_failure_is_swallowed() -> None:
+    engine = create_engine("sqlite://", poolclass=StaticPool)  # no tables created
+    pin = DbExtractionPin(sessionmaker(bind=engine))
+    pin.put("k", tool_input={"claims": []}, model_id="m")  # must not raise

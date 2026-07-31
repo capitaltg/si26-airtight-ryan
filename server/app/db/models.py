@@ -226,3 +226,31 @@ class ModelResponseCache(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class ExtractionPinRow(Base):
+    """One pinned extraction per turn-input (see :mod:`app.pipeline.extraction_pin`).
+
+    Separate from ``model_response_cache`` on purpose. That table keys on the
+    rendered prompt and serves persona reactions; this one keys on the turn's
+    inputs and is what makes the score a function of what the presenter said.
+    Not FK'd to ``sessions``: the whole point is that two runs of the same input,
+    in two different sessions, resolve to the same row.
+
+    Stores the model's raw tool input, not a score. Anchoring, grounding, and
+    scoring re-run on every replay, so a fix to any of those reaches pinned rows
+    without a model call. ``model_id`` is recorded so a model migration can be
+    handled with a targeted delete.
+    """
+
+    __tablename__ = "extraction_pin"
+
+    # sha256 hex of the canonical input payload (answer, persona, concern,
+    # ledger, content fingerprint, extraction schema).
+    input_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # The validated `record_extraction` tool input, exactly as the model emitted it.
+    tool_input: Mapped[dict[str, Any]] = mapped_column(JSON_)
+    model_id: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

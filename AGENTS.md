@@ -165,7 +165,8 @@ airtight/
 │  │  │  ├─ 0003_model_response_cache.py
 │  │  │  ├─ 0004_cache_normalized_answer.py
 │  │  │  ├─ 0005_turn_audio.py
-│  │  │  └─ 0006_session_history.py
+│  │  │  ├─ 0006_session_history.py
+│  │  │  └─ 0007_extraction_pin.py
 │  │  ├─ env.py
 │  │  └─ script.py.mako
 │  ├─ app/
