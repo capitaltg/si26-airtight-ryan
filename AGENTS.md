@@ -70,7 +70,6 @@ Note: the design docs still say `backend/`; the actual Python package lives in `
 ## Project structure
 
 <!-- STRUCTURE:START -->
-
 ```
 airtight/
 ├─ .devcontainer/
@@ -262,7 +261,6 @@ airtight/
 ├─ package.json
 └─ README.md                     # run/setup instructions
 ```
-
 <!-- STRUCTURE:END -->
 
 **Keep this tree current.** Whenever you add, remove, rename, or move a file or directory in this repo, update the block between the `STRUCTURE:START` and `STRUCTURE:END` markers in the same change, before you finish the task. The tree lists real files, not planned ones. When a directory fills with routine files (many schemas, components, tests), a one-line summary is fine instead of every filename. The full planned layout lives in the implementation plan; this block reflects what actually exists now.

@@ -56,6 +56,14 @@ async function holdWithMouse(page: Page) {
   await page.waitForTimeout(1200)
 }
 
+async function recordAnswer(page: Page) {
+  const button = page.getByRole("button", { name: HOLD_TO_TALK })
+  await button.hover()
+  await page.mouse.down()
+  await page.waitForTimeout(1200)
+  await page.mouse.up()
+}
+
 async function stubVoiceRoutes(page: Page, transcript: string, transcribeDelayMs = 0) {
   let transcribeCalls = 0
   let answerAudioCalls = 0
@@ -167,4 +175,64 @@ test("the confirm dialog blocks the mode toggle, the mic check, and push-to-talk
   await expect(page.getByTestId("discard-recording")).toBeVisible()
   await expect(page.getByRole("button", { name: RECORDING })).toHaveCount(0)
   await expect.poll(routes.transcribeCalls).toBe(0)
+})
+
+test("the Cancel button reaches a Space push-to-talk hold", async ({ page }) => {
+  const routes = await stubVoiceRoutes(page, RAW)
+  await openVoiceMode(page)
+
+  // A pointer hold captures the pointer on the talk button, so the Cancel
+  // button is only clickable during a keyboard hold. That is the case this
+  // covers; Escape covers the pointer case.
+  await page.keyboard.down("Space")
+  await expect(page.getByRole("button", { name: RECORDING })).toBeVisible()
+  await page.waitForTimeout(1200)
+  await page.getByTestId("cancel-recording").click()
+  await page.keyboard.up("Space")
+
+  await expect(page.getByTestId("discard-recording")).toBeVisible()
+  await page.getByTestId("discard-recording-discard").click()
+  await expect(page.getByRole("button", { name: HOLD_TO_TALK })).toBeVisible()
+  await expect.poll(routes.transcribeCalls).toBe(0)
+})
+
+test("Keep waiting leaves the transcription running", async ({ page }) => {
+  const routes = await stubVoiceRoutes(page, RAW, 3000)
+  await openVoiceMode(page)
+
+  await recordAnswer(page)
+  await expect(page.getByRole("button", { name: /Transcribing/ })).toBeVisible()
+  await page.getByTestId("cancel-recording").click()
+
+  await expect(page.getByTestId("discard-recording-keep")).toHaveText("Keep waiting")
+  await page.getByTestId("discard-recording-keep").click()
+
+  await expect(page.getByTestId("discard-recording")).toHaveCount(0)
+  await expect(page.getByTestId("voice-review")).toBeVisible()
+  await expect(page.getByTestId("voice-review-text")).toHaveValue(RAW)
+  await expect.poll(routes.transcribeCalls).toBe(1)
+})
+
+test("Discard take during transcription drops the take without an error", async ({ page }) => {
+  const routes = await stubVoiceRoutes(page, RAW, 3000)
+  await openVoiceMode(page)
+
+  await recordAnswer(page)
+  await expect(page.getByRole("button", { name: /Transcribing/ })).toBeVisible()
+  await page.getByTestId("cancel-recording").click()
+  await page.getByTestId("discard-recording-discard").click()
+
+  await expect(page.getByTestId("discard-recording")).toHaveCount(0)
+  await expect(page.getByRole("button", { name: HOLD_TO_TALK })).toBeVisible()
+  await expect(page.getByTestId("voice-review")).toHaveCount(0)
+
+  // The regression guard for a missing transcribeAudio.reset(): without it the
+  // aborted fetch renders as "The user aborted a request." next to the talk
+  // button. Waits past the stub's delay so a late response cannot sneak a
+  // review card in behind the assertion.
+  await page.waitForTimeout(3500)
+  await expect(page.getByText(/aborted/i)).toHaveCount(0)
+  await expect(page.locator(".text-red-700")).toHaveCount(0)
+  await expect(page.getByTestId("voice-review")).toHaveCount(0)
+  await expect.poll(routes.answerAudioCalls).toBe(0)
 })

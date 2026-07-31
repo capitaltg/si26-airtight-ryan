@@ -38,7 +38,7 @@ import { VoiceReview } from "./VoiceReview"
 // always stopped before this is set, so the take is already in hand and the mic
 // is already released: "Use recording" can still hand the blob to
 // transcription, and a discard just drops it.
-type DiscardPrompt = { kind: "recording"; blob: Blob; asked: Prompt }
+type DiscardPrompt = { kind: "recording"; blob: Blob; asked: Prompt } | { kind: "transcribing" }
 
 export function Rehearsal() {
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -154,6 +154,11 @@ export function Rehearsal() {
   // and the push-to-talk effect cleanup, any of which can fire for one press,
   // and only one of those five knows a cancel was asked for.
   const cancelIntentRef = useRef(false)
+  // The controller for the in-flight transcribe request, so a discard during
+  // "Transcribing…" can detach the client. The server may still finish the
+  // Amazon Transcribe call, which is acceptable: transcribe_audio writes
+  // nothing (server/app/api/sessions.py:457).
+  const transcribeAbortRef = useRef<AbortController | null>(null)
 
   const transcriptEndRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -465,20 +470,27 @@ export function Rehearsal() {
     // React has not necessarily rendered the mutation's pending state when a
     // prompt-audio response arrives, so lock the callback path now.
     voiceAnswerLockedRef.current = true
-    transcribeAudio.mutate(blob, {
-      onSuccess: (res) => {
-        setReview({
-          asked,
-          blob,
-          rawTranscript: res.transcript,
-          text: res.transcript,
-          durationSeconds: res.duration_seconds,
-        })
+    const controller = new AbortController()
+    transcribeAbortRef.current = controller
+    transcribeAudio.mutate(
+      { blob, signal: controller.signal },
+      {
+        onSuccess: (res) => {
+          transcribeAbortRef.current = null
+          setReview({
+            asked,
+            blob,
+            rawTranscript: res.transcript,
+            text: res.transcript,
+            durationSeconds: res.duration_seconds,
+          })
+        },
+        onError: () => {
+          transcribeAbortRef.current = null
+          voiceAnswerLockedRef.current = false
+        },
       },
-      onError: () => {
-        voiceAnswerLockedRef.current = false
-      },
-    })
+    )
   }
 
   function stopRecording() {
@@ -531,6 +543,13 @@ export function Rehearsal() {
     stopRecording()
   }
 
+  // Escape or the Cancel button while the transcript is still in flight. The
+  // request is deliberately left running: the dialog decides whether to abort
+  // it, so "Keep waiting" costs the presenter nothing.
+  function cancelTranscription() {
+    setDiscardPrompt({ kind: "transcribing" })
+  }
+
   // The non-destructive branch. A MediaRecorder cannot resume after stop() and
   // the presenter's finger is already off the button, so the honest opposite of
   // discarding is keeping the take: fall through to the normal transcribe and
@@ -545,7 +564,18 @@ export function Rehearsal() {
   // untouched: the question never changed, so the presenter answers the same
   // one again, still in voice mode, with no spoken-prompt replay.
   function discardTake() {
+    const current = discardPrompt
+    // Cleared in the same update as the reset below, so the stale-dialog effect
+    // cannot see a closing dialog and a settling mutation and fight over them.
     setDiscardPrompt(null)
+    if (current?.kind === "transcribing") {
+      transcribeAbortRef.current?.abort()
+      transcribeAbortRef.current = null
+      // Mandatory: Rehearsal renders transcribeAudio.error next to the talk
+      // button, so without this the abort prints "The user aborted a request."
+      // as if something had broken.
+      transcribeAudio.reset()
+    }
     voiceAnswerLockedRef.current = false
   }
 
@@ -621,11 +651,13 @@ export function Rehearsal() {
   const beginRecordingRef = useRef(beginRecording)
   const stopRecordingRef = useRef(stopRecording)
   const cancelRecordingRef = useRef(cancelRecording)
+  const cancelTranscriptionRef = useRef(cancelTranscription)
   const keepDiscardPromptRef = useRef(keepDiscardPrompt)
   useEffect(() => {
     beginRecordingRef.current = beginRecording
     stopRecordingRef.current = stopRecording
     cancelRecordingRef.current = cancelRecording
+    cancelTranscriptionRef.current = cancelTranscription
     keepDiscardPromptRef.current = keepDiscardPrompt
   })
 
@@ -699,7 +731,7 @@ export function Rehearsal() {
   // `cancelRecording` must not close over a stale one.
   useEffect(() => {
     if (micCheckOpen) return
-    if (!recorder.recording && discardPrompt === null) return
+    if (!recorder.recording && !transcribeAudio.isPending && discardPrompt === null) return
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== "Escape") return
       // Escape pressed on the dialog is a dismiss, so it takes the
@@ -709,11 +741,15 @@ export function Rehearsal() {
         keepDiscardPromptRef.current()
         return
       }
+      if (transcribeAudio.isPending) {
+        cancelTranscriptionRef.current()
+        return
+      }
       cancelRecordingRef.current()
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [recorder.recording, discardPrompt, micCheckOpen])
+  }, [recorder.recording, transcribeAudio.isPending, discardPrompt, micCheckOpen])
 
   // A past rehearsal is open: it owns the whole screen. Checked before the
   // landing and report branches so opening a card works from either one.
@@ -1047,9 +1083,11 @@ export function Rehearsal() {
                       onKeyDown={handleTalkKeyDown}
                       onKeyUp={handleTalkKeyUp}
                       aria-label={
-                        recorder.recording
-                          ? "Recording your answer — release to send"
-                          : "Hold this button, or hold the space bar, to record your answer"
+                        transcribeAudio.isPending
+                          ? "Transcribing your answer"
+                          : recorder.recording
+                            ? "Recording your answer — release to send"
+                            : "Hold this button, or hold the space bar, to record your answer"
                       }
                       disabled={
                         transcribeAudio.isPending || submitAudio.isPending || discardPrompt !== null
@@ -1068,6 +1106,29 @@ export function Rehearsal() {
                             ? "Recording… release to send"
                             : "Hold to talk (or hold Space)"}
                     </button>
+                    {/* The discoverable cancel path, and the only one that
+                        works during a Space push-to-talk hold or while a
+                        transcript is in flight. Unreachable during a mouse or
+                        touch hold: startRecording takes pointer capture
+                        (:397), so every pointer event routes to the talk
+                        button until release. Escape covers that case.
+                        Hijacking pointer capture to make a second button
+                        clickable mid-hold would put the release races at
+                        :419-444 back in play. */}
+                    {(recorder.recording || transcribeAudio.isPending) && (
+                      <button
+                        type="button"
+                        data-testid="cancel-recording"
+                        onClick={() =>
+                          transcribeAudio.isPending ? cancelTranscription() : cancelRecording()
+                        }
+                        disabled={discardPrompt !== null}
+                        aria-label="Cancel this recording and answer again"
+                        className="w-full rounded-lg border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        Cancel (or press Escape)
+                      </button>
+                    )}
                     {transcribeAudio.isError && (
                       <p className="text-sm text-red-700">
                         {(transcribeAudio.error as Error).message}
