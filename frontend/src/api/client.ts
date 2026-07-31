@@ -93,8 +93,11 @@ async function submitAnswerStream(
   return result
 }
 
-async function postMultipart<T>(path: string, form: FormData): Promise<T> {
-  const res = await fetch(`/api${path}`, { method: "POST", body: form })
+// `signal` is optional and only voice transcription passes one: a mid-flight
+// transcribe can be abandoned (nothing is written server-side either way),
+// while a submitted answer cannot.
+async function postMultipart<T>(path: string, form: FormData, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(`/api${path}`, { method: "POST", body: form, signal })
   if (!res.ok) {
     let detail = `HTTP ${res.status}`
     try {
@@ -125,10 +128,14 @@ async function submitAnswerAudio(
   return postMultipart<VoiceAnswerResponse>(`/sessions/${id}/answer_audio`, form)
 }
 
-async function transcribeAudio(id: string, blob: Blob): Promise<TranscribeResponse> {
+async function transcribeAudio(
+  id: string,
+  blob: Blob,
+  signal?: AbortSignal,
+): Promise<TranscribeResponse> {
   const form = new FormData()
   form.append("audio", blob, "answer.webm")
-  return postMultipart<TranscribeResponse>(`/sessions/${id}/transcribe_audio`, form)
+  return postMultipart<TranscribeResponse>(`/sessions/${id}/transcribe_audio`, form, signal)
 }
 
 export const api = {
@@ -194,9 +201,9 @@ export function useSubmitAnswerAudio(sessionId: string | null) {
 
 export function useTranscribeAudio(sessionId: string | null) {
   return useMutation({
-    mutationFn: (blob: Blob) => {
+    mutationFn: ({ blob, signal }: { blob: Blob; signal?: AbortSignal }) => {
       if (!sessionId) throw new Error("no active session")
-      return api.transcribeAudio(sessionId, blob)
+      return api.transcribeAudio(sessionId, blob, signal)
     },
   })
 }

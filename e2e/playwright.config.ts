@@ -8,7 +8,7 @@ const WEB_URL = process.env.E2E_WEB_URL ?? "http://localhost:5173"
 // and exposes more than one named fake input — a moving meter and a real second
 // option to select. Kept in its own project so the rest of the suite keeps
 // exercising the normal permission path.
-const MIC_SPEC = /(mic-check|voice-transcript-edit)\.spec\.ts/
+const MIC_SPEC = /(mic-check|voice-transcript-edit|cancel-recording)\.spec\.ts/
 
 export default defineConfig({
   testDir: "./tests",

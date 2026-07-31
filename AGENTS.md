@@ -70,6 +70,7 @@ Note: the design docs still say `backend/`; the actual Python package lives in `
 ## Project structure
 
 <!-- STRUCTURE:START -->
+
 ```
 airtight/
 ├─ .devcontainer/
@@ -87,9 +88,15 @@ airtight/
 │  │  ├─ frontend.yml            # oxlint + oxfmt + build/typecheck (on frontend changes)
 │  │  └─ server.yml              # ruff + mypy + pytest (on server changes)
 │  └─ PULL_REQUEST_TEMPLATE.md
+├─ docs/
+│  └─ superpowers/
+│     └─ specs/
+│        ├─ 2026-07-30-cancel-microphone-input-design.md
+│        └─ 2026-07-30-editable-voice-transcript-design.md
 ├─ e2e/                          # Playwright e2e smoke tests (boots stack via docker compose)
 │  ├─ tests/
 │  │  ├─ a11y-contrast.spec.ts   # axe-core WCAG 2.1 AA color-contrast check
+│  │  ├─ cancel-recording.spec.ts
 │  │  ├─ health.spec.ts
 │  │  ├─ mic-check.spec.ts       # device pickers, level meter, loopback (fake media project)
 │  │  ├─ persona-intro.spec.ts
@@ -110,6 +117,7 @@ airtight/
 │  │  │  ├─ AfterActionReport.tsx
 │  │  │  ├─ ArchiveView.tsx
 │  │  │  ├─ ChatTurn.tsx
+│  │  │  ├─ DiscardRecordingDialog.tsx
 │  │  │  ├─ HistoryList.tsx
 │  │  │  ├─ MeterBar.tsx
 │  │  │  ├─ MicCheck.tsx
@@ -147,6 +155,7 @@ airtight/
 │  ├─ consistency_check.py
 │  ├─ replay_session.py
 │  ├─ smoke_bedrock.py
+│  ├─ test_update_structure.py
 │  └─ update_structure.py
 ├─ server/                       # FastAPI + Pydantic v2 + SQLAlchemy + Alembic
 │  ├─ alembic/
@@ -259,6 +268,7 @@ airtight/
 ├─ package.json
 └─ README.md                     # run/setup instructions
 ```
+
 <!-- STRUCTURE:END -->
 
 **Keep this tree current.** Whenever you add, remove, rename, or move a file or directory in this repo, update the block between the `STRUCTURE:START` and `STRUCTURE:END` markers in the same change, before you finish the task. The tree lists real files, not planned ones. When a directory fills with routine files (many schemas, components, tests), a one-line summary is fine instead of every filename. The full planned layout lives in the implementation plan; this block reflects what actually exists now.
