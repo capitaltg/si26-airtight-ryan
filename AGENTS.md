@@ -155,6 +155,7 @@ airtight/
 │  ├─ consistency_check.py
 │  ├─ replay_session.py
 │  ├─ smoke_bedrock.py
+│  ├─ test_update_structure.py
 │  └─ update_structure.py
 ├─ server/                       # FastAPI + Pydantic v2 + SQLAlchemy + Alembic
 │  ├─ alembic/
@@ -247,7 +248,6 @@ airtight/
 │  │  ├─ test_session_archive.py
 │  │  ├─ test_span_anchor.py
 │  │  ├─ test_tier0_flags.py
-│  │  ├─ test_update_structure.py
 │  │  ├─ test_voice_audio.py
 │  │  ├─ test_voice_polly.py
 │  │  └─ test_voice_transcribe.py
