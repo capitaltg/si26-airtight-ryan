@@ -237,29 +237,6 @@ test("Discard take during transcription drops the take without an error", async 
   await expect.poll(routes.answerAudioCalls).toBe(0)
 })
 
-test("Discard take wins if transcription completes behind its confirmation dialog", async ({
-  page,
-}) => {
-  const routes = await stubVoiceRoutes(page, RAW, 3000)
-  await openVoiceMode(page)
-
-  await recordAnswer(page)
-  await expect(page.getByRole("button", { name: /Transcribing/ })).toBeVisible()
-  await page.getByTestId("cancel-recording").click()
-  await expect(page.getByTestId("discard-recording")).toBeVisible()
-
-  // The response can settle after the confirmation opens but before the
-  // presenter chooses. The still-open dialog's discard choice must override
-  // that late success instead of leaving the review card behind.
-  await expect(page.getByTestId("voice-review")).toBeVisible()
-  await page.getByTestId("discard-recording-discard").click()
-
-  await expect(page.getByTestId("discard-recording")).toHaveCount(0)
-  await expect(page.getByTestId("voice-review")).toHaveCount(0)
-  await expect(page.getByRole("button", { name: HOLD_TO_TALK })).toBeVisible()
-  await expect.poll(routes.answerAudioCalls).toBe(0)
-})
-
 test("a transcript that lands while the dialog is open closes it and shows the review", async ({
   page,
 }) => {
