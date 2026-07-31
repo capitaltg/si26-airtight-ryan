@@ -15,6 +15,7 @@ import type {
   SessionState,
   Stage,
   TangentLimits,
+  TranscribeResponse,
   VoiceAnswerResponse,
 } from "../types"
 
@@ -92,13 +93,8 @@ async function submitAnswerStream(
   return result
 }
 
-// Voice mode's answer submission: a multipart recording, not JSON, so it can't
-// go through `request` (which hardcodes a JSON Content-Type and would break the
-// multipart boundary the browser needs to set itself).
-async function submitAnswerAudio(id: string, blob: Blob): Promise<VoiceAnswerResponse> {
-  const form = new FormData()
-  form.append("audio", blob, "answer.webm")
-  const res = await fetch(`/api/sessions/${id}/answer_audio`, { method: "POST", body: form })
+async function postMultipart<T>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(`/api${path}`, { method: "POST", body: form })
   if (!res.ok) {
     let detail = `HTTP ${res.status}`
     try {
@@ -109,7 +105,30 @@ async function submitAnswerAudio(id: string, blob: Blob): Promise<VoiceAnswerRes
     }
     throw new Error(detail)
   }
-  return res.json() as Promise<VoiceAnswerResponse>
+  return res.json() as Promise<T>
+}
+
+// Voice mode's answer submission: a multipart recording, not JSON, so it can't
+// go through `request` (which hardcodes a JSON Content-Type and would break the
+// multipart boundary the browser needs to set itself).
+async function submitAnswerAudio(
+  id: string,
+  blob: Blob,
+  edit?: { answer: string; rawTranscript: string },
+): Promise<VoiceAnswerResponse> {
+  const form = new FormData()
+  form.append("audio", blob, "answer.webm")
+  if (edit) {
+    form.append("answer", edit.answer)
+    form.append("raw_transcript", edit.rawTranscript)
+  }
+  return postMultipart<VoiceAnswerResponse>(`/sessions/${id}/answer_audio`, form)
+}
+
+async function transcribeAudio(id: string, blob: Blob): Promise<TranscribeResponse> {
+  const form = new FormData()
+  form.append("audio", blob, "answer.webm")
+  return postMultipart<TranscribeResponse>(`/sessions/${id}/transcribe_audio`, form)
 }
 
 export const api = {
@@ -122,6 +141,7 @@ export const api = {
     }),
   submitAnswerStream,
   submitAnswerAudio,
+  transcribeAudio,
   promptAudio: (id: string) => request<PromptAudio>(`/sessions/${id}/prompt_audio`),
   askClarification: (id: string, question: string) =>
     request<ClarifyResponse>(`/sessions/${id}/clarify`, {
@@ -157,9 +177,26 @@ export function useSubmitAnswer(sessionId: string | null) {
 // transcript, score, and spoken reply/next-prompt audio all in one round trip.
 export function useSubmitAnswerAudio(sessionId: string | null) {
   return useMutation({
+    mutationFn: ({
+      blob,
+      answer,
+      rawTranscript,
+    }: {
+      blob: Blob
+      answer: string
+      rawTranscript: string
+    }) => {
+      if (!sessionId) throw new Error("no active session")
+      return api.submitAnswerAudio(sessionId, blob, { answer, rawTranscript })
+    },
+  })
+}
+
+export function useTranscribeAudio(sessionId: string | null) {
+  return useMutation({
     mutationFn: (blob: Blob) => {
       if (!sessionId) throw new Error("no active session")
-      return api.submitAnswerAudio(sessionId, blob)
+      return api.transcribeAudio(sessionId, blob)
     },
   })
 }

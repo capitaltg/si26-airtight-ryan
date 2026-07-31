@@ -11,8 +11,9 @@ from typing import Any
 import pytest
 
 import app.voice.transcribe as transcribe_module
+from app.api.deps import get_duration_measurer
 from app.voice import TranscriptionError
-from app.voice.transcribe import duration_seconds, transcribe_audio
+from app.voice.transcribe import duration_seconds, measure_duration, transcribe_audio
 
 
 def _result(transcript: str, *, is_partial: bool) -> SimpleNamespace:
@@ -135,3 +136,30 @@ def test_duration_seconds_uses_pcm_frame_count() -> None:
     assert duration_seconds(b"", rate) == 0
     assert duration_seconds(b"\0" * (rate * 2 * 120), rate) == 120
     assert duration_seconds(b"\0" * (rate * 2 * 120 + 2), rate) > 120
+
+
+def test_measure_duration_uses_decoded_pcm_frames(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Seconds come from decoded PCM frames, not container byte count."""
+    rate = transcribe_module.settings.transcribe_sample_rate
+    monkeypatch.setattr(
+        transcribe_module,
+        "to_pcm16",
+        lambda audio, content_type: b"\0" * (rate * 2 * 3),
+    )
+
+    assert measure_duration(b"raw-audio", "audio/webm") == 3.0
+
+
+def test_measure_duration_propagates_a_decode_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _boom(audio: bytes, content_type: str) -> bytes:
+        raise TranscriptionError("audio decode failed")
+
+    monkeypatch.setattr(transcribe_module, "to_pcm16", _boom)
+
+    with pytest.raises(TranscriptionError):
+        measure_duration(b"raw-audio", "audio/webm")
+
+
+def test_get_duration_measurer_returns_the_real_measurer() -> None:
+    """The dependency defaults to the production duration measurer."""
+    assert get_duration_measurer() is measure_duration

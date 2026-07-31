@@ -18,7 +18,7 @@ from app.bedrock.client import BedrockClient
 from app.content.loader import Content
 from app.db.session import SessionLocal, get_db  # re-exported for routers to depend on
 from app.voice.polly import synthesize_speech
-from app.voice.transcribe import TranscriptionResult, transcribe_audio
+from app.voice.transcribe import TranscriptionResult, measure_duration, transcribe_audio
 
 __all__ = [
     "get_db",
@@ -26,6 +26,7 @@ __all__ = [
     "get_bedrock_client",
     "get_session_factory",
     "get_transcriber",
+    "get_duration_measurer",
     "get_synthesizer",
 ]
 
@@ -56,6 +57,10 @@ class Transcriber(Protocol):
     def __call__(self, audio: bytes, content_type: str) -> TranscriptionResult: ...
 
 
+class DurationMeasurer(Protocol):
+    def __call__(self, audio: bytes, content_type: str) -> float: ...
+
+
 class Synthesizer(Protocol):
     def __call__(self, text: str, voice_id: str) -> bytes: ...
 
@@ -65,6 +70,12 @@ def get_transcriber() -> Transcriber:
     # in a scripted fake via `app.dependency_overrides`, same as
     # `get_bedrock_client`.
     return transcribe_audio
+
+
+def get_duration_measurer() -> DurationMeasurer:
+    # ffmpeg lives behind this indirection so tests can swap in a fake without
+    # shelling out to a subprocess.
+    return measure_duration
 
 
 def get_synthesizer() -> Synthesizer:

@@ -38,6 +38,12 @@ def duration_seconds(pcm: bytes, sample_rate: int) -> float:
     return len(pcm) / (sample_rate * 2)
 
 
+def measure_duration(audio: bytes, content_type: str) -> float:
+    """Duration of recorded audio after decoding it to transcription PCM."""
+    pcm = to_pcm16(audio, content_type)
+    return round(duration_seconds(pcm, settings.transcribe_sample_rate), 3)
+
+
 class _StreamingClient(Protocol):
     async def start_stream_transcription(self, **kwargs: Any) -> Any: ...
 

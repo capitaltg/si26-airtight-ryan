@@ -16,6 +16,7 @@ import {
   useSubmitAnswer,
   useSubmitAnswerAudio,
   useTangentLimits,
+  useTranscribeAudio,
 } from "../api/client"
 import { playSequence, primePlayback, setOutputDevice, useRecorder } from "../audio"
 import { useDevicePreferences } from "../devices"
@@ -30,6 +31,7 @@ import { MicCheck } from "./MicCheck"
 import { PendingTurn } from "./PendingTurn"
 import { PromptIntro } from "./PromptIntro"
 import { RubricPanel } from "./RubricPanel"
+import { VoiceReview } from "./VoiceReview"
 
 export function Rehearsal() {
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -75,6 +77,13 @@ export function Rehearsal() {
   // Surfaces a getUserMedia rejection (mic permission denied, no device, etc.)
   // after voice mode auto-falls-back to text — see the recorder.error effect below.
   const [voiceError, setVoiceError] = useState<string | null>(null)
+  const [review, setReview] = useState<{
+    asked: Prompt
+    blob: Blob
+    rawTranscript: string
+    text: string
+    durationSeconds: number
+  } | null>(null)
 
   const create = useCreateSession()
   const submit = useSubmitAnswer(sessionId)
@@ -85,6 +94,13 @@ export function Rehearsal() {
   const { inputId, outputId, setInputId, setOutputId } = useDevicePreferences()
   const recorder = useRecorder(inputId)
   const submitAudio = useSubmitAnswerAudio(sessionId)
+  const transcribeAudio = useTranscribeAudio(sessionId)
+  // Once a voice recording is released, it stays attached to this prompt until
+  // transcription either fails (so it can be retaken) or opens the review card.
+  // `submitAudio.isPending` is part of the lock because the review card now
+  // closes on submit: without it, clearing `review` would unlock voice mode
+  // while the answer is still being scored.
+  const voiceAnswerLocked = transcribeAudio.isPending || submitAudio.isPending || review !== null
   const speakPrompt = useSpeakPrompt(sessionId)
   const queryClient = useQueryClient()
   // Mirrors `submitAudio.isPending` for the `speakPrompt.onSuccess` closure in
@@ -96,6 +112,12 @@ export function Rehearsal() {
   useEffect(() => {
     submitAudioPendingRef.current = submitAudio.isPending
   }, [submitAudio.isPending])
+  // The spoken-prompt callback is created before recording begins, so it needs
+  // the current lock state rather than the render-time value it closed over.
+  const voiceAnswerLockedRef = useRef(voiceAnswerLocked)
+  useEffect(() => {
+    voiceAnswerLockedRef.current = voiceAnswerLocked
+  }, [voiceAnswerLocked])
   // Guards the hold-to-talk button's pointerup/pointercancel/blur handlers
   // (any of which can fire for a single press-and-release) against submitting
   // more than once per recording, independent of React's state-update timing.
@@ -105,6 +127,10 @@ export function Rehearsal() {
   // start promise lets stopRecording wait for it before deciding whether there's
   // anything to stop.
   const startPromiseRef = useRef<Promise<void> | null>(null)
+  // React Query's `isPending` only updates after React renders. Keep an
+  // immediate lock around review submission so two clicks in the same event
+  // turn cannot send the recorded answer twice.
+  const reviewSubmittingRef = useRef(false)
   // Guards re-entry into `stopRecording` itself: pointerup/pointercancel/blur/
   // keyup can all fire for a single press-and-release, and `recordingActiveRef`
   // alone no longer catches a second one landing while the first `stop()` call
@@ -124,10 +150,10 @@ export function Rehearsal() {
   useEffect(() => {
     if (recorder.error) {
       recordingActiveRef.current = false
-      setMode("text")
+      if (!voiceAnswerLocked) setMode("text")
       setVoiceError(recorder.error)
     }
-  }, [recorder.error])
+  }, [recorder.error, voiceAnswerLocked])
 
   // Route persona replies and spoken prompts to the chosen output. Keyed on the
   // id so a change made in either mic check placement applies at once. A
@@ -182,6 +208,7 @@ export function Rehearsal() {
   }, [recorder.recording])
 
   function startSession() {
+    reviewSubmittingRef.current = false
     create.mutate(undefined, {
       onSuccess: (s) => {
         // Revoke the previous session's recorded-answer object URLs before
@@ -201,6 +228,8 @@ export function Rehearsal() {
         setDraft("")
         setMode("text")
         setVoiceError(null)
+        setReview(null)
+        voiceAnswerLockedRef.current = false
       },
     })
   }
@@ -217,7 +246,7 @@ export function Rehearsal() {
 
   function sendAnswer() {
     const answer = draft.trim()
-    if (!answer || !prompt || submit.isPending) return
+    if (!answer || !prompt || submit.isPending || voiceAnswerLocked) return
     const asked = prompt // capture the prompt this answer responds to
     // Show the answer immediately with a stepper starting at the first stage;
     // `onStage` advances it as the SSE stream reports each pipeline boundary.
@@ -263,7 +292,8 @@ export function Rehearsal() {
 
   function sendClarification() {
     const question = draft.trim()
-    if (!question || !prompt || clarify.isPending || clarifyRemaining === 0) return
+    if (!question || !prompt || clarify.isPending || clarifyRemaining === 0 || voiceAnswerLocked)
+      return
     const asked = prompt
     // Same optimistic placeholder as a scored answer: the question lands
     // immediately with a live spinner while the evaluator replies.
@@ -314,6 +344,7 @@ export function Rehearsal() {
   // presenter from entering voice mode. This matches `playSequence`, which
   // already swallows blocked and failed clips.
   function enterVoiceMode() {
+    if (voiceAnswerLocked) return
     const wasText = mode === "text"
     setVoiceError(null)
     setMode("voice")
@@ -334,7 +365,8 @@ export function Rehearsal() {
           recordingActiveRef.current ||
           stopInFlightRef.current ||
           modeRef.current !== "voice" ||
-          submitAudioPendingRef.current
+          submitAudioPendingRef.current ||
+          voiceAnswerLockedRef.current
         ) {
           return
         }
@@ -350,7 +382,7 @@ export function Rehearsal() {
   // round trip, well outside any user gesture) isn't blocked by the browser's
   // autoplay policy.
   function beginRecording() {
-    if (recordingActiveRef.current || submitAudio.isPending) return
+    if (recordingActiveRef.current || submitAudio.isPending || transcribeAudio.isPending) return
     recordingActiveRef.current = true
     primePlayback()
     startPromiseRef.current = recorder.start()
@@ -361,7 +393,7 @@ export function Rehearsal() {
   // pointerup/pointercancel here (touch gets this for free via implicit
   // capture; a plain mouse doesn't).
   function startRecording(e: PointerEvent<HTMLButtonElement>) {
-    if (recordingActiveRef.current || submitAudio.isPending) return
+    if (recordingActiveRef.current || submitAudio.isPending || transcribeAudio.isPending) return
     e.currentTarget.setPointerCapture(e.pointerId)
     beginRecording()
   }
@@ -425,50 +457,22 @@ export function Rehearsal() {
         // to submit — but the recorder above has already been stopped and the
         // mic released either way.
         if (blob.size === 0 || !asked) return
-        // Same optimistic-pending flow as a typed answer, but there's no
-        // transcript yet to show, so the placeholder answer is blank.
-        setPending({ prompt: asked, answer: "", kind: "answer" })
-        setStage("extracting")
-        submitAudio.mutate(blob, {
+        // React has not necessarily rendered the mutation's pending state when
+        // a prompt-audio response arrives, so lock the callback path now.
+        voiceAnswerLockedRef.current = true
+        transcribeAudio.mutate(blob, {
           onSuccess: (res) => {
-            setTranscript((prev) => [
-              ...prev,
-              {
-                key: prev.length,
-                personaId: res.persona_id,
-                displayName: asked.display_name,
-                concernId: res.concern_id,
-                isFollowUp: asked.is_follow_up,
-                prompt: asked.prompt,
-                intro: asked.intro,
-                answer: res.transcript,
-                reply: res.reply,
-                rationale: res.rationale,
-                supportDelta: res.support_delta,
-                matchedRows: res.matched_rows,
-                capped: res.capped,
-                limit: res.limit,
-                transcript: res.transcript,
-                audioUrl: URL.createObjectURL(blob),
-              },
-            ])
-            setMeters(res.meters)
-            setPrompt(res.next_prompt)
-            setDone(res.done)
-            // A done turn archived the session server-side, so the list is stale.
-            if (res.done) void queryClient.invalidateQueries({ queryKey: ["history"] })
-            setPending(null)
-            // Play the persona's spoken reply, then the next prompt's spoken
-            // read-aloud, back to back. A rejected/blocked clip is swallowed by
-            // playSequence itself; the transcript's <audio controls> is the
-            // fallback for that case.
-            void playSequence(
-              [res.reply_audio, res.next_prompt_audio].filter((s): s is string => s != null),
-            )
+            setReview({
+              asked,
+              blob,
+              rawTranscript: res.transcript,
+              text: res.transcript,
+              durationSeconds: res.duration_seconds,
+            })
           },
-          // Clear the placeholder; submitAudio.isError red text surfaces the
-          // message the same way submit.isError does for the text path.
-          onError: () => setPending(null),
+          onError: () => {
+            voiceAnswerLockedRef.current = false
+          },
         })
       })
       .catch(() => {
@@ -480,6 +484,69 @@ export function Rehearsal() {
         recordingActiveRef.current = false
         stopInFlightRef.current = false
       })
+  }
+
+  function submitReview() {
+    if (!review || reviewSubmittingRef.current || submitAudio.isPending || !review.text.trim())
+      return
+    reviewSubmittingRef.current = true
+    const submitted = review
+    const { asked, blob, rawTranscript, text } = submitted
+    primePlayback()
+    setPending({ prompt: asked, answer: text, kind: "answer" })
+    setStage("extracting")
+    // The pending turn already shows the edited answer, so the review card has
+    // nothing left to say — close it on submit instead of leaving a duplicate
+    // of the same text on screen while scoring runs. A failed submission puts
+    // it back with the edits intact so the take can be retried.
+    setReview(null)
+    submitAudio.mutate(
+      { blob, answer: text, rawTranscript },
+      {
+        onSuccess: (res) => {
+          setTranscript((prev) => [
+            ...prev,
+            {
+              key: prev.length,
+              personaId: res.persona_id,
+              displayName: asked.display_name,
+              concernId: res.concern_id,
+              isFollowUp: asked.is_follow_up,
+              prompt: asked.prompt,
+              intro: asked.intro,
+              answer: res.transcript,
+              reply: res.reply,
+              rationale: res.rationale,
+              supportDelta: res.support_delta,
+              matchedRows: res.matched_rows,
+              capped: res.capped,
+              limit: res.limit,
+              transcript: rawTranscript,
+              audioUrl: URL.createObjectURL(blob),
+            },
+          ])
+          setMeters(res.meters)
+          setPrompt(res.next_prompt)
+          setDone(res.done)
+          // A done turn archived the session server-side, so the list is stale.
+          if (res.done) void queryClient.invalidateQueries({ queryKey: ["history"] })
+          setPending(null)
+          reviewSubmittingRef.current = false
+          // Play the persona's spoken reply, then the next prompt's spoken
+          // read-aloud, back to back. A rejected/blocked clip is swallowed by
+          // playSequence itself; the transcript's <audio controls> is the
+          // fallback for that case.
+          void playSequence(
+            [res.reply_audio, res.next_prompt_audio].filter((s): s is string => s != null),
+          )
+        },
+        onError: () => {
+          setPending(null)
+          setReview(submitted)
+          reviewSubmittingRef.current = false
+        },
+      },
+    )
   }
 
   // Global push-to-talk: holding Space anywhere in voice mode records, so the
@@ -501,7 +568,8 @@ export function Rehearsal() {
   // `!micCheckOpen`: the panel has its own Record button, and Space pressed on
   // it would otherwise also fire the window listener and start a rehearsal
   // recording behind the modal.
-  const pushToTalkEnabled = mode === "voice" && !done && prompt !== null && !micCheckOpen
+  const pushToTalkEnabled =
+    mode === "voice" && !done && prompt !== null && !micCheckOpen && !voiceAnswerLocked
   useEffect(() => {
     if (!pushToTalkEnabled) return
     // Space is a normal character in a text field; never steal it from one.
@@ -707,8 +775,7 @@ export function Rehearsal() {
             // input box would only duplicate the wait.
             prompt &&
             !submit.isPending &&
-            !clarify.isPending &&
-            !submitAudio.isPending && (
+            !clarify.isPending && (
               <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-center justify-between gap-2 text-sm">
                   <div className="flex items-center gap-2">
@@ -727,7 +794,8 @@ export function Rehearsal() {
                     <button
                       type="button"
                       onClick={() => setMicCheckOpen(true)}
-                      className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50"
+                      disabled={voiceAnswerLocked}
+                      className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
                     >
                       Mic check
                     </button>
@@ -737,23 +805,27 @@ export function Rehearsal() {
                     <div className="flex overflow-hidden rounded-md border border-slate-300 text-xs font-semibold">
                       <button
                         type="button"
-                        onClick={() => setMode("text")}
+                        onClick={() => {
+                          if (!voiceAnswerLocked) setMode("text")
+                        }}
+                        disabled={voiceAnswerLocked}
                         className={`px-2.5 py-1 transition ${
                           mode === "text"
                             ? "bg-slate-900 text-white"
                             : "bg-white text-slate-600 hover:bg-slate-50"
-                        }`}
+                        } disabled:opacity-50`}
                       >
                         Text
                       </button>
                       <button
                         type="button"
                         onClick={enterVoiceMode}
+                        disabled={voiceAnswerLocked}
                         className={`px-2.5 py-1 transition ${
                           mode === "voice"
                             ? "bg-slate-900 text-white"
                             : "bg-white text-slate-600 hover:bg-slate-50"
-                        }`}
+                        } disabled:opacity-50`}
                       >
                         Voice
                       </button>
@@ -774,7 +846,7 @@ export function Rehearsal() {
                       rows={4}
                       placeholder="Your answer… (⌘/Ctrl+Enter to submit)"
                       className="w-full resize-y rounded-md border border-slate-300 p-3 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
-                      disabled={submit.isPending || clarify.isPending}
+                      disabled={submit.isPending || clarify.isPending || voiceAnswerLocked}
                     />
                     {tangentLimits.data &&
                       (() => {
@@ -814,6 +886,7 @@ export function Rehearsal() {
                             submit.isPending ||
                             clarify.isPending ||
                             clarifyRemaining === 0 ||
+                            voiceAnswerLocked ||
                             !draft.trim()
                           }
                           title="Ask the evaluator what they mean, without being scored"
@@ -823,7 +896,12 @@ export function Rehearsal() {
                         </button>
                         <button
                           onClick={sendAnswer}
-                          disabled={submit.isPending || clarify.isPending || !draft.trim()}
+                          disabled={
+                            submit.isPending ||
+                            clarify.isPending ||
+                            voiceAnswerLocked ||
+                            !draft.trim()
+                          }
                           className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:opacity-50"
                         >
                           {submit.isPending ? "Scoring…" : "Submit"}
@@ -831,10 +909,21 @@ export function Rehearsal() {
                       </div>
                     </div>
                   </>
+                ) : // Voice mode: hold-to-talk replaces the textarea and both
+                // buttons. "Ask a clarifying question" stays text-only for
+                // now, so it simply isn't offered here.
+                review ? (
+                  <VoiceReview
+                    rawTranscript={review.rawTranscript}
+                    text={review.text}
+                    onChange={(text) => setReview((current) => current && { ...current, text })}
+                    durationSeconds={review.durationSeconds}
+                    limits={tangentLimits.data}
+                    submitting={submitAudio.isPending}
+                    error={submitAudio.isError ? (submitAudio.error as Error).message : null}
+                    onSubmit={submitReview}
+                  />
                 ) : (
-                  // Voice mode: hold-to-talk replaces the textarea and both
-                  // buttons. "Ask a clarifying question" stays text-only for
-                  // now, so it simply isn't offered here.
                   <div className="space-y-2">
                     {tangentLimits.data &&
                       recorder.recording &&
@@ -869,21 +958,25 @@ export function Rehearsal() {
                           ? "Recording your answer — release to send"
                           : "Hold this button, or hold the space bar, to record your answer"
                       }
-                      disabled={submitAudio.isPending}
+                      disabled={transcribeAudio.isPending || submitAudio.isPending}
                       className={`w-full select-none touch-none rounded-lg px-5 py-6 text-sm font-semibold shadow-sm transition disabled:opacity-50 ${
                         recorder.recording
                           ? "bg-red-600 text-white"
                           : "bg-slate-900 text-white hover:bg-slate-700"
                       }`}
                     >
-                      {submitAudio.isPending
-                        ? "Scoring…"
-                        : recorder.recording
-                          ? "Recording… release to send"
-                          : "Hold to talk (or hold Space)"}
+                      {transcribeAudio.isPending
+                        ? "Transcribing…"
+                        : submitAudio.isPending
+                          ? "Scoring…"
+                          : recorder.recording
+                            ? "Recording… release to send"
+                            : "Hold to talk (or hold Space)"}
                     </button>
-                    {submitAudio.isError && (
-                      <p className="text-sm text-red-700">{(submitAudio.error as Error).message}</p>
+                    {transcribeAudio.isError && (
+                      <p className="text-sm text-red-700">
+                        {(transcribeAudio.error as Error).message}
+                      </p>
                     )}
                   </div>
                 )}
