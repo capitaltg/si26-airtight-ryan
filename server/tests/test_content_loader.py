@@ -146,3 +146,44 @@ def test_persona_empty_intro_raises(tmp_path: Path) -> None:
     persona.write_text(stripped)
     with pytest.raises(ValidationError):
         load_content(store)
+
+
+def test_extraction_fingerprint_is_stable_and_excludes_the_rubric() -> None:
+    content = load_content()
+    assert len(content.extraction_fingerprint) == 64
+    # deterministic across loads
+    assert load_content().extraction_fingerprint == content.extraction_fingerprint
+
+
+def test_extraction_fingerprint_changes_when_a_persona_changes() -> None:
+    from app.content.loader import compute_extraction_fingerprint
+
+    content = load_content()
+    edited = {
+        pid: (
+            p.model_copy(update={"non_negotiables": [*p.non_negotiables, "new line"]})
+            if pid == "technical_evaluator"
+            else p
+        )
+        for pid, p in content.personas.items()
+    }
+    changed = compute_extraction_fingerprint(
+        rfp_text=content.rfp_text,
+        proposal_text=content.proposal_text,
+        personas=edited,
+        concerns=content.concerns,
+    )
+    assert changed != content.extraction_fingerprint
+
+
+def test_extraction_fingerprint_ignores_the_rubric() -> None:
+    from app.content.loader import compute_extraction_fingerprint
+
+    content = load_content()
+    same = compute_extraction_fingerprint(
+        rfp_text=content.rfp_text,
+        proposal_text=content.proposal_text,
+        personas=content.personas,
+        concerns=content.concerns,
+    )
+    assert same == content.extraction_fingerprint
