@@ -143,7 +143,7 @@ def main() -> int:
     tree = build_tree(files)
     body = [f"{root.name}/"] + render(tree, "", [], comments)
 
-    new_block = "\n```\n" + "\n".join(body) + "\n```\n"
+    new_block = "\n\n```\n" + "\n".join(body) + "\n```\n\n"
     new_content = pre + START + new_block + END + post
 
     if new_content != content:
