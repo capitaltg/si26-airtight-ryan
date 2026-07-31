@@ -91,6 +91,7 @@ airtight/
 ├─ docs/
 │  └─ superpowers/
 │     └─ specs/
+│        ├─ 2026-07-30-cancel-microphone-input-design.md
 │        └─ 2026-07-30-editable-voice-transcript-design.md
 ├─ e2e/                          # Playwright e2e smoke tests (boots stack via docker compose)
 │  ├─ tests/

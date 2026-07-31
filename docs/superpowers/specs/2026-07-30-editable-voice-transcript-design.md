@@ -11,14 +11,14 @@ The presenter never sees what the model heard until the turn is already scored a
 
 This design splits the voice turn into **transcribe, then score**, with an editable review step between them. Nothing touches the DB or the LLM until the presenter confirms.
 
-**Scope: this is a transcription-correction step, not a retake.** The delivery is committed the instant the presenter releases the button. The review card exists so a misheard number or a dropped "not" can be fixed before it is scored — it is not a preview screen for deciding whether the answer was good enough.
+**Scope: this is a transcription-correction step, not a retake.** The delivery becomes locked when transcription reaches the review card. Cancellation is available only before a transcript and review card exist. Once the card is on screen, it exists so a misheard number or a dropped "not" can be fixed before scoring; it is not a preview screen for deciding whether the answer was good enough.
 
 ## 2. Decisions
 
 | Question | Decision | Why |
 |---|---|---|
 | Where the edit sits | Always review before scoring. A transcribe-only endpoint, then submit. | No opt-in toggle (two code paths to maintain) and no post-hoc turn mutation (turns are append-only and the report snapshot must match the transcript). |
-| Exits from the review card | **Submit only.** No re-record, no discard. | Either one is a retake under another name: dump a bad delivery, hold the button again, no turn consumed. The recording is committed on release. |
+| Exits from the review card | **Submit only.** No re-record, no discard. | Either one is a retake under another name: dump a bad delivery, hold the button again, no turn consumed. Once transcription reaches the review card, the delivery is locked; cancellation is available only before then. |
 | Tangent limit on an edited turn | Stays `voice_seconds`, measured on recorded audio duration. | Editing fixes transcription; it is not a way to trim a 90-second ramble into 40 words and dodge the voice penalty. |
 | Audit trail | Store both: `turns.transcript` = raw model output, `turns.user_answer` = edited text that was scored. | Both columns already exist. Gives "you corrected this" in the UI and real data on transcription quality. |
 | Audio between steps | Re-upload the blob on step 2. | Stateless. 60s of opus is ~200 KB, and there is no pending-upload store to expire or clean up. |
