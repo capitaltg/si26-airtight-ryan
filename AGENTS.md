@@ -199,6 +199,7 @@ airtight/
 │  │  │  ├─ __init__.py
 │  │  │  ├─ conciseness.py
 │  │  │  ├─ extraction.py
+│  │  │  ├─ extraction_pin.py
 │  │  │  ├─ grounding.py
 │  │  │  ├─ orchestrator.py
 │  │  │  ├─ reaction.py
@@ -238,6 +239,7 @@ airtight/
 │  │  ├─ test_content_loader.py
 │  │  ├─ test_contradiction_grounding.py
 │  │  ├─ test_extraction.py
+│  │  ├─ test_extraction_pin.py
 │  │  ├─ test_extraction_schema.py
 │  │  ├─ test_grounding.py
 │  │  ├─ test_images_install_ffmpeg.py
