@@ -259,3 +259,76 @@ test("Discard take wins if transcription completes behind its confirmation dialo
   await expect(page.getByRole("button", { name: HOLD_TO_TALK })).toBeVisible()
   await expect.poll(routes.answerAudioCalls).toBe(0)
 })
+
+test("a transcript that lands while the dialog is open closes it and shows the review", async ({
+  page,
+}) => {
+  const routes = await stubVoiceRoutes(page, RAW, 1500)
+  await openVoiceMode(page)
+
+  await recordAnswer(page)
+  await expect(page.getByRole("button", { name: /Transcribing/ })).toBeVisible()
+  await page.getByTestId("cancel-recording").click()
+  await expect(page.getByTestId("discard-recording")).toBeVisible()
+
+  // The transcript arrives while the presenter is still deciding. The dialog is
+  // now asking about something that has already happened, so it closes on the
+  // keep branch and the review card owns the screen.
+  await expect(page.getByTestId("voice-review")).toBeVisible()
+  await expect(page.getByTestId("discard-recording")).toHaveCount(0)
+  await expect(page.getByTestId("voice-review-text")).toHaveValue(RAW)
+  await expect.poll(routes.transcribeCalls).toBe(1)
+})
+
+test("a discarded prompt can be answered again by voice", async ({ page }) => {
+  const routes = await stubVoiceRoutes(page, RAW)
+  await openVoiceMode(page)
+
+  await holdWithMouse(page)
+  await page.keyboard.press("Escape")
+  await expect(page.getByTestId("discard-recording")).toBeVisible()
+  await page.mouse.up()
+  await page.getByTestId("discard-recording-discard").click()
+  await expect(page.getByRole("button", { name: HOLD_TO_TALK })).toBeVisible()
+
+  // Same prompt, second take, all the way to a scored turn.
+  await recordAnswer(page)
+  const review = page.getByTestId("voice-review")
+  await expect(review).toBeVisible()
+  await review.getByRole("button", { name: "Submit" }).click()
+
+  await expect(page.getByText(SCORED_RESPONSE.reply, { exact: true })).toBeVisible()
+  await expect.poll(routes.transcribeCalls).toBe(1)
+  await expect.poll(routes.answerAudioCalls).toBe(1)
+})
+
+test("a discarded prompt can be answered again as text", async ({ page }) => {
+  const routes = await stubVoiceRoutes(page, RAW)
+  await page.route("**/api/sessions/*/answer/stream", (route) =>
+    route.fulfill({
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+      body:
+        `data: ${JSON.stringify({ stage: "extracting" })}\n\n` +
+        `data: ${JSON.stringify({ result: SCORED_RESPONSE })}\n\n`,
+    }),
+  )
+  await openVoiceMode(page)
+
+  await holdWithMouse(page)
+  await page.keyboard.press("Escape")
+  await expect(page.getByTestId("discard-recording")).toBeVisible()
+  await page.mouse.up()
+  await page.getByTestId("discard-recording-discard").click()
+
+  // The lock is off, so the mode toggle works again.
+  await page.getByRole("button", { name: "Text", exact: true }).click()
+  const textarea = page.getByPlaceholder("Your answer…")
+  await expect(textarea).toBeEnabled()
+  await textarea.fill("We hold a 20 percent margin on the staffing plan.")
+  await page.getByRole("button", { name: "Submit", exact: true }).click()
+
+  await expect(page.getByText(SCORED_RESPONSE.reply, { exact: true })).toBeVisible()
+  await expect.poll(routes.transcribeCalls).toBe(0)
+  await expect.poll(routes.answerAudioCalls).toBe(0)
+})

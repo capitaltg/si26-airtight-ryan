@@ -754,6 +754,16 @@ export function Rehearsal() {
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [recorder.recording, transcribeAudio.isPending, discardPrompt, micCheckOpen])
 
+  // The transcript arrived while the transcribing dialog was still open: the
+  // "Transcribing…" state it was asking about is over and the review card now
+  // owns the screen, so close it on the keep branch. Discarding here would be a
+  // retake from the review card, which the editable-transcript design rules out.
+  useEffect(() => {
+    if (discardPrompt?.kind !== "transcribing") return
+    if (transcribeAudio.isPending) return
+    setDiscardPrompt(null)
+  }, [discardPrompt, transcribeAudio.isPending])
+
   // A past rehearsal is open: it owns the whole screen. Checked before the
   // landing and report branches so opening a card works from either one.
   if (viewingSessionId) {
