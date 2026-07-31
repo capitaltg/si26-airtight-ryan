@@ -571,6 +571,9 @@ export function Rehearsal() {
     if (current?.kind === "transcribing") {
       transcribeAbortRef.current?.abort()
       transcribeAbortRef.current = null
+      // A response can settle behind the confirmation before this click. The
+      // presenter chose discard, so that late review must not survive it.
+      setReview(null)
       // Mandatory: Rehearsal renders transcribeAudio.error next to the talk
       // button, so without this the abort prints "The user aborted a request."
       // as if something had broken.
