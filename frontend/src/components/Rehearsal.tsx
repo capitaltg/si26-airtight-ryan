@@ -97,7 +97,10 @@ export function Rehearsal() {
   const transcribeAudio = useTranscribeAudio(sessionId)
   // Once a voice recording is released, it stays attached to this prompt until
   // transcription either fails (so it can be retaken) or opens the review card.
-  const voiceAnswerLocked = transcribeAudio.isPending || review !== null
+  // `submitAudio.isPending` is part of the lock because the review card now
+  // closes on submit: without it, clearing `review` would unlock voice mode
+  // while the answer is still being scored.
+  const voiceAnswerLocked = transcribeAudio.isPending || submitAudio.isPending || review !== null
   const speakPrompt = useSpeakPrompt(sessionId)
   const queryClient = useQueryClient()
   // Mirrors `submitAudio.isPending` for the `speakPrompt.onSuccess` closure in
@@ -487,10 +490,16 @@ export function Rehearsal() {
     if (!review || reviewSubmittingRef.current || submitAudio.isPending || !review.text.trim())
       return
     reviewSubmittingRef.current = true
-    const { asked, blob, rawTranscript, text } = review
+    const submitted = review
+    const { asked, blob, rawTranscript, text } = submitted
     primePlayback()
     setPending({ prompt: asked, answer: text, kind: "answer" })
     setStage("extracting")
+    // The pending turn already shows the edited answer, so the review card has
+    // nothing left to say — close it on submit instead of leaving a duplicate
+    // of the same text on screen while scoring runs. A failed submission puts
+    // it back with the edits intact so the take can be retried.
+    setReview(null)
     submitAudio.mutate(
       { blob, answer: text, rawTranscript },
       {
@@ -522,7 +531,6 @@ export function Rehearsal() {
           // A done turn archived the session server-side, so the list is stale.
           if (res.done) void queryClient.invalidateQueries({ queryKey: ["history"] })
           setPending(null)
-          setReview(null)
           reviewSubmittingRef.current = false
           // Play the persona's spoken reply, then the next prompt's spoken
           // read-aloud, back to back. A rejected/blocked clip is swallowed by
@@ -534,6 +542,7 @@ export function Rehearsal() {
         },
         onError: () => {
           setPending(null)
+          setReview(submitted)
           reviewSubmittingRef.current = false
         },
       },
@@ -949,7 +958,7 @@ export function Rehearsal() {
                           ? "Recording your answer — release to send"
                           : "Hold this button, or hold the space bar, to record your answer"
                       }
-                      disabled={transcribeAudio.isPending}
+                      disabled={transcribeAudio.isPending || submitAudio.isPending}
                       className={`w-full select-none touch-none rounded-lg px-5 py-6 text-sm font-semibold shadow-sm transition disabled:opacity-50 ${
                         recorder.recording
                           ? "bg-red-600 text-white"
@@ -958,9 +967,11 @@ export function Rehearsal() {
                     >
                       {transcribeAudio.isPending
                         ? "Transcribing…"
-                        : recorder.recording
-                          ? "Recording… release to send"
-                          : "Hold to talk (or hold Space)"}
+                        : submitAudio.isPending
+                          ? "Scoring…"
+                          : recorder.recording
+                            ? "Recording… release to send"
+                            : "Hold to talk (or hold Space)"}
                     </button>
                     {transcribeAudio.isError && (
                       <p className="text-sm text-red-700">
