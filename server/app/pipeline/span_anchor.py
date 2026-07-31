@@ -21,7 +21,7 @@ from __future__ import annotations
 from app.schemas.extraction import Extraction
 
 
-def _fold(text: str) -> tuple[str, list[int]]:
+def fold(text: str) -> tuple[str, list[int]]:
     """Lowercased, whitespace-collapsed ``text`` plus the source index of each
     character kept.
 
@@ -58,7 +58,7 @@ def _anchor(span: str, answer: str, folded_answer: str, origin: list[int]) -> st
     """The substring of ``answer`` that ``span`` quotes, or ``span`` unchanged."""
     if span and span in answer:
         return span
-    needle, _ = _fold(span)
+    needle, _ = fold(span)
     if not needle:
         return span
     at = folded_answer.find(needle)
@@ -74,7 +74,7 @@ def reanchor_spans(extraction: Extraction, answer: str) -> Extraction:
     already a substring, so it short-circuits. The rewrite only bites on a
     normalized cache hit, where the span came from an earlier phrasing.
     """
-    folded_answer, origin = _fold(answer)
+    folded_answer, origin = fold(answer)
 
     def fix(span: str | None) -> str | None:
         if span is None:
