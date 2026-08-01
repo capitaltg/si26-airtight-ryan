@@ -130,12 +130,15 @@ def _score_summary(run: dict[str, Any]) -> str:
     """Compact score signature for one replayed session."""
     turns = []
     for turn in run["turns"]:
+        if turn.get("kind") != "answer":
+            continue
         rows = ",".join(turn.get("matched_rows", [])) or "(none)"
         turns.append(
             f"{turn['concern_id']} rows={rows} delta={turn['support_delta']:+d} "
             f"meter={turn['meter']} capped={turn['capped']}"
         )
-    return f"{' | '.join(turns)}; final_meters={_abbrev(run['final_meters'])}"
+    scored = " | ".join(turns) or "(no scored turns)"
+    return f"{scored}; final_meters={_abbrev(run['final_meters'])}"
 
 
 def _score_differences(base: dict[str, Any], other: dict[str, Any]) -> list[str]:

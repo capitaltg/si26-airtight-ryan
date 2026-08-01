@@ -43,6 +43,17 @@ def _run(*turns: dict) -> dict:
     }
 
 
+def _clarification() -> dict:
+    return {
+        "kind": "clarify",
+        "persona_id": "technical_evaluator",
+        "concern_id": "technical_approach",
+        "sent": "Could you clarify the staffing assumption?",
+        "reply": "The baseline assumes three named leads.",
+        "remaining": 1,
+    }
+
+
 def test_identical_runs_have_no_diff() -> None:
     run = _run(_turn())
     assert diff_runs(run, copy.deepcopy(run)) == []
@@ -68,8 +79,9 @@ def test_check_scenario_prints_score_summaries_and_score_divergence(
 ) -> None:
     runs = iter(
         [
-            _run(_turn()),
+            _run(_clarification(), _turn()),
             _run(
+                _clarification(),
                 _turn(
                     support_delta=-1,
                     meter=49,
@@ -94,6 +106,7 @@ def test_check_scenario_prints_score_summaries_and_score_divergence(
     assert "run 1: technical_approach rows=approach_cited delta=+1 meter=51 capped=False" in output
     assert "run 2: technical_approach rows=approach_cited delta=-1 meter=49 capped=False" in output
     assert "SCORE DIVERGED: support_delta, meter" in output
+    assert 'final_meters={"technical_evaluator": [51, false]}' in output
     assert "reply" in output
 
 
