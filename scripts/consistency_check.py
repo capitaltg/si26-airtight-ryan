@@ -41,6 +41,8 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from replay_session import DEFAULT_BASE_URL, FIXTURE_DIR, _get, c, replay
@@ -53,6 +55,7 @@ DEFAULT_RESET_CMD = (
     '-c "TRUNCATE model_response_cache"'
 )
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+REPORT_DIR = Path(REPO_ROOT) / "docs" / "reports"
 
 # Fields compared turn by turn. `prompt` and `reply` are the model's own words;
 # the rest is the engine's arithmetic. Both have to hold for a run to count as
@@ -157,6 +160,54 @@ def _score_differences(base: dict[str, Any], other: dict[str, Any]) -> list[str]
     return changed
 
 
+def consistency_report(name: str, results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Machine-readable score and divergence details for one scenario."""
+    runs = []
+    for run_number, result in enumerate(results, start=1):
+        score_turns = []
+        for turn_number, turn in enumerate(result["turns"], start=1):
+            if turn.get("kind") != "answer":
+                continue
+            score_turns.append(
+                {
+                    "turn": turn_number,
+                    "concern_id": turn["concern_id"],
+                    "matched_rows": turn.get("matched_rows", []),
+                    "support_delta": turn["support_delta"],
+                    "meter": turn["meter"],
+                    "capped": turn["capped"],
+                    "concern_status": turn["concern_status"],
+                }
+            )
+        runs.append(
+            {
+                "run": run_number,
+                "score_turns": score_turns,
+                "final_meters": result["final_meters"],
+            }
+        )
+
+    base = results[0]
+    comparisons = [
+        {
+            "run": run_number,
+            "differences": diff_runs(base, other),
+            "score_differences": _score_differences(base, other),
+        }
+        for run_number, other in enumerate(results[1:], start=2)
+    ]
+    return {"name": name, "runs": runs, "comparisons": comparisons}
+
+
+def write_report(report: dict[str, Any], *, report_dir: Path = REPORT_DIR) -> Path:
+    """Save one consistency-check report and return its path."""
+    report_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    path = report_dir / f"{stamp}-consistency-report.json"
+    path.write_text(json.dumps(report, indent=2) + "\n")
+    return path
+
+
 def rows_fired(run: dict) -> set[str]:
     """Every rubric row that matched anywhere in the run."""
     return {row for turn in run["turns"] for row in turn.get("matched_rows", [])}
@@ -192,6 +243,7 @@ def check_scenario(
     quiet: bool,
     reset_cmd: str | None,
     expect_rows: list[str],
+    report_scenarios: list[dict[str, Any]] | None = None,
 ) -> bool:
     """Replay one scenario `runs` times and report. True if it held."""
     name = scenario.get("name", "(unnamed)")
@@ -243,6 +295,9 @@ def check_scenario(
     elif expected:
         print(c(f"  expected rows present: {', '.join(expected)}", "32"))
 
+    if report_scenarios is not None:
+        report_scenarios.append(consistency_report(name, results))
+
     return ok
 
 
@@ -276,6 +331,7 @@ def main() -> int:
         help="fail unless this rubric row fires somewhere in the run (repeatable)",
     )
     ap.add_argument("--quiet", action="store_true", help="skip the per-turn play-by-play")
+    ap.add_argument("--report", action="store_true", help="save score and divergence details to docs/reports/")
     args = ap.parse_args()
 
     if args.runs < 2:
@@ -296,6 +352,7 @@ def main() -> int:
         )
 
     failed: list[str] = []
+    report_scenarios: list[dict[str, Any]] | None = [] if args.report else None
     for path in _resolve(args):
         with open(path) as f:
             scenario = json.load(f)
@@ -306,11 +363,25 @@ def main() -> int:
             quiet=args.quiet,
             reset_cmd=reset_cmd,
             expect_rows=args.expect_row,
+            report_scenarios=report_scenarios,
         )
         if not ok:
             failed.append(scenario.get("name", os.path.basename(path)))
 
     print()
+    if report_scenarios is not None:
+        path = write_report(
+            {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "base_url": args.base_url,
+                "runs_per_scenario": args.runs,
+                "no_cache": args.no_cache,
+                "scenarios": report_scenarios,
+                "passed": not failed,
+            }
+        )
+        print(c(f"report saved: {path.relative_to(REPO_ROOT)}", "2"))
+
     if failed:
         print(c(f"FAIL: {len(failed)} scenario(s) inconsistent: {', '.join(failed)}", "1;31"))
         return 1

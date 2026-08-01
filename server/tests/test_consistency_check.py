@@ -8,9 +8,18 @@ quietly turn a divergent pair of runs into a pass.
 from __future__ import annotations
 
 import copy
+import json
+from pathlib import Path
 
 import pytest
-from consistency_check import check_scenario, diff_runs, missing_rows, rows_fired
+from consistency_check import (
+    check_scenario,
+    consistency_report,
+    diff_runs,
+    missing_rows,
+    rows_fired,
+    write_report,
+)
 from replay_session import _turn_record
 
 
@@ -108,6 +117,70 @@ def test_check_scenario_prints_score_summaries_and_score_divergence(
     assert "SCORE DIVERGED: support_delta, meter" in output
     assert 'final_meters={"technical_evaluator": [51, false]}' in output
     assert "reply" in output
+
+
+def test_consistency_report_records_each_scored_turn_and_score_divergence() -> None:
+    report = consistency_report(
+        "fixture",
+        [
+            _run(_clarification(), _turn()),
+            _run(
+                _clarification(),
+                _turn(support_delta=-1, meter=49, reply="Different wording entirely."),
+            ),
+        ],
+    )
+
+    assert report["runs"] == [
+        {
+            "run": 1,
+            "score_turns": [
+                {
+                    "turn": 2,
+                    "concern_id": "technical_approach",
+                    "matched_rows": ["approach_cited"],
+                    "support_delta": 1,
+                    "meter": 51,
+                    "capped": False,
+                    "concern_status": "satisfied",
+                }
+            ],
+            "final_meters": {"technical_evaluator": (51, False)},
+        },
+        {
+            "run": 2,
+            "score_turns": [
+                {
+                    "turn": 2,
+                    "concern_id": "technical_approach",
+                    "matched_rows": ["approach_cited"],
+                    "support_delta": -1,
+                    "meter": 49,
+                    "capped": False,
+                    "concern_status": "satisfied",
+                }
+            ],
+            "final_meters": {"technical_evaluator": (51, False)},
+        },
+    ]
+    assert report["comparisons"] == [
+        {
+            "run": 2,
+            "differences": report["comparisons"][0]["differences"],
+            "score_differences": ["support_delta", "meter"],
+        }
+    ]
+    assert "reply" in "\n".join(report["comparisons"][0]["differences"])
+
+
+def test_write_report_saves_json_under_requested_directory(tmp_path: Path) -> None:
+    path = write_report(
+        {"scenarios": [{"name": "fixture", "runs": []}]}, report_dir=tmp_path
+    )
+
+    assert path.parent == tmp_path
+    assert path.suffix == ".json"
+    assert json.loads(path.read_text()) == {"scenarios": [{"name": "fixture", "runs": []}]}
 
 
 def test_row_order_is_not_a_divergence() -> None:
