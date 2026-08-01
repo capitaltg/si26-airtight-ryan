@@ -89,6 +89,9 @@ airtight/
 │  │  └─ server.yml              # ruff + mypy + pytest (on server changes)
 │  └─ PULL_REQUEST_TEMPLATE.md
 ├─ docs/
+│  ├─ issues/                    # tracked implementation findings and follow-up work
+│  │  ├─ persona-exemplars-never-reach-the-model.md
+│  │  └─ response-cache-flag-was-never-implemented.md
 │  └─ superpowers/
 │     └─ specs/
 │        ├─ 2026-07-30-cancel-microphone-input-design.md
