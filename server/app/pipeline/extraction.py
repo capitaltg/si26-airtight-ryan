@@ -321,6 +321,9 @@ def run_extraction(
             tool_input=extraction.model_dump(mode="json"),
             model_id=settings.bedrock_model_id,
         )
+        canonical = resolved_pin.get(key)
+        if canonical is not None:
+            extraction = Extraction.model_validate(canonical)
 
     anchored = reanchor_spans(extraction, answer)
     grounded = drop_ungrounded(

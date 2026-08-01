@@ -6,6 +6,8 @@ running claim ledger with its verbatim spans so Tier-0 contradictions can be
 detected. These tests use a fake BedrockClient — no network.
 """
 
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier, Event, Lock
 from types import SimpleNamespace
 from typing import Any
 
@@ -511,6 +513,60 @@ class ScriptedBedrockClient:
         return self._results.pop(0)
 
 
+class SynchronizedRacingBedrockClient:
+    """Makes two cold extraction calls return opposing valid findings."""
+
+    def __init__(self) -> None:
+        self._barrier = Barrier(2)
+        self._lock = Lock()
+        self._calls = 0
+
+    def extract(
+        self,
+        content: str | list[Any],
+        *,
+        content_schema: type[BaseModel],
+        tool_name: str,
+        max_tokens: int = 4096,
+        cache_key: CacheKeyInput | None = None,
+    ) -> BaseModel:
+        with self._lock:
+            self._calls += 1
+            result = _clean_extraction() if self._calls == 1 else _harsher_extraction()
+        self._barrier.wait(timeout=5)
+        return result
+
+
+class SynchronizedFirstWriterPin:
+    """Forces two initial misses, then makes the clean extraction canonical."""
+
+    def __init__(self) -> None:
+        self._cold_gets = Barrier(2)
+        self._clean_stored = Event()
+        self._lock = Lock()
+        self._get_calls = 0
+        self._tool_input: dict[str, Any] | None = None
+
+    def get(self, key: str) -> dict[str, Any] | None:
+        with self._lock:
+            self._get_calls += 1
+            is_cold_miss = self._get_calls <= 2
+        if is_cold_miss:
+            self._cold_gets.wait(timeout=5)
+            return None
+        with self._lock:
+            return dict(self._tool_input) if self._tool_input is not None else None
+
+    def put(self, key: str, *, tool_input: dict[str, Any], model_id: str) -> None:
+        is_clean = tool_input["claims"][0]["backing"] == Backing.backed
+        if not is_clean:
+            assert self._clean_stored.wait(timeout=5), "clean writer never stored"
+        with self._lock:
+            if self._tool_input is None:
+                self._tool_input = dict(tool_input)
+                self._clean_stored.set()
+
+
 _GROUNDED_ANSWER = "We staff three named leads at contract start."
 
 
@@ -562,6 +618,35 @@ def test_same_input_scores_the_same_when_the_model_disagrees_with_itself() -> No
     second = once()
     assert first == second
     assert client.calls == 1, "the second run must not reach the model"
+
+
+def test_concurrent_first_misses_return_the_canonical_pinned_extraction() -> None:
+    content, persona, concern = _fixture()
+    client = SynchronizedRacingBedrockClient()
+    pin = SynchronizedFirstWriterPin()
+
+    def once() -> ExtractionResult:
+        return run_extraction(
+            answer=_GROUNDED_ANSWER,
+            concern=concern,
+            persona=persona,
+            content=content,
+            prior_claims=[],
+            client=client,  # type: ignore[arg-type]
+            pin=pin,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = [future.result(timeout=5) for future in (pool.submit(once), pool.submit(once))]
+
+    assert [result.extraction for result in results] == [
+        _clean_extraction(),
+        _clean_extraction(),
+    ]
+    assert [score_turn(result.extraction, content.rubric).support_delta for result in results] == [
+        2,
+        2,
+    ]
 
 
 def test_whitespace_variant_of_the_same_answer_replays_the_pin() -> None:
