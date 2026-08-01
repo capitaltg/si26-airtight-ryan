@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import copy
 
-from consistency_check import diff_runs, missing_rows, rows_fired
+import pytest
+from consistency_check import check_scenario, diff_runs, missing_rows, rows_fired
 from replay_session import _turn_record
 
 
@@ -60,6 +61,40 @@ def test_changed_reply_is_reported() -> None:
     diffs = diff_runs(_run(_turn()), _run(_turn(reply="Different wording entirely.")))
     assert len(diffs) == 1
     assert "reply" in diffs[0]
+
+
+def test_check_scenario_prints_score_summaries_and_score_divergence(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runs = iter(
+        [
+            _run(_turn()),
+            _run(
+                _turn(
+                    support_delta=-1,
+                    meter=49,
+                    reply="Different wording entirely.",
+                )
+            ),
+        ]
+    )
+    monkeypatch.setattr("consistency_check.replay", lambda *_args: next(runs))
+
+    assert not check_scenario(
+        "http://api.example",
+        {"name": "fixture"},
+        runs=2,
+        quiet=True,
+        reset_cmd=None,
+        expect_rows=[],
+    )
+
+    output = capsys.readouterr().out
+    assert "score summary:" in output
+    assert "run 1: technical_approach rows=approach_cited delta=+1 meter=51 capped=False" in output
+    assert "run 2: technical_approach rows=approach_cited delta=-1 meter=49 capped=False" in output
+    assert "SCORE DIVERGED: support_delta, meter" in output
+    assert "reply" in output
 
 
 def test_row_order_is_not_a_divergence() -> None:

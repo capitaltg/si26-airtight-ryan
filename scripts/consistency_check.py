@@ -41,6 +41,7 @@ import json
 import os
 import subprocess
 import sys
+from typing import Any
 
 from replay_session import DEFAULT_BASE_URL, FIXTURE_DIR, _get, c, replay
 
@@ -71,6 +72,13 @@ COMPARED = (
     "reply",
     "rationale",
     "remaining",
+)
+SCORE_FIELDS = (
+    "matched_rows",
+    "support_delta",
+    "meter",
+    "capped",
+    "concern_status",
 )
 
 
@@ -116,6 +124,34 @@ def diff_runs(base: dict, other: dict) -> list[str]:
             f"      this:  {_abbrev(other['concern_status'])}"
         )
     return diffs
+
+
+def _score_summary(run: dict[str, Any]) -> str:
+    """Compact score signature for one replayed session."""
+    turns = []
+    for turn in run["turns"]:
+        rows = ",".join(turn.get("matched_rows", [])) or "(none)"
+        turns.append(
+            f"{turn['concern_id']} rows={rows} delta={turn['support_delta']:+d} "
+            f"meter={turn['meter']} capped={turn['capped']}"
+        )
+    return f"{' | '.join(turns)}; final_meters={_abbrev(run['final_meters'])}"
+
+
+def _score_differences(base: dict[str, Any], other: dict[str, Any]) -> list[str]:
+    """Names of score-bearing fields that changed between two runs."""
+    changed: list[str] = []
+    if len(base["turns"]) != len(other["turns"]):
+        changed.append("turn count")
+
+    for b, o in zip(base["turns"], other["turns"]):
+        for field in SCORE_FIELDS:
+            if b.get(field) != o.get(field) and field not in changed:
+                changed.append(field)
+
+    if base["final_meters"] != other["final_meters"]:
+        changed.append("final meters")
+    return changed
 
 
 def rows_fired(run: dict) -> set[str]:
@@ -167,6 +203,10 @@ def check_scenario(
         results.append(replay(base_url, scenario, quiet, False))
 
     print(c(f"\n=== consistency: {name} ===", "1;35"))
+    print(c("  score summary:", "2"))
+    for n, result in enumerate(results, start=1):
+        print(f"    run {n}: {_score_summary(result)}")
+
     ok = True
 
     base = results[0]
@@ -175,6 +215,11 @@ def check_scenario(
         if diffs:
             ok = False
             print(c(f"  run {n}: DIVERGED from run 1 ({len(diffs)} difference(s))", "31"))
+            score_diffs = _score_differences(base, other)
+            if score_diffs:
+                print(c(f"    SCORE DIVERGED: {', '.join(score_diffs)}", "31"))
+            else:
+                print(c("    scores matched; non-score output diverged", "33"))
             for d in diffs:
                 print(f"    - {d}")
         else:
