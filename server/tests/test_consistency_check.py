@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ from consistency_check import (
     check_scenario,
     consistency_report,
     diff_runs,
+    main,
     missing_rows,
     rows_fired,
     write_report,
@@ -170,7 +172,35 @@ def test_consistency_report_records_each_scored_turn_and_score_divergence() -> N
             "score_differences": ["support_delta", "meter"],
         }
     ]
-    assert "reply" in "\n".join(report["comparisons"][0]["differences"])
+    assert any(
+        difference["field"] == "reply"
+        for difference in report["comparisons"][0]["differences"]
+    )
+
+
+def test_consistency_report_keeps_complete_difference_values_and_outcome() -> None:
+    original = "a" * 300
+    changed = "b" * 300
+    report = consistency_report(
+        "fixture",
+        [_run(_turn(reply=original)), _run(_turn(reply=changed))],
+        expected_rows=["contradiction"],
+        missing_expected_rows=["contradiction"],
+        passed=False,
+        scenario_path="scripts/replay/scenario-fixture.json",
+    )
+
+    reply_difference = next(
+        difference
+        for difference in report["comparisons"][0]["differences"]
+        if difference["field"] == "reply"
+    )
+    assert reply_difference["run_1"] == original
+    assert reply_difference["this"] == changed
+    assert report["passed"] is False
+    assert report["expected_rows"] == ["contradiction"]
+    assert report["missing_expected_rows"] == ["contradiction"]
+    assert report["scenario_path"] == "scripts/replay/scenario-fixture.json"
 
 
 def test_write_report_saves_json_under_requested_directory(tmp_path: Path) -> None:
@@ -181,6 +211,55 @@ def test_write_report_saves_json_under_requested_directory(tmp_path: Path) -> No
     assert path.parent == tmp_path
     assert path.suffix == ".json"
     assert json.loads(path.read_text()) == {"scenarios": [{"name": "fixture", "runs": []}]}
+
+
+def test_main_saves_invocation_metadata_when_a_scenario_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    scenario = tmp_path / "scenario.json"
+    scenario.write_text("{}")
+    captured: dict = {}
+
+    monkeypatch.setattr("consistency_check._get", lambda *_args: {})
+    monkeypatch.setattr("consistency_check._resolve", lambda _args: [str(scenario)])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "consistency_check.py",
+            "--report",
+            "--no-cache",
+            "--expect-row",
+            "contradiction",
+        ],
+    )
+
+    def fake_check_scenario(*_args: object, **kwargs: object) -> bool:
+        report_scenarios = kwargs["report_scenarios"]
+        assert isinstance(report_scenarios, list)
+        report_scenarios.append({"name": "fixture", "passed": False})
+        return False
+
+    def fake_write_report(report: dict) -> Path:
+        captured.update(report)
+        return tmp_path / "report.json"
+
+    monkeypatch.setattr("consistency_check.check_scenario", fake_check_scenario)
+    monkeypatch.setattr("consistency_check.write_report", fake_write_report)
+
+    assert main() == 1
+    assert captured["passed"] is False
+    assert captured["invocation"] == {
+        "base_url": "http://localhost:8000",
+        "expect_rows": ["contradiction"],
+        "no_cache": True,
+        "reset_cmd": (
+            "docker compose exec -T postgres psql -U airtight -d airtight "
+            '-c "TRUNCATE model_response_cache"'
+        ),
+        "runs": 2,
+        "scenarios": [str(scenario)],
+    }
 
 
 def test_row_order_is_not_a_divergence() -> None:

@@ -91,40 +91,73 @@ def _abbrev(value: object, width: int = 110) -> str:
     return text if len(text) <= width else text[: width - 1] + "…"
 
 
-def diff_runs(base: dict, other: dict) -> list[str]:
-    """Human-readable differences between two runs of the same scenario.
-
-    Empty list means the runs are identical on every compared field. Turn count
-    is checked first: if the runs took different paths through the agenda
-    (a follow-up fired in one and not the other) that is the finding, and a
-    field-by-field diff past that point would just be noise.
-    """
-    diffs: list[str] = []
+def _difference_records(base: dict, other: dict) -> list[dict[str, Any]]:
+    """Complete, structured differences between two runs of one scenario."""
+    differences: list[dict[str, Any]] = []
     base_turns, other_turns = base["turns"], other["turns"]
 
     if len(base_turns) != len(other_turns):
-        diffs.append(f"turn count: {len(base_turns)} vs {len(other_turns)}")
+        differences.append(
+            {
+                "scope": "session",
+                "field": "turn_count",
+                "run_1": len(base_turns),
+                "this": len(other_turns),
+            }
+        )
 
     for i, (b, o) in enumerate(zip(base_turns, other_turns), start=1):
         for field in COMPARED:
             if b.get(field) != o.get(field):
-                diffs.append(
-                    f"turn {i} ({b['concern_id']}) {field}:\n"
-                    f"      run 1: {_abbrev(b.get(field))}\n"
-                    f"      this:  {_abbrev(o.get(field))}"
+                differences.append(
+                    {
+                        "scope": "turn",
+                        "turn": i,
+                        "concern_id": b.get("concern_id"),
+                        "field": field,
+                        "run_1": b.get(field),
+                        "this": o.get(field),
+                    }
                 )
 
     if base["final_meters"] != other["final_meters"]:
-        diffs.append(
-            f"final meters:\n"
-            f"      run 1: {_abbrev(base['final_meters'])}\n"
-            f"      this:  {_abbrev(other['final_meters'])}"
+        differences.append(
+            {
+                "scope": "session",
+                "field": "final_meters",
+                "run_1": base["final_meters"],
+                "this": other["final_meters"],
+            }
         )
     if base["concern_status"] != other["concern_status"]:
+        differences.append(
+            {
+                "scope": "session",
+                "field": "concern_status",
+                "run_1": base["concern_status"],
+                "this": other["concern_status"],
+            }
+        )
+    return differences
+
+
+def diff_runs(base: dict, other: dict) -> list[str]:
+    """Human-readable, abbreviated differences between two scenario runs."""
+    diffs: list[str] = []
+    for difference in _difference_records(base, other):
+        field = difference["field"]
+        if difference["scope"] == "turn":
+            diffs.append(
+                f"turn {difference['turn']} ({difference['concern_id']}) {field}:\n"
+                f"      run 1: {_abbrev(difference['run_1'])}\n"
+                f"      this:  {_abbrev(difference['this'])}"
+            )
+            continue
+        label = field.replace("_", " ")
         diffs.append(
-            f"concern statuses:\n"
-            f"      run 1: {_abbrev(base['concern_status'])}\n"
-            f"      this:  {_abbrev(other['concern_status'])}"
+            f"{label}:\n"
+            f"      run 1: {_abbrev(difference['run_1'])}\n"
+            f"      this:  {_abbrev(difference['this'])}"
         )
     return diffs
 
@@ -160,7 +193,15 @@ def _score_differences(base: dict[str, Any], other: dict[str, Any]) -> list[str]
     return changed
 
 
-def consistency_report(name: str, results: list[dict[str, Any]]) -> dict[str, Any]:
+def consistency_report(
+    name: str,
+    results: list[dict[str, Any]],
+    *,
+    expected_rows: list[str] | None = None,
+    missing_expected_rows: list[str] | None = None,
+    passed: bool = True,
+    scenario_path: str | None = None,
+) -> dict[str, Any]:
     """Machine-readable score and divergence details for one scenario."""
     runs = []
     for run_number, result in enumerate(results, start=1):
@@ -191,12 +232,20 @@ def consistency_report(name: str, results: list[dict[str, Any]]) -> dict[str, An
     comparisons = [
         {
             "run": run_number,
-            "differences": diff_runs(base, other),
+            "differences": _difference_records(base, other),
             "score_differences": _score_differences(base, other),
         }
         for run_number, other in enumerate(results[1:], start=2)
     ]
-    return {"name": name, "runs": runs, "comparisons": comparisons}
+    return {
+        "name": name,
+        "scenario_path": scenario_path,
+        "passed": passed,
+        "expected_rows": expected_rows or [],
+        "missing_expected_rows": missing_expected_rows or [],
+        "runs": runs,
+        "comparisons": comparisons,
+    }
 
 
 def write_report(report: dict[str, Any], *, report_dir: Path = REPORT_DIR) -> Path:
@@ -244,6 +293,7 @@ def check_scenario(
     reset_cmd: str | None,
     expect_rows: list[str],
     report_scenarios: list[dict[str, Any]] | None = None,
+    scenario_path: str | None = None,
 ) -> bool:
     """Replay one scenario `runs` times and report. True if it held."""
     name = scenario.get("name", "(unnamed)")
@@ -296,7 +346,16 @@ def check_scenario(
         print(c(f"  expected rows present: {', '.join(expected)}", "32"))
 
     if report_scenarios is not None:
-        report_scenarios.append(consistency_report(name, results))
+        report_scenarios.append(
+            consistency_report(
+                name,
+                results,
+                expected_rows=expected,
+                missing_expected_rows=absent,
+                passed=ok,
+                scenario_path=scenario_path,
+            )
+        )
 
     return ok
 
@@ -353,7 +412,8 @@ def main() -> int:
 
     failed: list[str] = []
     report_scenarios: list[dict[str, Any]] | None = [] if args.report else None
-    for path in _resolve(args):
+    scenario_paths = [str(Path(path).resolve()) for path in _resolve(args)]
+    for path in scenario_paths:
         with open(path) as f:
             scenario = json.load(f)
         ok = check_scenario(
@@ -364,6 +424,7 @@ def main() -> int:
             reset_cmd=reset_cmd,
             expect_rows=args.expect_row,
             report_scenarios=report_scenarios,
+            scenario_path=path,
         )
         if not ok:
             failed.append(scenario.get("name", os.path.basename(path)))
@@ -373,14 +434,23 @@ def main() -> int:
         path = write_report(
             {
                 "generated_at": datetime.now(timezone.utc).isoformat(),
-                "base_url": args.base_url,
-                "runs_per_scenario": args.runs,
-                "no_cache": args.no_cache,
+                "invocation": {
+                    "base_url": args.base_url,
+                    "runs": args.runs,
+                    "no_cache": args.no_cache,
+                    "reset_cmd": reset_cmd,
+                    "expect_rows": args.expect_row,
+                    "scenarios": scenario_paths,
+                },
                 "scenarios": report_scenarios,
                 "passed": not failed,
             }
         )
-        print(c(f"report saved: {path.relative_to(REPO_ROOT)}", "2"))
+        try:
+            display_path = path.relative_to(REPO_ROOT)
+        except ValueError:
+            display_path = path
+        print(c(f"report saved: {display_path}", "2"))
 
     if failed:
         print(c(f"FAIL: {len(failed)} scenario(s) inconsistent: {', '.join(failed)}", "1;31"))
