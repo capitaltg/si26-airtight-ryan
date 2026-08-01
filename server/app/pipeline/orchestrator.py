@@ -37,6 +37,7 @@ from app.content.loader import Content
 from app.db import repo
 from app.db.models import RehearsalSession, Turn
 from app.pipeline.extraction import run_extraction
+from app.pipeline.extraction_pin import ExtractionPin
 from app.pipeline.reaction import run_clarification, run_reaction
 from app.pipeline.scoring import apply_limit_penalty, apply_to_meter, score_turn
 from app.schemas.content import Concern, PersonaDefinition
@@ -258,6 +259,7 @@ def submit_answer_events(
     session: RehearsalSession,
     answer: str,
     audio: AnswerAudio | None = None,
+    pin: ExtractionPin | None = None,
 ) -> Iterator[dict[str, object]]:
     """Run one turn, yielding stage-progress events around the same pipeline.
 
@@ -288,6 +290,7 @@ def submit_answer_events(
         content=content,
         prior_claims=prior_claims,
         client=client,  # type: ignore[arg-type]
+        pin=pin,
     )
     extraction = extraction_result.extraction
     logger.info(
@@ -407,6 +410,7 @@ def submit_answer(
     session: RehearsalSession,
     answer: str,
     audio: AnswerAudio | None = None,
+    pin: ExtractionPin | None = None,
 ) -> TurnResult:
     """Run one turn: extract → score → persist → meter → react → advance.
 
@@ -418,7 +422,7 @@ def submit_answer(
     :func:`submit_answer_events`; see there for what it does.
     """
     result: TurnResult | None = None
-    for ev in submit_answer_events(db, content, client, session, answer, audio):
+    for ev in submit_answer_events(db, content, client, session, answer, audio, pin):
         if "result" in ev:
             result = cast(TurnResult, ev["result"])
     assert result is not None  # the generator always yields a terminal result

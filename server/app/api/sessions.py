@@ -29,6 +29,7 @@ from app.api.deps import (
     get_content,
     get_db,
     get_duration_measurer,
+    get_extraction_pin,
     get_session_factory,
     get_synthesizer,
     get_transcriber,
@@ -39,6 +40,7 @@ from app.content.loader import Content
 from app.db import repo
 from app.db.models import Clarification, RehearsalSession, Turn
 from app.pipeline import orchestrator
+from app.pipeline.extraction_pin import ExtractionPin
 from app.pipeline.orchestrator import AnswerAudio, ClarificationCapReached, SessionComplete
 from app.report.builder import build_report
 from app.schemas.reaction import PersonaReaction
@@ -442,10 +444,11 @@ def submit_answer(
     db: Session = Depends(get_db),
     content: Content = Depends(get_content),
     client: BedrockClient = Depends(get_bedrock_client),
+    pin: ExtractionPin = Depends(get_extraction_pin),
 ) -> AnswerResponse:
     session = _require_live_session(db, session_id)
     try:
-        result = orchestrator.submit_answer(db, content, client, session, body.answer)
+        result = orchestrator.submit_answer(db, content, client, session, body.answer, pin=pin)
     except SessionComplete as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if result.done:
@@ -497,6 +500,7 @@ def submit_answer_audio(
     db: Session = Depends(get_db),
     content: Content = Depends(get_content),
     client: BedrockClient = Depends(get_bedrock_client),
+    pin: ExtractionPin = Depends(get_extraction_pin),
     transcriber: Transcriber = Depends(get_transcriber),
     synthesizer: Synthesizer = Depends(get_synthesizer),
     measure: DurationMeasurer = Depends(get_duration_measurer),
@@ -559,6 +563,7 @@ def submit_answer_audio(
                 transcript=stored_transcript,
                 duration_seconds=duration_seconds,
             ),
+            pin=pin,
         )
     except SessionComplete as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -681,6 +686,7 @@ async def submit_answer_stream(
     body: AnswerRequest,
     content: Content = Depends(get_content),
     client: BedrockClient = Depends(get_bedrock_client),
+    pin: ExtractionPin = Depends(get_extraction_pin),
     session_factory: sessionmaker[Session] = Depends(get_session_factory),
 ) -> StreamingResponse:
     """Streaming twin of ``/answer``: emits SSE ``data:`` frames tagged by key —
@@ -708,7 +714,7 @@ async def submit_answer_stream(
                 emit({"error": "session is archived"})
                 return
             for ev in orchestrator.submit_answer_events(
-                db, content, client, session, body.answer
+                db, content, client, session, body.answer, pin=pin
             ):
                 if "result" in ev:
                     result = cast(orchestrator.TurnResult, ev["result"])

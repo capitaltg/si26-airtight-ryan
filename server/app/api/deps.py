@@ -17,6 +17,7 @@ from app.bedrock.cache import DbResponseCache
 from app.bedrock.client import BedrockClient
 from app.content.loader import Content
 from app.db.session import SessionLocal, get_db  # re-exported for routers to depend on
+from app.pipeline.extraction_pin import DbExtractionPin, ExtractionPin
 from app.voice.polly import synthesize_speech
 from app.voice.transcribe import TranscriptionResult, measure_duration, transcribe_audio
 
@@ -24,6 +25,7 @@ __all__ = [
     "get_db",
     "get_content",
     "get_bedrock_client",
+    "get_extraction_pin",
     "get_session_factory",
     "get_transcriber",
     "get_duration_measurer",
@@ -42,6 +44,12 @@ def get_bedrock_client() -> BedrockClient:
     # despite temperature=0 not being reproducible on Bedrock; it opens its own
     # short session per lookup/store off the same factory.
     return BedrockClient(cache=DbResponseCache(SessionLocal))
+
+
+def get_extraction_pin() -> ExtractionPin:
+    # Like the response cache, this opens a short-lived session per lookup and
+    # store, so the streaming endpoint can use it from its worker thread.
+    return DbExtractionPin(SessionLocal)
 
 
 def get_session_factory() -> sessionmaker[Session]:
