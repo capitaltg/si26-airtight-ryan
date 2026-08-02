@@ -10,8 +10,9 @@ and never carries or sets a number.
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.scoring import LimitKind
 
@@ -45,19 +46,32 @@ class RateStats(BaseModel):
     coverage_rate: float  # concerns_satisfied / concerns_total
 
 
+class FindingEvidence(BaseModel):
+    """One verbatim quote that fed a row application, with its per-quote detail."""
+
+    span: str = Field(min_length=1)
+    detail: str
+
+
 class ScoredFinding(BaseModel):
-    """One scored signal, linked to the verbatim quote that triggered it and the
-    rubric row it fired. ``span`` is required non-empty: a finding with no quote
-    would break the audit trail, so signals without a verbatim span (contradiction,
-    unsubstantiated) are surfaced as counts instead of findings."""
+    """One charged row on one turn, with every verbatim quote behind it."""
 
     turn_index: int
     persona_id: str
     concern_id: str
     rubric_row: str
-    support_value: int
-    span: str = Field(min_length=1)  # verbatim quote from the answer
-    detail: str
+    support_value: int  # per application
+    count: int = Field(default=1, ge=1)
+    evidence: list[FindingEvidence] = Field(min_length=1)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _upgrade_legacy_span(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "evidence" not in data and "span" in data:
+            data = dict(data)
+            data["evidence"] = [{"span": data["span"], "detail": data.get("detail", "")}]
+            data.setdefault("count", 1)
+        return data
 
 
 class ClarificationLine(BaseModel):

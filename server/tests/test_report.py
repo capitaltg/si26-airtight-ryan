@@ -18,7 +18,9 @@ from typing import Any
 
 from app.content.loader import load_content
 from app.db.models import PersonaMeter, Turn
+from app.pipeline.scoring import score_turn
 from app.report.builder import (
+    _turn_findings,
     build_report,
     build_scored_report,
     render_narrative,
@@ -32,10 +34,13 @@ from app.schemas.extraction import (
     Dodge,
     DodgeType,
     Extraction,
+    FactCheck,
     RedLineHit,
     RedLineSourceKind,
     SubQuestionCoverage,
+    Verdict,
 )
+from app.schemas.report import ScoredFinding
 
 
 class FakeReactClient:
@@ -195,9 +200,91 @@ def test_every_scored_finding_has_a_verbatim_span_and_a_rubric_row() -> None:
     assert [f.rubric_row for f in report.findings] == ["evidence_backed", "dodge", "red_line"]
     valid_rows = {row.id for row in content.rubric.rows}
     for f in report.findings:
-        assert f.span.strip(), "every scored finding must carry a verbatim quote"
+        assert f.evidence, "every scored finding must carry at least one quote"
+        assert all(e.span.strip() for e in f.evidence), "every quote must be verbatim, non-empty"
+        assert f.count >= 1
         assert f.rubric_row in valid_rows
         assert f.turn_index in (0, 1, 2)
+
+
+def test_one_finding_per_row_carries_every_span() -> None:
+    content = load_content()
+    ext = Extraction(
+        sub_question_coverage=[
+            SubQuestionCoverage(id="architecture", addressed=Addressed.full, span="three services"),
+            SubQuestionCoverage(id="hosting", addressed=Addressed.full, span="FedRAMP host"),
+            SubQuestionCoverage(id="integrations", addressed=Addressed.partial, span="two APIs"),
+        ]
+    )
+    findings = _turn_findings(
+        _turn(0, "technical_evaluator", "technical_approach", ext, content.rubric),
+        ext,
+        score_turn(ext, content.rubric),
+        {row.id: row.support_value for row in content.rubric.rows},
+    )
+    assert [f.rubric_row for f in findings] == ["approach_cited"]
+    assert findings[0].count == 1
+    assert findings[0].support_value == 1
+    assert [e.span for e in findings[0].evidence] == ["three services", "FedRAMP host", "two APIs"]
+
+
+def test_false_fact_finding_count_matches_the_applications() -> None:
+    content = load_content()
+    ext = Extraction(
+        fact_checks=[
+            FactCheck(claim="12M records", tier=1, verdict=Verdict.refuted, source="PWS 3.1"),
+            FactCheck(claim="six week cutover", tier=1, verdict=Verdict.refuted, source="PWS 3.4"),
+        ]
+    )
+    findings = _turn_findings(
+        _turn(0, "technical_evaluator", "technical_approach", ext, content.rubric),
+        ext,
+        score_turn(ext, content.rubric),
+        {row.id: row.support_value for row in content.rubric.rows},
+    )
+    assert len(findings) == 1
+    assert findings[0].count == 2
+    assert findings[0].support_value == -1
+    assert len(findings[0].evidence) == 2
+
+
+def test_tier_zero_refutation_never_becomes_a_false_fact_span() -> None:
+    content = load_content()
+    ext = Extraction(
+        fact_checks=[
+            FactCheck(claim="12M records", tier=1, verdict=Verdict.refuted, source="PWS 3.1"),
+            FactCheck(claim="forty staff", tier=0, verdict=Verdict.refuted, source="turn 1"),
+        ]
+    )
+    score = score_turn(ext, content.rubric)
+    findings = _turn_findings(
+        _turn(0, "technical_evaluator", "technical_approach", ext, content.rubric),
+        ext,
+        score,
+        {row.id: row.support_value for row in content.rubric.rows},
+    )
+    assert score.row_counts == {"false_fact": 1}
+    assert len(findings) == 1
+    assert findings[0].count == 1
+    assert [e.span for e in findings[0].evidence] == ["12M records"]
+
+
+def test_legacy_finding_shape_upgrades_to_grouped_evidence() -> None:
+    legacy = ScoredFinding.model_validate(
+        {
+            "turn_index": 0,
+            "persona_id": "technical_evaluator",
+            "concern_id": "technical_approach",
+            "rubric_row": "dodge",
+            "support_value": -2,
+            "span": "we are confident in our approach",
+            "detail": "non_commitment",
+        }
+    )
+    assert legacy.count == 1
+    assert [(e.span, e.detail) for e in legacy.evidence] == [
+        ("we are confident in our approach", "non_commitment")
+    ]
 
 
 def test_scored_part_is_byte_identical_across_regeneration() -> None:

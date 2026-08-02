@@ -47,7 +47,9 @@ export interface AnswerResponse {
   concern_id: string
   concern_status: string
   support_delta: number
+  raw_support_delta: number
   matched_rows: string[]
+  row_counts: Record<string, number>
   meter: number
   capped: boolean
   limit: LimitResult | null
@@ -102,6 +104,7 @@ export interface RubricRow {
   description: string
   support_value: number
   cap: number | null
+  note: string | null
 }
 
 export interface ConcernDisclosure {
@@ -114,6 +117,7 @@ export interface ConcernDisclosure {
 export interface RubricDisclosure {
   version: number
   rows: RubricRow[]
+  combination: string[]
   concerns: ConcernDisclosure[]
 }
 
@@ -143,14 +147,19 @@ export interface RateStats {
   coverage_rate: number
 }
 
+export interface FindingEvidence {
+  span: string
+  detail: string
+}
+
 export interface ScoredFinding {
   turn_index: number
   persona_id: string
   concern_id: string
   rubric_row: string
   support_value: number
-  span: string // verbatim quote
-  detail: string
+  count: number
+  evidence: FindingEvidence[]
 }
 
 export interface ClarificationLine {
@@ -207,7 +216,9 @@ export interface TranscriptTurn {
   reply: string
   rationale: string
   supportDelta: number
+  rawSupportDelta: number
   matchedRows: string[]
+  rowCounts: Record<string, number>
   capped: boolean
   limit?: LimitResult | null
   // A clarification turn is not scored: ChatTurn branches on this to suppress the
@@ -248,7 +259,9 @@ export interface ArchivedTurn {
   reply: string
   rationale: string
   support_delta: number
+  raw_support_delta: number
   matched_rows: string[]
+  row_counts: Record<string, number>
   capped: boolean
   scored: boolean
   transcript: string | null

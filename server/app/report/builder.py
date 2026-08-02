@@ -35,6 +35,7 @@ from app.schemas.extraction import (
 from app.schemas.report import (
     ClarificationLine,
     CoverageCounts,
+    FindingEvidence,
     LimitFinding,
     NarrativeSection,
     PersonaLine,
@@ -65,28 +66,18 @@ def _turn_findings(
     score: ScoreOutput,
     values: dict[str, int],
 ) -> list[ScoredFinding]:
-    """Emit one finding per span-bearing signal that actually fired this turn.
+    """Emit one grouped finding per charged row with its evidence spans.
 
     Driven by ``matched_rows`` so a finding always maps to a row that moved the
     number (e.g. a backed claim on a red-lined turn is not shown, because the red
     line fired first and suppressed it).
     """
     matched = set(score.matched_rows)
-    findings: list[ScoredFinding] = []
+    evidence: dict[str, list[FindingEvidence]] = {}
 
     def add(row: str, span: str, detail: str) -> None:
         if row in matched and span.strip():
-            findings.append(
-                ScoredFinding(
-                    turn_index=turn.turn_index,
-                    persona_id=turn.persona_id,
-                    concern_id=turn.concern_id,
-                    rubric_row=row,
-                    support_value=values.get(row, 0),
-                    span=span,
-                    detail=detail,
-                )
-            )
+            evidence.setdefault(row, []).append(FindingEvidence(span=span, detail=detail))
 
     for hit in extraction.red_line_hits:
         add("red_line", hit.span, hit.why)
@@ -99,10 +90,22 @@ def _turn_findings(
         if cov.addressed in (Addressed.full, Addressed.partial) and cov.span:
             add("approach_cited", cov.span, cov.addressed.value)
     for fc in extraction.fact_checks:
-        if fc.verdict is Verdict.refuted:
+        if fc.verdict is Verdict.refuted and fc.tier >= 1:
             add("false_fact", fc.claim, fc.source)
 
-    return findings
+    return [
+        ScoredFinding(
+            turn_index=turn.turn_index,
+            persona_id=turn.persona_id,
+            concern_id=turn.concern_id,
+            rubric_row=row,
+            support_value=values.get(row, 0),
+            count=score.row_counts.get(row, 1),
+            evidence=evidence[row],
+        )
+        for row in score.matched_rows
+        if row in evidence
+    ]
 
 
 def build_scored_report(

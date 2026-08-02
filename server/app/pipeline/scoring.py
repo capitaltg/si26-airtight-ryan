@@ -51,15 +51,17 @@ def score_turn(extraction: Extraction, rubric: Rubric) -> ScoreOutput:
     if extraction.red_line_hits:
         return ScoreOutput(
             support_delta=values["red_line"],
+            raw_support_delta=values["red_line"],
             matched_rows=["red_line"],
+            row_counts={"red_line": 1},
             capped=True,
         )
 
     delta = 0
-    matched: set[str] = set()
+    counts: dict[str, int] = {}
 
     if extraction.dodges:
-        matched.add("dodge")
+        counts["dodge"] = 1
         delta += values["dodge"]
 
     # Tier 0 is a conflict with an earlier answer, which the `contradiction` row
@@ -70,11 +72,11 @@ def score_turn(extraction: Extraction, rubric: Rubric) -> ScoreOutput:
         1 for fc in extraction.fact_checks if fc.verdict is Verdict.refuted and fc.tier >= 1
     )
     if refuted:
-        matched.add("false_fact")
+        counts["false_fact"] = refuted
         delta += values["false_fact"] * refuted
 
     if extraction.consistency_flags:
-        matched.add("contradiction")
+        counts["contradiction"] = 1
         delta += values["contradiction"]
 
     backed = any(
@@ -82,7 +84,7 @@ def score_turn(extraction: Extraction, rubric: Rubric) -> ScoreOutput:
         for claim in extraction.claims
     )
     if backed:
-        matched.add("evidence_backed")
+        counts["evidence_backed"] = 1
         delta += values["evidence_backed"]
 
     cited = any(
@@ -92,16 +94,23 @@ def score_turn(extraction: Extraction, rubric: Rubric) -> ScoreOutput:
     # approach_cited is the weaker positive; a backed commitment already captures
     # the credit, so don't double-count.
     if cited and not backed:
-        matched.add("approach_cited")
+        counts["approach_cited"] = 1
         delta += values["approach_cited"]
 
-    if not matched:
-        matched.add("unsubstantiated")
+    if not counts:
+        counts["unsubstantiated"] = 1
         delta += values["unsubstantiated"]  # 0
 
-    delta = max(-2, min(2, delta))
-    ordered = [row for row in _ROW_ORDER if row in matched]
-    return ScoreOutput(support_delta=delta, matched_rows=ordered, capped=False)
+    raw = delta
+    delta = max(-2, min(2, raw))
+    ordered = [row for row in _ROW_ORDER if row in counts]
+    return ScoreOutput(
+        support_delta=delta,
+        raw_support_delta=raw,
+        matched_rows=ordered,
+        row_counts={row: counts[row] for row in ordered},
+        capped=False,
+    )
 
 
 def apply_limit_penalty(
@@ -124,11 +133,13 @@ def apply_limit_penalty(
     if not exceeded:
         return score.model_copy(update={"limit": result})
 
-    matched = set(score.matched_rows)
-    matched.add("over_limit")
+    counts = {**score.row_counts, "over_limit": 1}
+    ordered = [row for row in _ROW_ORDER if row in counts]
     return ScoreOutput(
         support_delta=score.support_delta + penalty,
-        matched_rows=[row for row in _ROW_ORDER if row in matched],
+        raw_support_delta=score.raw_support_delta,
+        matched_rows=ordered,
+        row_counts={row: counts[row] for row in ordered},
         capped=score.capped,
         limit=result,
     )

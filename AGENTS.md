@@ -103,6 +103,7 @@ airtight/
 │  │  ├─ health.spec.ts
 │  │  ├─ mic-check.spec.ts       # device pickers, level meter, loopback (fake media project)
 │  │  ├─ persona-intro.spec.ts
+│  │  ├─ scoring-legibility.spec.ts # row applications, clamp marker, rubric combination rules
 │  │  ├─ session-history.spec.ts # past-rehearsals list and archive view
 │  │  ├─ tangent-limits.spec.ts  # live answer-limit disclosure and warnings
 │  │  ├─ voice-prompt-audio.spec.ts

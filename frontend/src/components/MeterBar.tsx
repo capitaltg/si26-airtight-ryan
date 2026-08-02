@@ -35,7 +35,7 @@ export function MeterBar({ meter }: { meter: Meter }) {
 export function MeterPanel({ meters }: { meters: Meter[] }) {
   return (
     <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
         Evaluator support
       </h2>
       {meters.map((m) => (

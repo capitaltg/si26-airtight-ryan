@@ -28,6 +28,7 @@ class ConcernDisclosureDTO(BaseModel):
 class RubricDisclosureDTO(BaseModel):
     version: int
     rows: list[RubricRow]
+    combination: list[str]
     concerns: list[ConcernDisclosureDTO]
 
 
@@ -48,6 +49,7 @@ def get_rubric(content: Content = Depends(get_content)) -> RubricDisclosureDTO:
     return RubricDisclosureDTO(
         version=content.rubric.version,
         rows=content.rubric.rows,
+        combination=content.rubric.combination,
         concerns=[
             ConcernDisclosureDTO(
                 concern_id=c.concern_id,

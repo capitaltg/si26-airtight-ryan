@@ -77,6 +77,9 @@ export function RubricPanel({ open, onClose }: { open: boolean; onClose: () => v
                         <td className="py-1.5 align-top">
                           <div className="font-medium text-slate-800">{prettify(row.id)}</div>
                           <div className="text-xs text-slate-500">{row.description}</div>
+                          {row.note && (
+                            <div className="mt-0.5 text-xs italic text-slate-500">{row.note}</div>
+                          )}
                           {row.cap !== null && (
                             <div className="mt-1 inline-block rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-700">
                               {row.support_value} per turn · {row.cap} permanent cap
@@ -88,6 +91,19 @@ export function RubricPanel({ open, onClose }: { open: boolean; onClose: () => v
                   </tbody>
                 </table>
               </section>
+
+              {data.combination.length > 0 && (
+                <section className="space-y-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    How rows combine
+                  </h3>
+                  <ol className="ml-4 list-decimal space-y-1 text-xs text-slate-600">
+                    {data.combination.map((rule) => (
+                      <li key={rule}>{rule}</li>
+                    ))}
+                  </ol>
+                </section>
+              )}
 
               <section className="space-y-3">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">

@@ -45,7 +45,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from replay_session import DEFAULT_BASE_URL, FIXTURE_DIR, _get, c, replay
+from replay_session import DEFAULT_BASE_URL, FIXTURE_DIR, _format_rows, _get, c, replay
 
 # Truncating the cache table is what forces fresh Bedrock calls. Overridable
 # with --reset-cmd for a stack that isn't the compose one (a local Postgres, a
@@ -68,7 +68,9 @@ COMPARED = (
     "prompt",
     "sent",
     "matched_rows",
+    "row_counts",
     "support_delta",
+    "raw_support_delta",
     "meter",
     "capped",
     "concern_status",
@@ -78,7 +80,9 @@ COMPARED = (
 )
 SCORE_FIELDS = (
     "matched_rows",
+    "row_counts",
     "support_delta",
+    "raw_support_delta",
     "meter",
     "capped",
     "concern_status",
@@ -168,9 +172,11 @@ def _score_summary(run: dict[str, Any]) -> str:
     for turn in run["turns"]:
         if turn.get("kind") != "answer":
             continue
-        rows = ",".join(turn.get("matched_rows", [])) or "(none)"
+        rows = _format_rows(turn.get("matched_rows", []), turn.get("row_counts"))
+        raw = turn.get("raw_support_delta", turn["support_delta"])
+        clamp = f" (clamped from {raw:+d})" if abs(raw) > 2 else ""
         turns.append(
-            f"{turn['concern_id']} rows={rows} delta={turn['support_delta']:+d} "
+            f"{turn['concern_id']} rows={rows} delta={turn['support_delta']:+d}{clamp} "
             f"meter={turn['meter']} capped={turn['capped']}"
         )
     scored = " | ".join(turns) or "(no scored turns)"
@@ -214,7 +220,9 @@ def consistency_report(
                     "turn": turn_number,
                     "concern_id": turn["concern_id"],
                     "matched_rows": turn.get("matched_rows", []),
+                    "row_counts": turn.get("row_counts", {}),
                     "support_delta": turn["support_delta"],
+                    "raw_support_delta": turn.get("raw_support_delta", turn["support_delta"]),
                     "meter": turn["meter"],
                     "capped": turn["capped"],
                     "concern_status": turn["concern_status"],

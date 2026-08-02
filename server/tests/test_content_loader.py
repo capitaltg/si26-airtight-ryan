@@ -38,6 +38,42 @@ def test_rubric_cap_lives_on_the_red_line_row() -> None:
     assert content.rubric.cap_ceiling == 25
 
 
+def test_rubric_discloses_how_rows_combine() -> None:
+    content = load_content()
+    assert len(content.rubric.combination) >= 6
+    joined = " ".join(content.rubric.combination).lower()
+    assert "red line" in joined
+    assert "-2 to +2" in joined
+
+
+def test_rows_with_a_combination_caveat_carry_a_note() -> None:
+    rows = {row.id: row for row in load_content().rubric.rows}
+    assert rows["false_fact"].note is not None
+    assert rows["approach_cited"].note is not None
+    assert rows["contradiction"].note is not None
+    assert rows["over_limit"].note is not None
+    assert rows["dodge"].note is None
+
+
+def test_rubric_without_the_new_fields_still_loads(tmp_path: Path) -> None:
+    store = tmp_path / "store"
+    shutil.copytree(STORE, store)
+    (store / "rubric.yaml").write_text(
+        "version: 2\n"
+        "rows:\n"
+        "  - id: red_line\n"
+        "    support_value: -2\n"
+        "    cap: 25\n"
+        "    description: Crossed a persona hard limit.\n"
+        "  - id: over_limit\n"
+        "    support_value: -1\n"
+        "    description: Answer exceeds the configured limit.\n"
+    )
+    content = load_content(store)
+    assert content.rubric.combination == []
+    assert all(row.note is None for row in content.rubric.rows)
+
+
 def test_texts_and_keys_are_populated() -> None:
     content = load_content()
     assert content.rfp_text.strip()

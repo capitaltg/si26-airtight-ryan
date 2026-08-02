@@ -23,7 +23,7 @@ from app.schemas.extraction import (
     SubQuestionCoverage,
     Verdict,
 )
-from app.schemas.scoring import LimitKind, LimitMeasurement
+from app.schemas.scoring import LimitKind, LimitMeasurement, LimitResult, ScoreOutput
 
 
 def _rubric():
@@ -239,6 +239,132 @@ def test_multiple_refuted_facts_accumulate_before_clamp():
     out = score_turn(ext, _rubric())
     assert out.support_delta == -2  # -1 + -1, supported ignored
     assert out.matched_rows == ["false_fact"]
+
+
+def test_row_counts_report_false_fact_applications():
+    ext = Extraction(
+        fact_checks=[
+            FactCheck(claim="a", tier=1, verdict=Verdict.refuted, source="RFP"),
+            FactCheck(claim="b", tier=1, verdict=Verdict.refuted, source="RFP"),
+            FactCheck(claim="c", tier=1, verdict=Verdict.supported, source="RFP"),
+        ]
+    )
+    out = score_turn(ext, _rubric())
+    assert out.support_delta == -2
+    assert out.raw_support_delta == -2
+    assert out.row_counts == {"false_fact": 2}
+
+
+def test_raw_support_delta_keeps_the_points_the_clamp_absorbed():
+    ext = Extraction(
+        dodges=[Dodge(sub_question_id="s", type=DodgeType.deflection, evidence="e")],
+        fact_checks=[
+            FactCheck(claim="a", tier=1, verdict=Verdict.refuted, source="RFP"),
+            FactCheck(claim="b", tier=1, verdict=Verdict.refuted, source="RFP"),
+            FactCheck(claim="c", tier=1, verdict=Verdict.refuted, source="RFP"),
+        ],
+    )
+    out = score_turn(ext, _rubric())
+    assert out.support_delta == -2
+    assert out.raw_support_delta == -5
+    assert out.row_counts == {"dodge": 1, "false_fact": 3}
+
+
+def test_single_dodge_sits_at_the_bound_without_clamping():
+    out = score_turn(
+        Extraction(dodges=[Dodge(sub_question_id="s", type=DodgeType.deflection, evidence="e")]),
+        _rubric(),
+    )
+    assert out.support_delta == out.raw_support_delta == -2
+    assert out.row_counts == {"dodge": 1}
+
+
+def test_red_line_counts_once_however_many_hits():
+    hit = RedLineHit(
+        source_id="technical_approach",
+        source_kind=RedLineSourceKind.concern_red_line,
+        span="on-premises in our own data center",
+        why="PWS 3.1 forbids on-premises hosting",
+    )
+    out = score_turn(Extraction(red_line_hits=[hit, hit, hit]), _rubric())
+    assert out.matched_rows == ["red_line"]
+    assert out.row_counts == {"red_line": 1}
+    assert out.raw_support_delta == -2
+
+
+def test_unsubstantiated_turn_has_a_zero_raw_delta():
+    out = score_turn(Extraction(), _rubric())
+    assert out.matched_rows == ["unsubstantiated"]
+    assert out.row_counts == {"unsubstantiated": 1}
+    assert out.raw_support_delta == 0
+
+
+def test_row_counts_ordering_follows_matched_rows():
+    ext = Extraction(
+        dodges=[Dodge(sub_question_id="s", type=DodgeType.filibuster, evidence="e")],
+        fact_checks=[FactCheck(claim="c", tier=1, verdict=Verdict.refuted, source="RFP")],
+        consistency_flags=[ConsistencyFlag(conflicts_with_turn=1, detail="d")],
+    )
+    out = score_turn(ext, _rubric())
+    assert list(out.row_counts) == out.matched_rows == ["dodge", "false_fact", "contradiction"]
+
+
+def test_legacy_score_json_backfills_both_new_fields():
+    legacy = ScoreOutput(support_delta=-1, matched_rows=["dodge"])
+    assert legacy.row_counts == {"dodge": 1}
+    assert legacy.raw_support_delta == -1
+
+
+def test_legacy_over_limit_row_reconstructs_the_semantic_delta():
+    legacy = ScoreOutput(
+        support_delta=-3,
+        matched_rows=["dodge", "over_limit"],
+        limit=LimitResult(
+            kind=LimitKind.text_words,
+            measured=301,
+            warning_threshold=225,
+            limit_threshold=300,
+            exceeded=True,
+            penalty_applied=True,
+            penalty_value=-1,
+        ),
+    )
+    assert legacy.raw_support_delta == -2
+
+
+def test_row_counts_keys_outside_matched_rows_are_dropped():
+    out = ScoreOutput(
+        support_delta=-1,
+        matched_rows=["dodge"],
+        row_counts={"dodge": 1, "false_fact": 4},
+    )
+    assert out.row_counts == {"dodge": 1}
+
+
+def test_limit_penalty_preserves_counts_and_the_raw_delta():
+    semantic = score_turn(
+        Extraction(
+            fact_checks=[
+                FactCheck(claim="a", tier=1, verdict=Verdict.refuted, source="RFP"),
+                FactCheck(claim="b", tier=1, verdict=Verdict.refuted, source="RFP"),
+            ]
+        ),
+        _rubric(),
+    )
+    final = apply_limit_penalty(
+        semantic,
+        _rubric(),
+        LimitMeasurement(
+            kind=LimitKind.text_words,
+            measured=301,
+            warning_threshold=225,
+            limit_threshold=300,
+        ),
+    )
+    assert final.support_delta == -3
+    assert final.raw_support_delta == -2
+    assert final.row_counts == {"false_fact": 2, "over_limit": 1}
+    assert list(final.row_counts) == final.matched_rows
 
 
 def test_matched_rows_are_in_stable_rubric_order():

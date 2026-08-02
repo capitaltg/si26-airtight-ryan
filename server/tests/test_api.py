@@ -309,7 +309,7 @@ def test_report_is_code_rendered_with_labeled_narrative(client: TestClient) -> N
     # the backed commitment is a scored finding carrying its verbatim span
     assert len(body["findings"]) == 1
     assert body["findings"][0]["rubric_row"] == "evidence_backed"
-    assert body["findings"][0]["span"]
+    assert body["findings"][0]["evidence"][0]["span"]
     # the narrative sits under a "Not scored" header
     assert body["narrative"]["scored"] is False
     assert body["narrative"]["header"] == "Not scored"
@@ -383,9 +383,14 @@ def test_content_rubric_is_disclosed(client: TestClient) -> None:
     assert body["version"] == 2
     assert "cap_ceiling" not in body  # the cap now rides inside the red_line row
     assert len(body["rows"]) == 8
+    assert len(body["combination"]) >= 6
     red_line = next(row for row in body["rows"] if row["id"] == "red_line")
     assert red_line["cap"] == 25
     assert all(row["cap"] is None for row in body["rows"] if row["id"] != "red_line")
+    false_fact = next(row for row in body["rows"] if row["id"] == "false_fact")
+    assert "once per false fact" in false_fact["note"]
+    dodge = next(row for row in body["rows"] if row["id"] == "dodge")
+    assert dodge["note"] is None
     assert len(body["concerns"]) == 8
     assert all(c["red_lines"] for c in body["concerns"])
 
@@ -769,9 +774,26 @@ def test_transcript_interleaves_clarifications_and_marks_them_unscored(
     assert clarification["rationale"] == ""
     assert clarification["support_delta"] == 0
     assert clarification["matched_rows"] == []
+    assert clarification["row_counts"] == {}
+    assert clarification["raw_support_delta"] == 0
     assert clarification["capped"] is False
     # Asked against the active prompt, which is the same one the scored turn answered.
     assert clarification["prompt"] == turns[1]["prompt"]
+
+
+def test_answer_exposes_row_counts_and_the_raw_delta(client: TestClient) -> None:
+    session_id = client.post("/sessions").json()["id"]
+    body = client.post(f"/sessions/{session_id}/answer", json={"answer": "Architecture."}).json()
+    assert body["row_counts"] == {"evidence_backed": 1}
+    assert body["raw_support_delta"] == 2
+
+
+def test_transcript_carries_row_counts_and_the_raw_delta(client: TestClient) -> None:
+    session_id = client.post("/sessions").json()["id"]
+    client.post(f"/sessions/{session_id}/answer", json={"answer": "Architecture."})
+    turn = client.get(f"/sessions/{session_id}/transcript").json()["turns"][0]
+    assert turn["row_counts"] == {"evidence_backed": 1}
+    assert turn["raw_support_delta"] == 2
 
 
 def test_transcript_marks_a_second_turn_on_one_concern_as_a_follow_up(
