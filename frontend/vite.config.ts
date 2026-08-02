@@ -8,6 +8,12 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
+    // The workspace is bind-mounted from macOS host; Docker Desktop's file
+    // sharing doesn't propagate inotify events through the mount, so the
+    // default watcher misses host-side saves. Poll instead.
+    watch: {
+      usePolling: true,
+    },
     proxy: {
       "/api": {
         target: process.env.VITE_API_TARGET ?? "http://localhost:8000",
