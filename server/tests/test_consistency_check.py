@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 from consistency_check import (
+    _score_differences,
+    _score_summary,
     check_scenario,
     consistency_report,
     diff_runs,
@@ -34,7 +36,9 @@ def _turn(**over: object) -> dict:
         "prompt": "Walk me through the architecture.",
         "sent": "Containerized microservices on GovCloud.",
         "matched_rows": ["approach_cited"],
+        "row_counts": {"approach_cited": 1},
         "support_delta": 1,
+        "raw_support_delta": 1,
         "meter": 51,
         "capped": False,
         "concern_status": "satisfied",
@@ -141,7 +145,9 @@ def test_consistency_report_records_each_scored_turn_and_score_divergence() -> N
                     "turn": 2,
                     "concern_id": "technical_approach",
                     "matched_rows": ["approach_cited"],
+                    "row_counts": {"approach_cited": 1},
                     "support_delta": 1,
+                    "raw_support_delta": 1,
                     "meter": 51,
                     "capped": False,
                     "concern_status": "satisfied",
@@ -156,7 +162,9 @@ def test_consistency_report_records_each_scored_turn_and_score_divergence() -> N
                     "turn": 2,
                     "concern_id": "technical_approach",
                     "matched_rows": ["approach_cited"],
+                    "row_counts": {"approach_cited": 1},
                     "support_delta": -1,
+                    "raw_support_delta": 1,
                     "meter": 49,
                     "capped": False,
                     "concern_status": "satisfied",
@@ -285,6 +293,64 @@ def test_turn_record_sorts_matched_rows() -> None:
     record = _turn_record(prompt, "Forty at steady state.", res)
     assert record["matched_rows"] == ["approach_cited", "contradiction"]
     assert record["is_follow_up"] is True
+
+
+def test_format_rows_shows_the_application_count() -> None:
+    from replay_session import _format_rows
+
+    assert _format_rows(["false_fact", "dodge"], {"false_fact": 2, "dodge": 1}) == (
+        "false_fact x2, dodge"
+    )
+    assert _format_rows(["dodge"], {}) == "dodge"
+    assert _format_rows([], {}) == "(none)"
+
+
+def test_score_summary_shows_counts_and_the_clamp() -> None:
+    run = _run(
+        _turn(
+            matched_rows=["dodge", "false_fact"],
+            row_counts={"dodge": 1, "false_fact": 3},
+            support_delta=-2,
+            raw_support_delta=-5,
+        )
+    )
+    summary = _score_summary(run)
+    assert "false_fact x3" in summary
+    assert "clamped from -5" in summary
+
+
+def test_turn_record_persists_counts_and_the_raw_delta() -> None:
+    prompt = {"is_follow_up": False, "prompt": "And the records?"}
+    res = {
+        "persona_id": "technical_evaluator",
+        "concern_id": "technical_approach",
+        "matched_rows": ["false_fact", "dodge"],
+        "row_counts": {"false_fact": 2, "dodge": 1},
+        "raw_support_delta": -4,
+        "support_delta": -2,
+        "meter": 48,
+        "capped": False,
+        "concern_status": "dodged",
+        "reply": "Which number is it?",
+        "rationale": "Two refuted counts.",
+    }
+    record = _turn_record(prompt, "Twelve million records.", res)
+    assert record["row_counts"] == {"dodge": 1, "false_fact": 2}
+    assert record["raw_support_delta"] == -4
+
+
+def test_application_count_change_is_a_score_divergence() -> None:
+    base = _run(_turn(row_counts={"false_fact": 2}))
+    other = _run(_turn(row_counts={"false_fact": 3}))
+    assert any("row_counts" in d for d in _score_differences(base, other))
+
+
+def test_report_records_counts_and_the_raw_delta() -> None:
+    run = _run(_turn(row_counts={"false_fact": 2}, raw_support_delta=-4))
+    report = consistency_report("fixture", [run])
+    turn = report["runs"][0]["score_turns"][0]
+    assert turn["row_counts"] == {"false_fact": 2}
+    assert turn["raw_support_delta"] == -4
 
 
 def test_differing_turn_count_is_reported() -> None:

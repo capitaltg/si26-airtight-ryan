@@ -114,7 +114,9 @@ class TurnResult:
     concern_id: str
     concern_status: str
     support_delta: int
+    raw_support_delta: int
     matched_rows: list[str]
+    row_counts: dict[str, int]
     meter: int
     capped: bool
     next: Assignment | None
@@ -394,7 +396,9 @@ def submit_answer_events(
             concern_id=concern.concern_id,
             concern_status=status,
             support_delta=score.support_delta,
+            raw_support_delta=score.raw_support_delta,
             matched_rows=score.matched_rows,
+            row_counts=score.row_counts,
             meter=new_meter,
             capped=capped,
             next=following,

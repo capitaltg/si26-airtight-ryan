@@ -86,8 +86,15 @@ def _fmt_prompt(prompt: dict) -> str:
     return f"{who}{tag}\n    {prompt['prompt']}"
 
 
+def _format_rows(matched_rows: list[str], row_counts: dict[str, int] | None = None) -> str:
+    """Matched rows with their application count, e.g. ``false_fact x2, dodge``."""
+    counts = row_counts or {}
+    parts = [row if counts.get(row, 1) == 1 else f"{row} x{counts[row]}" for row in matched_rows]
+    return ", ".join(parts) or "(none)"
+
+
 def _fmt_result(r: dict) -> str:
-    rows = ", ".join(r["matched_rows"]) or "(none)"
+    rows = _format_rows(r["matched_rows"], r.get("row_counts"))
     delta = r["support_delta"]
     delta_s = c(f"{delta:+d}", "32" if delta > 0 else "31" if delta < 0 else "2")
     cap = c(" CAPPED", "31") if r["capped"] else ""
@@ -115,7 +122,9 @@ def _turn_record(prompt: dict, sent: str, res: dict) -> dict:
         "prompt": prompt["prompt"],
         "sent": sent,
         "matched_rows": sorted(res["matched_rows"]),
+        "row_counts": dict(sorted(res.get("row_counts", {}).items())),
         "support_delta": res["support_delta"],
+        "raw_support_delta": res.get("raw_support_delta", res["support_delta"]),
         "meter": res["meter"],
         "capped": res["capped"],
         "concern_status": res["concern_status"],

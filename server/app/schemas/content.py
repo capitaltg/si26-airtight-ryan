@@ -63,11 +63,13 @@ class RubricRow(BaseModel):
     description: str
     support_value: int
     cap: int | None = None  # if set, crossing this row pins the meter at <= cap, sticky forever
+    note: str | None = None
 
 
 class Rubric(BaseModel):
     version: int
     rows: list[RubricRow] = Field(default_factory=list)
+    combination: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _red_line_must_carry_a_cap(self) -> "Rubric":

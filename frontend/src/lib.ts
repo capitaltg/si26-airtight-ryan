@@ -10,6 +10,10 @@ export function prettify(id: string): string {
     .join(" ")
 }
 
+export function rowLabel(row: string, count = 1): string {
+  return count > 1 ? `${prettify(row)} x${count}` : prettify(row)
+}
+
 export function countWords(text: string): number {
   return text.trim() ? text.trim().split(/\s+/).length : 0
 }

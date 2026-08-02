@@ -123,7 +123,9 @@ class AnswerResponse(BaseModel):
     concern_id: str
     concern_status: str
     support_delta: int
+    raw_support_delta: int
     matched_rows: list[str]
+    row_counts: dict[str, int]
     meter: int
     capped: bool
     limit: LimitResult | None
@@ -188,7 +190,9 @@ class ArchivedTurnDTO(BaseModel):
     reply: str
     rationale: str
     support_delta: int
+    raw_support_delta: int
     matched_rows: list[str]
+    row_counts: dict[str, int]
     capped: bool
     scored: bool  # False for a clarification exchange
     transcript: str | None  # voice turns only
@@ -302,7 +306,9 @@ def _archived_turns(
                     reply=reaction.in_character_reply if reaction is not None else "",
                     rationale=reaction.rationale if reaction is not None else "",
                     support_delta=score.support_delta,
+                    raw_support_delta=score.raw_support_delta,
                     matched_rows=score.matched_rows,
+                    row_counts=score.row_counts,
                     # The per-turn red-line flag, which is the auditable fact
                     # about this answer. The persona's sticky meter cap is a
                     # session-level fact and shows on the meters.
@@ -325,7 +331,9 @@ def _archived_turns(
                     reply=row.reply,
                     rationale="",
                     support_delta=0,
+                    raw_support_delta=0,
                     matched_rows=[],
+                    row_counts={},
                     capped=False,
                     scored=False,
                     transcript=None,
@@ -341,6 +349,7 @@ def _answer_payload(
     """The AnswerResponse for one scored turn. Shared by the plain-JSON
     ``/answer`` endpoint and the SSE ``/answer/stream`` result frame so both
     carry byte-identical fields."""
+    score = ScoreOutput.model_validate(result.turn.score_json)
     return AnswerResponse(
         reply=result.reaction.in_character_reply,
         rationale=result.reaction.rationale,
@@ -348,10 +357,12 @@ def _answer_payload(
         concern_id=result.concern_id,
         concern_status=result.concern_status,
         support_delta=result.support_delta,
+        raw_support_delta=result.raw_support_delta,
         matched_rows=result.matched_rows,
+        row_counts=result.row_counts,
         meter=result.meter,
         capped=result.capped,
-        limit=ScoreOutput.model_validate(result.turn.score_json).limit,
+        limit=score.limit,
         meters=_meters(db, session_id),
         next_prompt=_prompt_dto(result.next),
         done=result.done,

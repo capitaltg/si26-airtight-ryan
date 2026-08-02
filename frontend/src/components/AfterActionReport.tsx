@@ -6,7 +6,7 @@
 // number. `print:` utilities let the presenter export it from the browser.
 
 import { useReport } from "../api/client"
-import { prettify } from "../lib"
+import { prettify, rowLabel } from "../lib"
 import type { PersonaLine, Report, ScoredFinding } from "../types"
 import { MeterPanel } from "./MeterBar"
 
@@ -43,16 +43,16 @@ const ROW_TONE: Record<string, string> = {
 
 function FindingCard({ f }: { f: ScoredFinding }) {
   const tone = ROW_TONE[f.rubric_row] ?? "bg-slate-100 text-slate-600"
-  const sign = f.support_value > 0 ? `+${f.support_value}` : `${f.support_value}`
+  const total = f.support_value * f.count
+  const sign = total > 0 ? `+${total}` : `${total}`
   // dodge and approach_cited carry a category enum (e.g. "non_commitment") as
   // their detail; the rest carry prose, which must stay verbatim.
-  const detail =
-    f.rubric_row === "dodge" || f.rubric_row === "approach_cited" ? prettify(f.detail) : f.detail
+  const prettifyDetail = f.rubric_row === "dodge" || f.rubric_row === "approach_cited"
   return (
-    <details className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm print:shadow-none print:open">
+    <details className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm print:shadow-none">
       <summary className="flex cursor-pointer items-center gap-2 text-sm">
         <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${tone}`}>
-          {prettify(f.rubric_row)} {sign}
+          {rowLabel(f.rubric_row, f.count)} {sign}
         </span>
         <span className="text-slate-500">
           {prettify(f.persona_id)} · {prettify(f.concern_id)}
@@ -60,10 +60,16 @@ function FindingCard({ f }: { f: ScoredFinding }) {
         <span className="ml-auto text-xs text-slate-400">turn {f.turn_index + 1}</span>
       </summary>
       <div className="mt-2 space-y-1.5 text-xs text-slate-600">
-        <blockquote className="border-l-2 border-slate-300 pl-2 italic text-slate-700">
-          “{f.span}”
-        </blockquote>
-        {detail && <p className="text-slate-500">{detail}</p>}
+        {f.evidence.map((e, i) => (
+          <div key={`${e.span}-${i}`} className="space-y-1">
+            <blockquote className="border-l-2 border-slate-300 pl-2 italic text-slate-700">
+              “{e.span}”
+            </blockquote>
+            {e.detail && (
+              <p className="text-slate-500">{prettifyDetail ? prettify(e.detail) : e.detail}</p>
+            )}
+          </div>
+        ))}
       </div>
     </details>
   )
@@ -175,7 +181,14 @@ function ReportBody({ report }: { report: Report }) {
             ) : (
               <div className="space-y-2">
                 {report.findings.map((f) => (
-                  <FindingCard key={`${f.turn_index}-${f.rubric_row}-${f.span}`} f={f} />
+                  // New reports guarantee one finding per turn and row. Legacy
+                  // snapshots can still contain several independently upgraded
+                  // findings for that pair, so include every evidence value in
+                  // the key rather than collapsing a card during reconciliation.
+                  <FindingCard
+                    key={`${f.turn_index}-${f.rubric_row}-${f.evidence.map((e) => `${e.span}\u0000${e.detail}`).join("\u0001")}`}
+                    f={f}
+                  />
                 ))}
               </div>
             )}
