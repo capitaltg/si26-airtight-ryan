@@ -4,13 +4,17 @@
 
 import type { Meter } from "../types"
 import { meterTone, prettify } from "../lib"
+import { PersonaAvatar } from "./PersonaAvatar"
 
 export function MeterBar({ meter }: { meter: Meter }) {
   const width = Math.max(0, Math.min(100, meter.support))
   return (
     <div className="space-y-1">
       <div className="flex items-baseline justify-between text-sm">
-        <span className="font-medium text-slate-700">{prettify(meter.persona_id)}</span>
+        <span className="flex items-center gap-2 font-medium text-slate-700">
+          <PersonaAvatar personaId={meter.persona_id} size={20} />
+          {prettify(meter.persona_id)}
+        </span>
         <span className="flex items-center gap-2 tabular-nums text-slate-500">
           {meter.capped && (
             <span className="whitespace-nowrap rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-700">

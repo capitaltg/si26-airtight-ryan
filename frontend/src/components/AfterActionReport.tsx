@@ -9,6 +9,7 @@ import { useReport } from "../api/client"
 import { prettify, rowLabel } from "../lib"
 import type { PersonaLine, Report, ScoredFinding } from "../types"
 import { MeterPanel } from "./MeterBar"
+import { PersonaAvatar } from "./PersonaAvatar"
 
 function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -54,7 +55,8 @@ function FindingCard({ f }: { f: ScoredFinding }) {
         <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${tone}`}>
           {rowLabel(f.rubric_row, f.count)} {sign}
         </span>
-        <span className="text-slate-500">
+        <span className="flex items-center gap-1.5 text-slate-500">
+          <PersonaAvatar personaId={f.persona_id} size={16} />
           {prettify(f.persona_id)} · {prettify(f.concern_id)}
         </span>
         <span className="ml-auto text-xs text-slate-400">turn {f.turn_index + 1}</span>
@@ -132,8 +134,11 @@ function ReportBody({ report }: { report: Report }) {
                   key={`${finding.turn_index}-${finding.kind}`}
                   className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-900 print:border-orange-400"
                 >
-                  Turn {finding.turn_index + 1} · {prettify(finding.persona_id)} ·{" "}
-                  {prettify(finding.concern_id)}
+                  <span className="flex items-center gap-1.5">
+                    <PersonaAvatar personaId={finding.persona_id} size={16} />
+                    Turn {finding.turn_index + 1} · {prettify(finding.persona_id)} ·{" "}
+                    {prettify(finding.concern_id)}
+                  </span>
                   <div className="text-xs">
                     {isText ? "Text length" : "Voice duration"}: {measured} {unit} (
                     {finding.limit_threshold} {unit} limit) · {finding.penalty}
@@ -217,6 +222,7 @@ function ReportBody({ report }: { report: Report }) {
                   <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                     Not scored
                   </span>
+                  <PersonaAvatar personaId={c.persona_id} size={16} />
                   <span className="text-xs text-slate-500">
                     {prettify(c.persona_id)} · {prettify(c.concern_id)}
                   </span>
