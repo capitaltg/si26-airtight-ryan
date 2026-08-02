@@ -102,6 +102,7 @@ airtight/
 │  │  ├─ cancel-recording.spec.ts
 │  │  ├─ health.spec.ts
 │  │  ├─ mic-check.spec.ts       # device pickers, level meter, loopback (fake media project)
+│  │  ├─ persona-avatars.spec.ts # deterministic, accessible evaluator avatars
 │  │  ├─ persona-intro.spec.ts
 │  │  ├─ scoring-legibility.spec.ts # row applications, clamp marker, rubric combination rules
 │  │  ├─ session-history.spec.ts # past-rehearsals list and archive view
@@ -126,6 +127,7 @@ airtight/
 │  │  │  ├─ MeterBar.tsx
 │  │  │  ├─ MicCheck.tsx
 │  │  │  ├─ PendingTurn.tsx
+│  │  │  ├─ PersonaAvatar.tsx    # local deterministic DiceBear evaluator avatar
 │  │  │  ├─ PromptIntro.tsx
 │  │  │  ├─ Rehearsal.tsx
 │  │  │  ├─ RubricPanel.tsx
