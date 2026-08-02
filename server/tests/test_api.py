@@ -9,12 +9,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.api.deps import get_bedrock_client, get_db, get_session_factory
+from app.api.deps import get_bedrock_client, get_db, get_extraction_pin, get_session_factory
 from app.bedrock.cache import CacheKeyInput
 from app.content.loader import Content
 from app.db import repo
 from app.db.models import Base
 from app.main import app
+from app.pipeline.extraction_pin import DbExtractionPin
 from app.schemas.extraction import (
     Addressed,
     Backing,
@@ -24,6 +25,7 @@ from app.schemas.extraction import (
     SubQuestionCoverage,
 )
 from app.schemas.reaction import PersonaReaction
+from tests.test_extraction import ScriptedBedrockClient
 
 
 def test_health():
@@ -63,13 +65,19 @@ class _FakeClient:
                         text="Named architecture with committed leads.",
                         type=ClaimType.commitment,
                         backing=Backing.backed,
-                        span="named components, FedRAMP host, three integrations",
+                        span="architecture",
                     )
                 ],
                 sub_question_coverage=[
-                    SubQuestionCoverage(id="architecture", addressed=Addressed.full, span="x"),
-                    SubQuestionCoverage(id="hosting", addressed=Addressed.full, span="x"),
-                    SubQuestionCoverage(id="integrations", addressed=Addressed.full, span="x"),
+                    SubQuestionCoverage(
+                        id="architecture", addressed=Addressed.full, span="architecture"
+                    ),
+                    SubQuestionCoverage(
+                        id="hosting", addressed=Addressed.full, span="architecture"
+                    ),
+                    SubQuestionCoverage(
+                        id="integrations", addressed=Addressed.full, span="architecture"
+                    ),
                 ],
             )
         return PersonaReaction(in_character_reply="Concrete. Good.", rationale="+2 backed.")
@@ -92,7 +100,9 @@ class _PartialClient(_FakeClient):
         if content_schema is Extraction:
             return Extraction(
                 sub_question_coverage=[
-                    SubQuestionCoverage(id="architecture", addressed=Addressed.full, span="x")
+                    SubQuestionCoverage(
+                        id="architecture", addressed=Addressed.full, span="architecture"
+                    )
                 ]
             )
         return super().extract(
@@ -125,6 +135,7 @@ def client(db_factory: sessionmaker[Session]) -> Iterator[TestClient]:
 
     app.dependency_overrides[get_db] = _get_db
     app.dependency_overrides[get_bedrock_client] = _FakeClient
+    app.dependency_overrides[get_extraction_pin] = lambda: DbExtractionPin(db_factory)
     # The SSE endpoint opens its own session off the factory (own worker thread),
     # so point it at the same in-memory engine the request sessions use.
     app.dependency_overrides[get_session_factory] = lambda: db_factory
@@ -158,6 +169,67 @@ def test_answer_round_trip_moves_meter_and_advances(client: TestClient) -> None:
     assert body["concern_status"] == "satisfied"
     assert body["next_prompt"]["concern_id"] == "key_personnel"
     assert body["done"] is False
+
+
+def test_the_same_answer_twice_scores_the_same_through_the_api(client: TestClient) -> None:
+    """Two sessions replay one extraction for the same scored input."""
+    class _ScriptedApiClient(ScriptedBedrockClient):
+        def extract(
+            self,
+            content: str | list,
+            *,
+            content_schema: type[BaseModel],
+            tool_name: str,
+            max_tokens: int = 4096,
+            cache_key: CacheKeyInput | None = None,
+        ) -> BaseModel:
+            if content_schema is PersonaReaction:
+                return PersonaReaction(in_character_reply="Concrete.", rationale="+2 backed.")
+            return super().extract(
+                content,
+                content_schema=content_schema,
+                tool_name=tool_name,
+                max_tokens=max_tokens,
+                cache_key=cache_key,
+            )
+
+    scripted = _ScriptedApiClient(
+        [
+            Extraction(
+                claims=[
+                    Claim(
+                        text="Three named leads at contract start.",
+                        type=ClaimType.commitment,
+                        backing=Backing.backed,
+                        span="three named leads at contract start",
+                    )
+                ]
+            ),
+            Extraction(
+                claims=[
+                    Claim(
+                        text="Three named leads at contract start.",
+                        type=ClaimType.commitment,
+                        backing=Backing.bare,
+                        span="three named leads at contract start",
+                    )
+                ]
+            ),
+        ]
+    )
+    client.app.dependency_overrides[get_bedrock_client] = lambda: scripted
+
+    deltas = []
+    for _ in range(2):
+        created = client.post("/sessions").json()
+        answered = client.post(
+            f"/sessions/{created['id']}/answer",
+            json={"answer": "We staff three named leads at contract start."},
+        ).json()
+        deltas.append(answered["support_delta"])
+
+    assert deltas[0] == deltas[1]
+    assert scripted.calls == 1
 
 
 def _collect_sse(response) -> list[dict]:

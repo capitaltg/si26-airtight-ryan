@@ -89,6 +89,9 @@ airtight/
 │  │  └─ server.yml              # ruff + mypy + pytest (on server changes)
 │  └─ PULL_REQUEST_TEMPLATE.md
 ├─ docs/
+│  ├─ issues/                    # tracked implementation findings and follow-up work
+│  │  ├─ persona-exemplars-never-reach-the-model.md
+│  │  └─ response-cache-flag-was-never-implemented.md
 │  └─ superpowers/
 │     └─ specs/
 │        ├─ 2026-07-30-cancel-microphone-input-design.md
@@ -165,7 +168,8 @@ airtight/
 │  │  │  ├─ 0003_model_response_cache.py
 │  │  │  ├─ 0004_cache_normalized_answer.py
 │  │  │  ├─ 0005_turn_audio.py
-│  │  │  └─ 0006_session_history.py
+│  │  │  ├─ 0006_session_history.py
+│  │  │  └─ 0007_extraction_pin.py
 │  │  ├─ env.py
 │  │  └─ script.py.mako
 │  ├─ app/
@@ -199,6 +203,8 @@ airtight/
 │  │  │  ├─ __init__.py
 │  │  │  ├─ conciseness.py
 │  │  │  ├─ extraction.py
+│  │  │  ├─ extraction_pin.py
+│  │  │  ├─ grounding.py
 │  │  │  ├─ orchestrator.py
 │  │  │  ├─ reaction.py
 │  │  │  ├─ scoring.py
@@ -237,7 +243,9 @@ airtight/
 │  │  ├─ test_content_loader.py
 │  │  ├─ test_contradiction_grounding.py
 │  │  ├─ test_extraction.py
+│  │  ├─ test_extraction_pin.py
 │  │  ├─ test_extraction_schema.py
+│  │  ├─ test_grounding.py
 │  │  ├─ test_images_install_ffmpeg.py
 │  │  ├─ test_orchestrator.py
 │  │  ├─ test_reaction.py

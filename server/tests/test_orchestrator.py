@@ -34,6 +34,8 @@ from app.schemas.extraction import (
 )
 from app.schemas.reaction import PersonaReaction
 
+_BACKED_ANSWER = "Here is a named lead, 12 years, full-time; covered."
+
 
 @pytest.fixture(scope="module")
 def content() -> Content:
@@ -182,7 +184,7 @@ def test_backed_answer_satisfies_and_advances(db: Session, content: Content) -> 
     client = ScriptedClient()
     client.next_extraction = _full(content.concerns["technical_approach"])
 
-    result = orchestrator.submit_answer(db, content, client, session, "Here is the architecture...")
+    result = orchestrator.submit_answer(db, content, client, session, _BACKED_ANSWER)
 
     assert result.support_delta == 2
     assert result.meter == 52
@@ -200,7 +202,9 @@ def test_red_line_caps_and_stays_capped_across_next_good_answer(
     client = ScriptedClient()
 
     client.next_extraction = _red_line()
-    first = orchestrator.submit_answer(db, content, client, session, "We'll just lift and shift.")
+    first = orchestrator.submit_answer(
+        db, content, client, session, "We'll just lift and shift the mainframe overnight."
+    )
     assert first.capped is True
     assert first.meter == 25  # clamped to the ceiling
     assert first.concern_status == "dodged"  # red line is a terminal failure of the concern
@@ -209,7 +213,7 @@ def test_red_line_caps_and_stays_capped_across_next_good_answer(
     assert first.next is not None
     next_concern = first.next.concern
     client.next_extraction = _full(next_concern)
-    second = orchestrator.submit_answer(db, content, client, session, "Named PM, full-time.")
+    second = orchestrator.submit_answer(db, content, client, session, _BACKED_ANSWER)
     assert second.persona_id == "technical_evaluator"
     assert second.meter == 25  # +2 would be 27, held at the ceiling
     assert second.capped is True
@@ -222,17 +226,17 @@ def test_submit_answer_with_audio_persists_it_on_the_turn(db: Session, content: 
     audio = orchestrator.AnswerAudio(
         data=b"\x00\x01fake-audio-bytes",
         content_type="audio/webm",
-        transcript="Here is the architecture...",
+        transcript=_BACKED_ANSWER,
     )
 
     result = orchestrator.submit_answer(
-        db, content, client, session, "Here is the architecture...", audio
+        db, content, client, session, _BACKED_ANSWER, audio
     )
 
     turn = repo.get_turns(db, session.id)[0]
     assert turn.answer_audio == b"\x00\x01fake-audio-bytes"
     assert turn.answer_audio_content_type == "audio/webm"
-    assert turn.transcript == "Here is the architecture..."
+    assert turn.transcript == _BACKED_ANSWER
     # scoring/agenda behavior is unaffected by the presence of audio
     assert result.support_delta == 2
     assert result.concern_status == "satisfied"
@@ -245,7 +249,7 @@ def test_submit_answer_without_audio_leaves_turn_audio_columns_null(
     client = ScriptedClient()
     client.next_extraction = _full(content.concerns["technical_approach"])
 
-    orchestrator.submit_answer(db, content, client, session, "Here is the architecture...")
+    orchestrator.submit_answer(db, content, client, session, _BACKED_ANSWER)
 
     turn = repo.get_turns(db, session.id)[0]
     assert turn.answer_audio is None
@@ -257,7 +261,7 @@ def test_typed_and_voice_paths_yield_equivalent_scoring(db: Session, content: Co
     """The same words, submitted typed vs. as a transcribed voice answer, must
     produce the same score — audio only changes what gets persisted."""
     concern = content.concerns["technical_approach"]
-    answer_text = "Here is the architecture..."
+    answer_text = _BACKED_ANSWER
 
     typed_session = orchestrator.start_session(db, content)
     typed_client = ScriptedClient()
@@ -334,7 +338,7 @@ def test_clarification_cap_is_per_concern(db: Session, content: Content) -> None
 
     # Satisfy the first concern so the agenda advances to a new one.
     client.next_extraction = _full(content.concerns[first_concern])
-    result = orchestrator.submit_answer(db, content, client, session, "backed answer")
+    result = orchestrator.submit_answer(db, content, client, session, _BACKED_ANSWER)
     assert result.next is not None
     assert result.next.concern.concern_id != first_concern
 
@@ -354,7 +358,7 @@ def test_session_ends_after_all_concerns_resolved(db: Session, content: Content)
         if asg is None:
             break
         client.next_extraction = _full(asg.concern)
-        result = orchestrator.submit_answer(db, content, client, session, "backed answer")
+        result = orchestrator.submit_answer(db, content, client, session, _BACKED_ANSWER)
         submissions += 1
         assert submissions <= 8, "should terminate within 8 satisfied concerns"
 
@@ -373,7 +377,7 @@ def _satisfy_current(
     asg = orchestrator.next_concern(db, content, session)
     assert asg is not None
     client.next_extraction = _full(asg.concern)
-    orchestrator.submit_answer(db, content, client, session, "A concrete, backed answer.")
+    orchestrator.submit_answer(db, content, client, session, _BACKED_ANSWER)
 
 
 def test_first_prompt_of_the_session_carries_the_personas_intro(

@@ -9,7 +9,7 @@ re-anchoring, every span is a real substring of the answer the presenter typed.
 from itertools import combinations
 
 from app.bedrock.cache import normalize_answer
-from app.pipeline.span_anchor import reanchor_spans
+from app.pipeline.span_anchor import fold, reanchor_spans
 from app.schemas.extraction import (
     Addressed,
     Backing,
@@ -27,6 +27,14 @@ from app.schemas.extraction import (
 )
 
 RAW = "We follow a phased approach with a named PM. Our PM has 12 years of federal work."
+
+
+def test_fold_is_public_and_collapses_case_and_whitespace() -> None:
+    folded, origin = fold("  We   Staff\nThree  leads. ")
+    assert folded == "we staff three leads."
+    assert len(origin) == len(folded)
+    # every origin index points at the character that produced it
+    assert "  We   Staff\nThree  leads. "[origin[0]] == "W"
 
 
 def _claim(span: str) -> Claim:

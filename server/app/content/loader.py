@@ -17,6 +17,8 @@ validation. Keep this shape uniform across all three persona files.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,6 +43,31 @@ class Content:
     personas: dict[str, PersonaDefinition]
     concerns: dict[str, Concern]
     rubric: Rubric
+    # sha256 over the authored content the extraction prompt reads. Keys the
+    # extraction pin, so editing a persona or a concern rescores affected inputs
+    # while a code-side prompt reword does not. Deliberately excludes the rubric:
+    # the score is recomputed from pinned findings, so a rubric fix must take
+    # effect without re-extracting. Named for what it covers, not "version",
+    # so the exclusion is visible at every call site.
+    extraction_fingerprint: str
+
+
+def compute_extraction_fingerprint(
+    *,
+    rfp_text: str,
+    proposal_text: str,
+    personas: dict[str, PersonaDefinition],
+    concerns: dict[str, Concern],
+) -> str:
+    """Stable digest of the authored content that reaches the extraction prompt."""
+    payload = {
+        "rfp": rfp_text,
+        "proposal": proposal_text,
+        "personas": {pid: p.model_dump(mode="json") for pid, p in personas.items()},
+        "concerns": {cid: c.model_dump(mode="json") for cid, c in concerns.items()},
+    }
+    blob = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
 def _read_text(path: Path) -> str:
@@ -87,10 +114,20 @@ def load_content(content_dir: Path = settings.content_dir) -> Content:
     Any missing file, parse error, or ``pydantic.ValidationError`` propagates so the
     app fails fast at startup instead of running on partial content.
     """
+    rfp_text = _read_text(content_dir / "rfp_pws.md")
+    proposal_text = _read_text(content_dir / "written_proposal.md")
+    personas = _load_personas(content_dir / "personas")
+    concerns = _load_concerns(content_dir / "concerns.yaml")
     return Content(
-        rfp_text=_read_text(content_dir / "rfp_pws.md"),
-        proposal_text=_read_text(content_dir / "written_proposal.md"),
-        personas=_load_personas(content_dir / "personas"),
-        concerns=_load_concerns(content_dir / "concerns.yaml"),
+        rfp_text=rfp_text,
+        proposal_text=proposal_text,
+        personas=personas,
+        concerns=concerns,
         rubric=_load_rubric(content_dir / "rubric.yaml"),
+        extraction_fingerprint=compute_extraction_fingerprint(
+            rfp_text=rfp_text,
+            proposal_text=proposal_text,
+            personas=personas,
+            concerns=concerns,
+        ),
     )
