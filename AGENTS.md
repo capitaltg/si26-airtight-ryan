@@ -270,6 +270,7 @@ airtight/
 │  │  ├─ test_orchestrator.py
 │  │  ├─ test_persona_writer.py
 │  │  ├─ test_reaction.py
+│  │  ├─ test_replay_session.py
 │  │  ├─ test_repo.py
 │  │  ├─ test_report.py
 │  │  ├─ test_response_cache.py
