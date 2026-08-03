@@ -17,6 +17,7 @@ from consistency_check import (
     _score_differences,
     _score_summary,
     check_scenario,
+    compare_baseline,
     consistency_report,
     diff_runs,
     main,
@@ -87,6 +88,45 @@ def test_changed_reply_is_reported() -> None:
     diffs = diff_runs(_run(_turn()), _run(_turn(reply="Different wording entirely.")))
     assert len(diffs) == 1
     assert "reply" in diffs[0]
+
+
+def test_compare_baseline_reports_score_and_reaction_differences(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    baseline = _run(_turn())
+    customized = _run(_turn(support_delta=-1, meter=49, reply="Different voice."))
+    monkeypatch.setattr("consistency_check.replay", lambda *_args: baseline)
+    monkeypatch.setattr(
+        "consistency_check.replay_with_personas", lambda *_args: customized
+    )
+
+    assert compare_baseline(
+        "http://api.example",
+        {"name": "fixture", "personas": {"technical_evaluator": {}}},
+        quiet=True,
+    )
+
+    output = capsys.readouterr().out
+    assert "baseline score:" in output
+    assert "customized score:" in output
+    assert "SCORE CHANGED: support_delta, meter" in output
+    assert "reply" in output
+
+
+def test_compare_baseline_succeeds_when_results_match(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = _run(_turn())
+    monkeypatch.setattr("consistency_check.replay", lambda *_args: run)
+    monkeypatch.setattr("consistency_check.replay_with_personas", lambda *_args: run)
+
+    assert compare_baseline(
+        "http://api.example",
+        {"name": "fixture", "personas": {"technical_evaluator": {}}},
+        quiet=True,
+    )
+
+    assert "no scoring or reaction differences" in capsys.readouterr().out
 
 
 def test_check_scenario_prints_score_summaries_and_score_divergence(
@@ -259,6 +299,7 @@ def test_main_saves_invocation_metadata_when_a_scenario_fails(
     assert captured["passed"] is False
     assert captured["invocation"] == {
         "base_url": "http://localhost:8000",
+        "compare_baseline": False,
         "expect_rows": ["contradiction"],
         "no_cache": True,
         "reset_cmd": (

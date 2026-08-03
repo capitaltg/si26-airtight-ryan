@@ -49,9 +49,10 @@ excluded; they are supposed to differ.
 python3 scripts/consistency_check.py scripts/replay/scenario-contradiction.json
 python3 scripts/consistency_check.py --all --runs 3 --quiet
 python3 scripts/consistency_check.py scripts/replay/scenario-false-fact.json --no-cache
+python3 scripts/consistency_check.py scripts/replay/scenario-custom-dana.json --compare-baseline
 ```
 
-Two modes testing two different things:
+The repeat-run modes test two different things:
 
 - **default (cache on).** Run 1 populates `model_response_cache`; later runs
   replay it. A pass means the request bytes hash identically across separate
@@ -69,6 +70,12 @@ Two modes testing two different things:
 Exit code is 0 only if every run agreed and every expected row fired. The pure
 comparison logic is unit-tested in
 [`server/tests/test_consistency_check.py`](../../server/tests/test_consistency_check.py).
+
+`--compare-baseline` runs a customized scenario once with default personas,
+then once with its temporary persona overrides. Score changes are observations
+from different validated extraction facts, not failures. The reaction is always
+compared too. This mode runs exactly one baseline/customized pair, so it cannot
+be combined with `--no-cache` or a non-default `--runs` value.
 
 ## Why scenarios are keyed by concern
 

@@ -5,7 +5,8 @@ This is the executable form of the consistency claim in
 docs/ideation/2-scoring-and-drift.md: the same answer to the same prompt must
 produce the same rows, the same delta, the same meter, and the same reply.
 
-Two modes, testing two different things:
+Two repeat-run modes test different things; `--compare-baseline` compares
+default-persona and customized runs as an observation:
 
   default (cache on)
       Run 1 populates ``model_response_cache``; runs 2..N replay it. A pass
@@ -27,6 +28,7 @@ Usage (stack must be up — `cd e2e && npm run stack:up`):
     python3 scripts/consistency_check.py scripts/replay/scenario-contradiction.json
     python3 scripts/consistency_check.py --all --runs 3
     python3 scripts/consistency_check.py scripts/replay/scenario-false-fact.json --no-cache
+    python3 scripts/consistency_check.py scripts/replay/scenario-custom-dana.json --compare-baseline
     python3 scripts/consistency_check.py --all --expect-row contradiction
 
 Exit code is 0 only if every run of every scenario agreed and every expected
@@ -45,7 +47,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from replay_session import DEFAULT_BASE_URL, FIXTURE_DIR, _format_rows, _get, c, replay
+from replay_session import (
+    DEFAULT_BASE_URL,
+    FIXTURE_DIR,
+    _format_rows,
+    _get,
+    c,
+    replay,
+    replay_with_personas,
+)
 
 # Truncating the cache table is what forces fresh Bedrock calls. Overridable
 # with --reset-cmd for a stack that isn't the compose one (a local Postgres, a
@@ -368,6 +378,46 @@ def check_scenario(
     return ok
 
 
+def compare_baseline(
+    base_url: str,
+    scenario: dict,
+    quiet: bool,
+    report_scenarios: list[dict[str, Any]] | None = None,
+    scenario_path: str | None = None,
+) -> bool:
+    """Report how a temporary persona customization changes one replay."""
+    baseline_scenario = {
+        key: value for key, value in scenario.items() if key != "personas"
+    }
+    baseline = replay(base_url, baseline_scenario, quiet, False)
+    customized = replay_with_personas(base_url, scenario, quiet, False)
+    diffs = diff_runs(baseline, customized)
+    score_diffs = _score_differences(baseline, customized)
+
+    print(c(f"\n=== baseline comparison: {scenario.get('name', '(unnamed)')} ===", "1;35"))
+    print(c(f"  baseline score: {_score_summary(baseline)}", "2"))
+    print(c(f"  customized score: {_score_summary(customized)}", "2"))
+    if not diffs:
+        print(c("  no scoring or reaction differences", "2"))
+    elif score_diffs:
+        print(c(f"  SCORE CHANGED: {', '.join(score_diffs)}", "33"))
+    else:
+        print(c("  score unchanged; reaction changed", "33"))
+    for diff in diffs:
+        print(f"    - {diff}")
+
+    if report_scenarios is not None:
+        report = consistency_report(
+            scenario.get("name", "(unnamed)"),
+            [baseline, customized],
+            passed=True,
+            scenario_path=scenario_path,
+        )
+        report["comparison_mode"] = "baseline"
+        report_scenarios.append(report)
+    return True
+
+
 def _resolve(args: argparse.Namespace) -> list[str]:
     if args.all:
         return sorted(glob.glob(os.path.join(FIXTURE_DIR, "scenario-*.json")))
@@ -389,6 +439,11 @@ def main() -> int:
         action="store_true",
         help="truncate the response cache between runs so every run hits Bedrock (costs money)",
     )
+    ap.add_argument(
+        "--compare-baseline",
+        action="store_true",
+        help="compare each customized scenario with its default-persona baseline",
+    )
     ap.add_argument("--reset-cmd", default=DEFAULT_RESET_CMD, help="command used by --no-cache")
     ap.add_argument(
         "--expect-row",
@@ -403,6 +458,10 @@ def main() -> int:
 
     if args.runs < 2:
         sys.exit("--runs must be at least 2; comparing one run to itself proves nothing")
+    if args.compare_baseline and args.runs != 2:
+        sys.exit("--compare-baseline always runs one baseline/customized pair; omit --runs")
+    if args.compare_baseline and args.no_cache:
+        sys.exit("--compare-baseline does not support --no-cache")
 
     try:
         _get(args.base_url, "/health")
@@ -424,16 +483,27 @@ def main() -> int:
     for path in scenario_paths:
         with open(path) as f:
             scenario = json.load(f)
-        ok = check_scenario(
-            args.base_url,
-            scenario,
-            runs=args.runs,
-            quiet=args.quiet,
-            reset_cmd=reset_cmd,
-            expect_rows=args.expect_row,
-            report_scenarios=report_scenarios,
-            scenario_path=path,
-        )
+        if args.compare_baseline:
+            if "personas" not in scenario:
+                sys.exit("--compare-baseline requires a scenario with personas")
+            ok = compare_baseline(
+                args.base_url,
+                scenario,
+                args.quiet,
+                report_scenarios,
+                path,
+            )
+        else:
+            ok = check_scenario(
+                args.base_url,
+                scenario,
+                runs=args.runs,
+                quiet=args.quiet,
+                reset_cmd=reset_cmd,
+                expect_rows=args.expect_row,
+                report_scenarios=report_scenarios,
+                scenario_path=path,
+            )
         if not ok:
             failed.append(scenario.get("name", os.path.basename(path)))
 
@@ -446,6 +516,7 @@ def main() -> int:
                     "base_url": args.base_url,
                     "runs": args.runs,
                     "no_cache": args.no_cache,
+                    "compare_baseline": args.compare_baseline,
                     "reset_cmd": reset_cmd,
                     "expect_rows": args.expect_row,
                     "scenarios": scenario_paths,
