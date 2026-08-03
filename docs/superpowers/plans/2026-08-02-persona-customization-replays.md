@@ -529,3 +529,130 @@ Expected: clean.
 git add scripts/consistency_check.py server/tests/test_consistency_check.py scripts/replay/README.md
 git commit -m "feat: compare customized replays with baseline"
 ```
+
+### Task 4: Replace generic custom fixtures with persona-discriminator answers
+
+**Files:**
+- Modify: `scripts/replay/scenario-custom-dana.json`
+- Modify: `scripts/replay/scenario-custom-marcus.json`
+- Modify: `scripts/replay/scenario-custom-priya.json`
+- Modify: `scripts/replay/README.md`
+- Modify: `server/tests/test_replay_session.py`
+
+**Interfaces:**
+- Consumes: the baseline comparison, which sends every fixture answer unchanged
+  to both the shipped-default and temporary-custom persona.
+- Produces: fixtures where a plausible target-concern answer omits the proof
+  emphasized by its custom persona.
+
+- [ ] **Step 1: Write failing discriminator-fixture tests**
+
+```python
+@pytest.mark.parametrize(
+    "filename,persona_id,concern_id,required_phrases",
+    [
+        ("scenario-custom-dana.json", "technical_evaluator", "technical_approach", ("containerized services", "versioned apis", "validate traffic")),
+        ("scenario-custom-marcus.json", "contracting_officer", "cost_realism", ("firm-fixed", "28-fte", "requirements that surface")),
+        ("scenario-custom-priya.json", "program_rep", "operational_impact", ("help desk", "triage issues", "managers informed")),
+    ],
+)
+def test_custom_persona_scenarios_keep_their_persona_discriminator(
+    filename: str,
+    persona_id: str,
+    concern_id: str,
+    required_phrases: tuple[str, ...],
+) -> None:
+    scenario = json.loads((REPLAY_DIR / filename).read_text())
+    answer = scenario["concerns"][concern_id]["answer"].lower()
+
+    assert set(scenario["personas"]) == {persona_id}
+    assert all(phrase in answer for phrase in required_phrases)
+    assert any("not guaranteed" in note.lower() for note in scenario["notes"])
+```
+
+- [ ] **Step 2: Verify RED**
+
+Run: `cd server && .venv/bin/pytest tests/test_replay_session.py -k discriminator -v`
+
+Expected: fail because no discriminator test exists and the current fixtures do
+not state that score differences are not guaranteed.
+
+- [ ] **Step 3: Replace only target-concern answers and document the intent**
+
+Keep every fixture's eight concerns, fixed IDs, custom persona fields, and all
+non-target answers. Add a note: baseline and customized runs receive identical
+answers; score differences are observations from persona-context extraction and
+are not guaranteed.
+
+Replace Dana's `technical_approach` entry:
+
+```json
+"technical_approach": {
+  "answer": "CMS runs as containerized services in AWS GovCloud at FedRAMP Moderate, with PostgreSQL and an event bus. Our integration team will configure versioned APIs for the Payments Engine, Benefits Portal, and data warehouse, then validate traffic during transition.",
+  "followup": "We use our standard migration playbook and established tooling to check interfaces before go-live."
+}
+```
+
+The answer names architecture but withholds Mara's named test, rollback,
+reconciliation, and migration-sequence control. It does not propose on-premises
+hosting or an overnight cutover.
+
+Replace Marcus's `cost_realism` entry:
+
+```json
+"cost_realism": {
+  "answer": "Price is firm-fixed for the planned work. Staffing is based on a lean 28-FTE operating model, and we will work collaboratively on any requirements that surface during performance.",
+  "followup": "We track burn and adjust team mix to maintain outcomes."
+}
+```
+
+The answer retains price form and staffing basis but withholds Elias's bounded,
+auditable treatment of emerging requirements. It does not promise a price
+adjustment or a named out-of-scope deliverable.
+
+Replace Priya's `operational_impact` entry:
+
+```json
+"operational_impact": {
+  "answer": "Cutover will be carefully managed, users will receive communications, and the help desk will be ready. We will monitor transition, triage issues quickly, and keep managers informed.",
+  "followup": "Teams will get materials and support while the delivery team coordinates issue resolution."
+}
+```
+
+The answer omits Nadia's concrete training, Severity-1 response, parallel-run
+fallback, and user recovery path. It does not promise a seamless or risk-free
+cutover.
+
+Add `## Persona-discriminator fixtures` to the README. State that the three
+custom fixtures use identical answers for shipped-default and customized runs,
+deliberately withhold proof the temporary persona emphasizes, and treat either a
+score change or a reaction-only change as useful evidence.
+
+- [ ] **Step 4: Verify GREEN and JSON**
+
+Run: `cd server && .venv/bin/pytest tests/test_replay_session.py -v`
+
+Expected: pass.
+
+Run: `python3 -m json.tool scripts/replay/scenario-custom-dana.json >/dev/null && python3 -m json.tool scripts/replay/scenario-custom-marcus.json >/dev/null && python3 -m json.tool scripts/replay/scenario-custom-priya.json >/dev/null`
+
+Expected: all commands exit 0.
+
+- [ ] **Step 5: Run live comparisons when stack and AWS credentials are available**
+
+```bash
+python3 scripts/consistency_check.py scripts/replay/scenario-custom-dana.json --compare-baseline
+python3 scripts/consistency_check.py scripts/replay/scenario-custom-marcus.json --compare-baseline
+python3 scripts/consistency_check.py scripts/replay/scenario-custom-priya.json --compare-baseline
+```
+
+Record score-bearing differences, reaction-only differences, or both. Do not
+fail a fixture if score-bearing fields match. Confirm targeted live personas are
+restored after each comparison.
+
+- [ ] **Step 6: Commit discriminator fixtures**
+
+```bash
+git add scripts/replay/scenario-custom-dana.json scripts/replay/scenario-custom-marcus.json scripts/replay/scenario-custom-priya.json scripts/replay/README.md server/tests/test_replay_session.py
+git commit -m "test: sharpen custom persona replay scenarios"
+```
