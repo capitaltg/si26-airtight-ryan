@@ -7,6 +7,7 @@
   "personas": {
     "contracting_officer": {
       "display_name": "Elias",
+      "intro": "Elias Grant, contracting officer on this acquisition. I'll test every commitment against scope, terms, and a defensible pricing basis.",
       "voice": "Formal and clause-focused. Treats a precise boundary as stronger than an expansive promise.",
       "values": ["solicitation discipline", "auditable price realism", "bounded commitments"],
       "wants": ["specific PWS alignment", "clear pricing assumptions"],

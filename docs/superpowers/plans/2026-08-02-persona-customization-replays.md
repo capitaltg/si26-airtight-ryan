@@ -4,7 +4,7 @@
 
 **Goal:** Add three repeatable session fixtures that temporarily customize an evaluator, run a full rehearsal, and restore the prior personas.
 
-**Architecture:** `scripts/replay_session.py` gains an optional top-level `personas` scenario field. It snapshots each targeted persona through the content API, sends only editable fields to the existing `PUT` endpoint, runs the normal replay, then restores every snapshot in `finally`. Three JSON files exercise Dana, Marcus, and Priya without changing fixed IDs, priorities, or rubric version.
+**Architecture:** `scripts/replay_session.py` gains an optional top-level `personas` scenario field. It snapshots each targeted persona through the content API, sends only editable fields to the existing `PUT` endpoint, runs the normal replay, then restores every snapshot in `finally`. Baseline comparison snapshots the live targeted personas, resets those IDs through the content API, runs the same answers against shipped defaults and temporary overrides, then restores the live snapshots. Three JSON files exercise Dana, Marcus, and Priya without changing fixed IDs, priorities, or rubric version.
 
 **Tech Stack:** Python standard-library HTTP client, existing FastAPI persona API, pytest.
 
@@ -14,6 +14,10 @@
 - A scenario with no `personas` calls `replay(...)` directly and does not call
   the persona content API.
 - Never send `id`, `priorities`, `rubric_version`, `is_customized`, or exemplar `persona` in an update request.
+- When a scenario omits `exemplars`, retain every exemplar from the snapshot in
+  the apply payload. The API's omitted-field default is an empty list.
+- Register a snapshot for restoration before its apply `PUT`, since the server
+  may save successfully even when the client cannot read the response.
 - Restore every successfully customized persona when replay succeeds or fails.
 - Attempt every restore even after an earlier restore fails. On a successful
   replay, surface restoration failure. On a failed replay, preserve the original
@@ -254,20 +258,15 @@ def replay_with_personas(base_url: str, scenario: dict, quiet: bool, want_report
     requested = scenario.get("personas", {})
     if not requested:
         return replay(base_url, scenario, quiet, want_report)
-    live = {persona["id"]: persona for persona in _get(base_url, "/content/personas")}
-    unknown = set(requested) - set(live)
-    if unknown:
-        raise ValueError(f"unknown persona customization: {sorted(unknown)}")
+    snapshots = _persona_snapshots(base_url, requested)
     originals: list[tuple[str, dict]] = []
     original_error: Exception | None = None
     try:
         for persona_id, overrides in requested.items():
-            original = live[persona_id]
+            original = snapshots[persona_id]
             customized = persona_update({**original, **overrides})
-            if "exemplars" not in overrides:
-                customized.pop("exemplars", None)
+            originals.append((persona_id, original))
             _put(base_url, f"/content/personas/{persona_id}", customized)
-            originals.append((persona_id, persona_update(original)))
         return replay(base_url, scenario, quiet, want_report)
     except Exception as exc:
         original_error = exc
@@ -386,7 +385,7 @@ git add scripts/replay scripts/replay_session.py server/tests/test_replay_sessio
 git commit -m "test: add customized persona replay scenarios"
 ```
 
-### Task 3: Compare default and customized replay results
+### Task 3: Compare shipped-default and customized replay results
 
 **Files:**
 - Modify: `scripts/consistency_check.py`
@@ -460,9 +459,22 @@ def compare_baseline(
     report_scenarios: list[dict[str, Any]] | None = None,
     scenario_path: str | None = None,
 ) -> bool:
+    requested = scenario.get("personas")
+    if not isinstance(requested, dict) or not requested:
+        raise ValueError("baseline comparison requires a nonempty personas object")
+    originals = list(_persona_snapshots(base_url, requested, get=_get).items())
     baseline_scenario = {key: value for key, value in scenario.items() if key != "personas"}
-    baseline = replay(base_url, baseline_scenario, quiet, False)
-    customized = replay_with_personas(base_url, scenario, quiet, False)
+    original_error: Exception | None = None
+    try:
+        for persona_id in requested:
+            _post(base_url, f"/content/personas/{persona_id}/reset", None)
+        baseline = replay(base_url, baseline_scenario, quiet, False)
+        customized = replay_with_personas(base_url, scenario, quiet, False)
+    except Exception as exc:
+        original_error = exc
+        raise
+    finally:
+        _restore_personas(base_url, originals, original_error, put=_put)
     diffs = diff_runs(baseline, customized)
     score_diffs = _score_differences(baseline, customized)
 
@@ -490,7 +502,7 @@ def compare_baseline(
     return True
 ```
 
-Add `ap.add_argument("--compare-baseline", action="store_true", help="compare each customized scenario with its default-persona baseline")`. In `main()`, reject this option for a scenario without `personas` using `sys.exit("--compare-baseline requires a scenario with personas")`; otherwise call `compare_baseline(...)` instead of `check_scenario(...)`. This mode always runs one baseline/customized pair, so reject `--runs` when it differs from the existing default `2`, and reject `--no-cache`. Include `compare_baseline` in the saved report invocation metadata.
+Add `ap.add_argument("--compare-baseline", action="store_true", help="reset targeted personas to shipped defaults, then compare with temporary overrides")`. In `main()`, require a nonempty `personas` object; otherwise call `compare_baseline(...)` instead of `check_scenario(...)`. This mode always runs one shipped-default/customized pair, so reject `--runs` when it differs from the existing default `2`, and reject `--no-cache`. Include `compare_baseline` in the saved report invocation metadata and use comparison-specific final success text.
 
 Document:
 

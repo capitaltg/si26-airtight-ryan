@@ -7,6 +7,7 @@
   "personas": {
     "program_rep": {
       "display_name": "Nadia",
+      "intro": "Nadia Shah, program representative for the adjudication division. I speak for frontline users and will press on continuity, support, and recovery.",
       "voice": "Practical and user-centered. Presses for continuity plans that a busy adjudicator can feel.",
       "values": ["predictable daily operations", "supported users", "reversible cutovers"],
       "wants": ["specific user support coverage", "a fallback path for interrupted work"],

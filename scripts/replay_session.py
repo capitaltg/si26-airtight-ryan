@@ -41,6 +41,7 @@ import re
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 DEFAULT_BASE_URL = os.environ.get("AIRTIGHT_API_URL", "http://localhost:8000")
@@ -114,42 +115,65 @@ def persona_update(persona: dict) -> dict:
     return update
 
 
+def _persona_snapshots(
+    base_url: str,
+    requested: dict,
+    get: Callable[[str, str], object] | None = None,
+) -> dict[str, dict]:
+    """Snapshot targeted personas as safe API update payloads."""
+    response = (get or _get)(base_url, "/content/personas")
+    if not isinstance(response, list):
+        raise TypeError("persona list response must be an array")
+    live = {persona["id"]: persona for persona in response}
+    unknown = set(requested) - set(live)
+    if unknown:
+        raise ValueError(f"unknown persona customization: {sorted(unknown)}")
+    return {persona_id: persona_update(live[persona_id]) for persona_id in requested}
+
+
+def _restore_personas(
+    base_url: str,
+    originals: list[tuple[str, dict]],
+    original_error: Exception | None,
+    put: Callable[[str, str, dict], dict] | None = None,
+) -> None:
+    """Attempt every restore, preserving an earlier operation failure."""
+    restore_errors: list[Exception] = []
+    put_request = put or _put
+    for persona_id, original in reversed(originals):
+        try:
+            put_request(base_url, f"/content/personas/{persona_id}", original)
+        except Exception as exc:
+            restore_errors.append(exc)
+    if not restore_errors:
+        return
+    message = "; ".join(f"restore failed: {exc}" for exc in restore_errors)
+    if original_error is not None:
+        original_error.add_note(message)
+    else:
+        raise RuntimeError(message) from restore_errors[0]
+
+
 def replay_with_personas(base_url: str, scenario: dict, quiet: bool, want_report: bool) -> dict:
     """Replay with temporary persona changes, then restore each changed persona."""
     requested = scenario.get("personas", {})
     if not requested:
         return replay(base_url, scenario, quiet, want_report)
-    live = {persona["id"]: persona for persona in _get(base_url, "/content/personas")}
-    unknown = set(requested) - set(live)
-    if unknown:
-        raise ValueError(f"unknown persona customization: {sorted(unknown)}")
+    snapshots = _persona_snapshots(base_url, requested)
     originals: list[tuple[str, dict]] = []
     original_error: Exception | None = None
     try:
         for persona_id, overrides in requested.items():
-            original = live[persona_id]
+            original = snapshots[persona_id]
             customized = persona_update({**original, **overrides})
-            if "exemplars" not in overrides:
-                customized.pop("exemplars", None)
+            originals.append((persona_id, original))
             _put(base_url, f"/content/personas/{persona_id}", customized)
-            originals.append((persona_id, persona_update(original)))
         return replay(base_url, scenario, quiet, want_report)
     except Exception as exc:
         original_error = exc
         raise
     finally:
-        restore_errors: list[Exception] = []
-        for persona_id, original in reversed(originals):
-            try:
-                _put(base_url, f"/content/personas/{persona_id}", original)
-            except Exception as exc:
-                restore_errors.append(exc)
-        if restore_errors:
-            message = "; ".join(f"restore failed: {exc}" for exc in restore_errors)
-            if original_error is not None:
-                original_error.add_note(message)
-            else:
-                raise RuntimeError(message) from restore_errors[0]
+        _restore_personas(base_url, originals, original_error)
 
 
 def _fmt_prompt(prompt: dict) -> str:

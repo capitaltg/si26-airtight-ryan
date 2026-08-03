@@ -22,11 +22,15 @@ mapping only controls the temporary customizations applied around that run.
 The existing scenarios retain their current behavior because the mapping is
 optional.
 
-`scripts/consistency_check.py --compare-baseline` runs a customized scenario
-twice: first without its `personas` mapping, then with the temporary override.
-It reports changed matched rows, deltas, meters, statuses, replies, and
-rationales. A comparison with no differences still succeeds. The comparison
-observes a result; it does not claim that a persona edit must change a score.
+`scripts/consistency_check.py --compare-baseline` snapshots every live persona
+targeted by the scenario, resets those IDs through the existing content API,
+then runs the same answers first against shipped defaults and next against the
+temporary override. The override starts from the reset default state. A final
+cleanup restores every pre-comparison snapshot, including when reset, replay,
+or response handling fails. It reports changed matched rows, deltas, meters,
+statuses, replies, and rationales. A comparison with no differences still
+succeeds. The comparison observes a result; it does not claim that a persona
+edit must change a score.
 
 ## Fixtures
 
@@ -42,9 +46,12 @@ scoring remains owned by the rubric once extraction facts are validated.
 
 ## Failure handling and testing
 
-If applying a customization fails, the runner stops before creating a session
-and restores any personas already updated. If replaying fails, restoration still
-runs. Restoration failures are reported alongside the original failure.
+If applying a customization fails, the runner stops before creating a session.
+It registers the target snapshot before each `PUT`, so a saved update is still
+restored when response handling fails. If a scenario omits exemplars, the apply
+payload retains the snapshot's complete exemplar set. If replaying fails,
+restoration still runs. Restoration failures are reported alongside the
+original failure.
 
 Unit tests cover payload filtering, applying multiple customizations, and
 restoration after both success and replay failure. Existing scenarios verify

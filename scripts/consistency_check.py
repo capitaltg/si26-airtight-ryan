@@ -5,8 +5,7 @@ This is the executable form of the consistency claim in
 docs/ideation/2-scoring-and-drift.md: the same answer to the same prompt must
 produce the same rows, the same delta, the same meter, and the same reply.
 
-Two repeat-run modes test different things; `--compare-baseline` compares
-default-persona and customized runs as an observation:
+Three modes test different things:
 
   default (cache on)
       Run 1 populates ``model_response_cache``; runs 2..N replay it. A pass
@@ -23,6 +22,12 @@ default-persona and customized runs as an observation:
       A divergent turn is an unanchored case that wants an exemplar. Costs one
       full session of Sonnet calls per run.
 
+  --compare-baseline
+      Snapshots targeted live personas, resets them to shipped defaults through
+      the content API, then runs the same answers against shipped defaults and
+      temporary overrides. Both runs make normal model/cache requests. It
+      restores the pre-comparison live snapshots afterward.
+
 Usage (stack must be up — `cd e2e && npm run stack:up`):
 
     python3 scripts/consistency_check.py scripts/replay/scenario-contradiction.json
@@ -31,8 +36,9 @@ Usage (stack must be up — `cd e2e && npm run stack:up`):
     python3 scripts/consistency_check.py scripts/replay/scenario-custom-dana.json --compare-baseline
     python3 scripts/consistency_check.py --all --expect-row contradiction
 
-Exit code is 0 only if every run of every scenario agreed and every expected
-rubric row actually fired.
+In repeat modes, exit code is 0 only if every run agreed and every expected
+rubric row fired. Baseline comparison is observational, so score or reaction
+differences do not make it fail.
 """
 
 from __future__ import annotations
@@ -52,6 +58,10 @@ from replay_session import (
     FIXTURE_DIR,
     _format_rows,
     _get,
+    _persona_snapshots,
+    _post,
+    _put,
+    _restore_personas,
     c,
     replay,
     replay_with_personas,
@@ -385,12 +395,25 @@ def compare_baseline(
     report_scenarios: list[dict[str, Any]] | None = None,
     scenario_path: str | None = None,
 ) -> bool:
-    """Report how a temporary persona customization changes one replay."""
+    """Compare shipped defaults with overrides, then restore live personas."""
+    requested = scenario.get("personas")
+    if not isinstance(requested, dict) or not requested:
+        raise ValueError("baseline comparison requires a nonempty personas object")
+    originals = list(_persona_snapshots(base_url, requested, get=_get).items())
     baseline_scenario = {
         key: value for key, value in scenario.items() if key != "personas"
     }
-    baseline = replay(base_url, baseline_scenario, quiet, False)
-    customized = replay_with_personas(base_url, scenario, quiet, False)
+    original_error: Exception | None = None
+    try:
+        for persona_id in requested:
+            _post(base_url, f"/content/personas/{persona_id}/reset", None)
+        baseline = replay(base_url, baseline_scenario, quiet, False)
+        customized = replay_with_personas(base_url, scenario, quiet, False)
+    except Exception as exc:
+        original_error = exc
+        raise
+    finally:
+        _restore_personas(base_url, originals, original_error, put=_put)
     diffs = diff_runs(baseline, customized)
     score_diffs = _score_differences(baseline, customized)
 
@@ -442,7 +465,10 @@ def main() -> int:
     ap.add_argument(
         "--compare-baseline",
         action="store_true",
-        help="compare each customized scenario with its default-persona baseline",
+        help=(
+            "reset targeted personas to shipped defaults, then compare with "
+            "temporary overrides"
+        ),
     )
     ap.add_argument("--reset-cmd", default=DEFAULT_RESET_CMD, help="command used by --no-cache")
     ap.add_argument(
@@ -484,8 +510,8 @@ def main() -> int:
         with open(path) as f:
             scenario = json.load(f)
         if args.compare_baseline:
-            if not isinstance(scenario.get("personas"), dict):
-                sys.exit("--compare-baseline requires personas as an object")
+            if not isinstance(scenario.get("personas"), dict) or not scenario["personas"]:
+                sys.exit("--compare-baseline requires a nonempty personas object")
             ok = compare_baseline(
                 args.base_url,
                 scenario,
@@ -532,8 +558,12 @@ def main() -> int:
         print(c(f"report saved: {display_path}", "2"))
 
     if failed:
-        print(c(f"FAIL: {len(failed)} scenario(s) inconsistent: {', '.join(failed)}", "1;31"))
+        label = "comparison(s) failed" if args.compare_baseline else "scenario(s) inconsistent"
+        print(c(f"FAIL: {len(failed)} {label}: {', '.join(failed)}", "1;31"))
         return 1
+    if args.compare_baseline:
+        print(c("PASS: every baseline comparison completed", "1;32"))
+        return 0
     print(c("PASS: every scenario reproduced identically", "1;32"))
     return 0
 

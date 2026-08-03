@@ -7,6 +7,7 @@
   "personas": {
     "technical_evaluator": {
       "display_name": "Mara",
+      "intro": "Mara Velez, senior technical evaluator on the source-selection board. I'll press on testable architecture, verifiable staffing, and controlled migration.",
       "voice": "Direct and architecture-first. Asks for testable controls before accepting an assertion.",
       "values": ["operationally testable architecture", "migration safety", "verifiable staffing"],
       "wants": ["named integration and migration controls", "evidence for key-person qualifications"],

@@ -67,15 +67,21 @@ The repeat-run modes test two different things:
   session of Sonnet calls per run. Override the truncate with `--reset-cmd` if
   your Postgres isn't the compose one.
 
-Exit code is 0 only if every run agreed and every expected row fired. The pure
-comparison logic is unit-tested in
+For repeat-run modes, exit code is 0 only if every run agreed and every expected
+row fired. Baseline comparison is observational, so differences do not make it
+fail. The pure comparison logic is unit-tested in
 [`server/tests/test_consistency_check.py`](../../server/tests/test_consistency_check.py).
 
-`--compare-baseline` runs a customized scenario once with default personas,
-then once with its temporary persona overrides. Score changes are observations
-from different validated extraction facts, not failures. The reaction is always
-compared too. This mode runs exactly one baseline/customized pair, so it cannot
-be combined with `--no-cache` or a non-default `--runs` value.
+`--compare-baseline` requires a scenario with a nonempty `personas` object. It
+snapshots each targeted live persona, resets those IDs to shipped defaults,
+runs the same answers against the defaults, then runs them with temporary
+overrides applied from that default state. It restores all pre-comparison live
+snapshots afterward, including on failure. Score changes are observations from
+different validated extraction facts, not failures. Reactions are always
+compared too. This mode runs exactly one shipped-default/customized pair, so it
+cannot be combined with `--no-cache` or a non-default `--runs` value. A
+successful command reports that each baseline comparison completed; it does
+not claim that the two runs reproduced identically.
 
 ## Why scenarios are keyed by concern
 
@@ -127,12 +133,15 @@ engine** — a scenario shapes the inputs, not the outcome.
 
 A scenario can include one or more evaluator overrides. The runner snapshots the
 current persona, applies only editable fields through the content API, runs the
-rehearsal, then restores that snapshot even if the replay fails.
+rehearsal, then restores that snapshot even if the replay fails. If an override
+omits `exemplars`, the runner carries the snapshot's complete exemplar set into
+the apply request instead of clearing it.
 
 ```json
 "personas": {
   "technical_evaluator": {
     "display_name": "Mara",
+    "intro": "Mara Velez, senior technical evaluator. I'll press on testable architecture and controlled migration.",
     "voice": "Direct and architecture-first.",
     "values": ["operationally testable architecture"],
     "wants": ["named integration and migration controls"],

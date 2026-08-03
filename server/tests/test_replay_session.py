@@ -18,25 +18,43 @@ EXPECTED_CONCERNS = {
     "past_performance",
     "operational_impact",
 }
+LOCKED_PERSONA_FIELDS = {"id", "priorities", "rubric_version", "is_customized"}
+REQUIRED_CUSTOM_FIELDS = {
+    "display_name",
+    "intro",
+    "voice",
+    "values",
+    "wants",
+    "non_negotiables",
+    "polly_voice_id",
+    "exemplars",
+}
 
 
 @pytest.mark.parametrize(
-    "filename,persona_id",
+    "filename,persona_id,display_name",
     [
-        ("scenario-custom-dana.json", "technical_evaluator"),
-        ("scenario-custom-marcus.json", "contracting_officer"),
-        ("scenario-custom-priya.json", "program_rep"),
+        ("scenario-custom-dana.json", "technical_evaluator", "Mara"),
+        ("scenario-custom-marcus.json", "contracting_officer", "Elias"),
+        ("scenario-custom-priya.json", "program_rep", "Nadia"),
     ],
 )
 def test_custom_persona_scenarios_define_one_editable_persona(
-    filename: str, persona_id: str
+    filename: str, persona_id: str, display_name: str
 ) -> None:
-    """Each customized fixture changes one evaluator, not its locked identity."""
+    """Each fixture has a complete reskin without changing locked identity."""
     scenario = json.loads((REPLAY_DIR / filename).read_text())
+    override = scenario["personas"][persona_id]
 
     assert set(scenario["personas"]) == {persona_id}
     assert set(scenario["concerns"]) == EXPECTED_CONCERNS
-    assert not {"id", "priorities", "rubric_version"} & set(scenario["personas"][persona_id])
+    assert not LOCKED_PERSONA_FIELDS & set(override)
+    assert REQUIRED_CUSTOM_FIELDS <= set(override)
+    assert override["display_name"] == display_name
+    assert display_name in override["intro"]
+    assert len(override["exemplars"]) == 3
+    assert {item["support_delta"] for item in override["exemplars"]} == {-2, 0, 2}
+    assert all(set(item) == {"user", "support_delta", "note"} for item in override["exemplars"])
 
 
 def test_persona_update_omits_locked_and_server_owned_fields() -> None:
@@ -102,11 +120,94 @@ def test_replay_with_personas_restores_snapshot_when_replay_raises(
         )
 
     assert calls == [
-        ("/content/personas/technical_evaluator", {"display_name": "Mara"}),
+        (
+            "/content/personas/technical_evaluator",
+            {"display_name": "Mara", "exemplars": []},
+        ),
         (
             "/content/personas/technical_evaluator",
             {"display_name": "Dana", "exemplars": []},
         ),
+    ]
+
+
+def test_replay_with_personas_retains_existing_exemplars_when_override_omits_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An omitted exemplar override must not become the API's default empty list."""
+    from replay_session import replay_with_personas
+
+    calls: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        "replay_session._get",
+        lambda *_: [
+            {
+                "id": "technical_evaluator",
+                "display_name": "Dana",
+                "exemplars": [
+                    {
+                        "persona": "technical_evaluator",
+                        "user": "Keep this example.",
+                        "support_delta": 2,
+                        "note": "Authored evidence.",
+                    }
+                ],
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        "replay_session._put",
+        lambda _base, path, body: calls.append((path, body)) or {},
+    )
+    monkeypatch.setattr("replay_session.replay", lambda *_: {"name": "run"})
+
+    replay_with_personas(
+        "http://api",
+        {"personas": {"technical_evaluator": {"display_name": "Mara"}}},
+        True,
+        False,
+    )
+
+    retained = [{"user": "Keep this example.", "support_delta": 2, "note": "Authored evidence."}]
+    assert calls[0][1]["exemplars"] == retained
+    assert calls[1][1]["exemplars"] == retained
+
+
+def test_replay_with_personas_restores_when_apply_response_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A server write followed by a failed response still has a registered snapshot."""
+    from replay_session import replay_with_personas
+
+    calls: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        "replay_session._get",
+        lambda *_: [{"id": "technical_evaluator", "display_name": "Dana"}],
+    )
+
+    def put(_base: str, path: str, body: dict) -> dict:
+        calls.append((path, body))
+        if len(calls) == 1:
+            raise RuntimeError("response lost after write")
+        return {}
+
+    monkeypatch.setattr("replay_session._put", put)
+    monkeypatch.setattr(
+        "replay_session.replay",
+        lambda *_: pytest.fail("replay must not start after an apply failure"),
+    )
+
+    with pytest.raises(RuntimeError, match="response lost after write"):
+        replay_with_personas(
+            "http://api",
+            {"personas": {"technical_evaluator": {"display_name": "Mara"}}},
+            True,
+            False,
+        )
+
+    assert calls == [
+        ("/content/personas/technical_evaluator", {"display_name": "Mara", "exemplars": []}),
+        ("/content/personas/technical_evaluator", {"display_name": "Dana", "exemplars": []}),
     ]
 
 
