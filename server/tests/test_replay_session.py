@@ -2,7 +2,41 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
+
+REPLAY_DIR = Path(__file__).resolve().parents[2] / "scripts" / "replay"
+EXPECTED_CONCERNS = {
+    "technical_approach",
+    "key_personnel",
+    "transition",
+    "risk",
+    "compliance_security",
+    "cost_realism",
+    "past_performance",
+    "operational_impact",
+}
+
+
+@pytest.mark.parametrize(
+    "filename,persona_id",
+    [
+        ("scenario-custom-dana.json", "technical_evaluator"),
+        ("scenario-custom-marcus.json", "contracting_officer"),
+        ("scenario-custom-priya.json", "program_rep"),
+    ],
+)
+def test_custom_persona_scenarios_define_one_editable_persona(
+    filename: str, persona_id: str
+) -> None:
+    """Each customized fixture changes one evaluator, not its locked identity."""
+    scenario = json.loads((REPLAY_DIR / filename).read_text())
+
+    assert set(scenario["personas"]) == {persona_id}
+    assert set(scenario["concerns"]) == EXPECTED_CONCERNS
+    assert not {"id", "priorities", "rubric_version"} & set(scenario["personas"][persona_id])
 
 
 def test_persona_update_omits_locked_and_server_owned_fields() -> None:

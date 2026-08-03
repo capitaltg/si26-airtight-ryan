@@ -29,6 +29,9 @@ Point at a non-default API with `--base-url` or `AIRTIGHT_API_URL`.
 | `scenario-mixed.json`         | a believable full rehearsal: a clarify, clean passes, a coverage-gap follow-up that recovers, an over-claim, a concern that closes failed        |
 | `scenario-contradiction.json` | Tier-0 `contradiction`: four conflicts between two things the presenter said, on facts absent from the RFP and proposal so nothing else can fire |
 | `scenario-false-fact.json`    | Tier-1 `false_fact`: six claims refutable against the RFP or written proposal, chosen to stay off the authored red lines                         |
+| `scenario-custom-dana.json`   | full agenda with a temporary technical-evaluator customization                                                                             |
+| `scenario-custom-marcus.json` | full agenda with a temporary contracting-officer customization                                                                            |
+| `scenario-custom-priya.json`  | full agenda with a temporary program-representative customization                                                                          |
 
 A scenario may declare `"expect_rows": ["contradiction"]` — the rubric rows that
 must fire somewhere in the run. `consistency_check.py` treats an expected row
@@ -112,3 +115,33 @@ sessions.
 
 The exact classification and meter for each turn are decided **live by the
 engine** — a scenario shapes the inputs, not the outcome.
+
+## Temporary persona customization
+
+A scenario can include one or more evaluator overrides. The runner snapshots the
+current persona, applies only editable fields through the content API, runs the
+rehearsal, then restores that snapshot even if the replay fails.
+
+```json
+"personas": {
+  "technical_evaluator": {
+    "display_name": "Mara",
+    "voice": "Direct and architecture-first.",
+    "values": ["operationally testable architecture"],
+    "wants": ["named integration and migration controls"],
+    "non_negotiables": ["do not trade migration safety for speed"],
+    "polly_voice_id": "Ruth",
+    "exemplars": [{"user": "...", "support_delta": 2, "note": "..."}]
+  }
+}
+```
+
+Allowed fields are `display_name`, `intro`, `voice`, `demographics`, `values`,
+`wants`, `non_negotiables`, `polly_voice_id`, and `exemplars`. IDs, priorities,
+and rubric versions stay fixed. Each custom fixture includes all eight concern
+answers because the agenda does not change with a reskinned evaluator.
+
+Persona customization changes shared, file-backed content for the duration of a
+run. Do not run these scenarios concurrently with another customized replay or
+any persona-writing activity. The runner restores its prior snapshot, but a
+second writer can otherwise be overwritten by that restoration.

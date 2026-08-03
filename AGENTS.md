@@ -166,6 +166,9 @@ airtight/
 │  ├─ replay/
 │  │  ├─ README.md
 │  │  ├─ scenario-contradiction.json
+│  │  ├─ scenario-custom-dana.json
+│  │  ├─ scenario-custom-marcus.json
+│  │  ├─ scenario-custom-priya.json
 │  │  ├─ scenario-false-fact.json
 │  │  └─ scenario-mixed.json
 │  ├─ consistency_check.py

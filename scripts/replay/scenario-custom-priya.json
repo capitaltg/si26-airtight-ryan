@@ -1,0 +1,32 @@
+{
+  "name": "Customized Priya replay",
+  "notes": [
+    "Temporarily reskins the program representative while preserving her fixed identity and agenda ownership.",
+    "Run this fixture alone: persona customization is global for the duration of the replay."
+  ],
+  "personas": {
+    "program_rep": {
+      "display_name": "Nadia",
+      "voice": "Practical and user-centered. Presses for continuity plans that a busy adjudicator can feel.",
+      "values": ["predictable daily operations", "supported users", "reversible cutovers"],
+      "wants": ["specific user support coverage", "a fallback path for interrupted work"],
+      "non_negotiables": ["do not minimize the effect of change on users", "do not promise a risk-free cutover"],
+      "polly_voice_id": "Danielle",
+      "exemplars": [
+        {"user": "Users will not notice the switch because there is no cutover risk.", "support_delta": -2, "note": "Dismisses user disruption and promises an unrealistic risk-free cutover."},
+        {"user": "We care deeply about a smooth user experience.", "support_delta": 0, "note": "Offers no support model, training plan, or fallback path."},
+        {"user": "Adjudicators train before cutover, use a staffed service desk with a 30-minute Severity-1 response, and can fall back during the 60-day parallel run.", "support_delta": 2, "note": "Makes continuity, support, and recovery concrete for end users."}
+      ]
+    }
+  },
+  "concerns": {
+    "technical_approach": {"answer": "We run containerized microservices in AWS GovCloud at FedRAMP Moderate. PostgreSQL is the system of record, an event bus connects services, and versioned REST APIs serve the Payments Engine, Benefits Portal, and data warehouse.", "followup": "Integration contracts are versioned, tested in a staging environment, and monitored for failed events before each release."},
+    "key_personnel": {"answer": "Karen Holloway is the PM with twelve years of federal delivery and a PMP since 2015. Samuel Ortiz is Lead Solutions Architect with nine years in cloud-native design, and Anil Kapoor leads migration with seven years on large data migrations.", "followup": "All three are committed full time for the base period, with their qualifications and roles documented in the proposal."},
+    "transition": {"answer": "We submit the Transition-In Plan within 10 business days of award and complete transition-in within 90 calendar days. Meridian provides structured knowledge transfer during the first 30 days.", "followup": "We use three oldest-first migration waves with reconciliation after every wave and retain LCS for a 60-day parallel run before retirement."},
+    "risk": {"answer": "The top risk is migration data integrity across 42 million case records. We mitigate it with wave-level reconciliation, rollback gates, and the 60-day parallel run.", "followup": "A second risk is incumbent knowledge loss, addressed through shadowing, written runbooks, and acceptance checks before handoff."},
+    "compliance_security": {"answer": "We build to the NIST SP 800-53 moderate baseline in FedRAMP Moderate AWS GovCloud. No production case data enters the system before ATO approval.", "followup": "The ATO package is prepared against the full moderate control set, while synthetic data supports testing during the government's roughly 120-day review."},
+    "cost_realism": {"answer": "We staff 28 FTE at steady state, sized to the 1.2 million annual cases. Pricing is firm-fixed for the base period and both option periods with no assumed adjustment.", "followup": "The staffing basis separates the base-period migration load from steady-state adjudication support."},
+    "past_performance": {"answer": "The Veterans Claims Office modernization moved 1.8 million cases to a cloud-native platform on schedule with zero data loss and an Exceptional CPARS rating.", "followup": "Its live-user case-management migration and phased data conversion are directly comparable to LCS."},
+    "operational_impact": {"answer": "All 2,400 adjudicators train before cutover. LCS stays live through the 60-day parallel run with daily reconciliation, and the staffed help desk responds to Severity-1 incidents within 30 minutes.", "followup": "If a wave fails reconciliation, users keep working in LCS while the team rolls back and corrects the issue."}
+  }
+}
