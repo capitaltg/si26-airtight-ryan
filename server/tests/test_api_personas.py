@@ -102,3 +102,111 @@ def test_list_reports_a_hand_edited_persona_as_customized(
         if p["id"] == "contracting_officer"
     )
     assert marcus["is_customized"] is True
+
+
+def a_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "display_name": "Mira",
+        "intro": "Mira Alvarez, contracting officer on this acquisition.",
+        "voice": "Clipped and procedural.",
+        "demographics": "Contracting officer with warrant authority.",
+        "values": ["compliance with the RFP"],
+        "wants": ["answers that stay inside the PWS"],
+        "non_negotiables": ["do not promise work outside the PWS"],
+        "polly_voice_id": "Joanna",
+        "exemplars": [
+            {
+                "user": "Firm-fixed price, 28 FTE.",
+                "support_delta": 2,
+                "note": "Backed.",
+            }
+        ],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_save_returns_the_updated_persona(client: TestClient) -> None:
+    r = client.put("/content/personas/contracting_officer", json=a_payload())
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["display_name"] == "Mira"
+    assert body["polly_voice_id"] == "Joanna"
+    assert body["is_customized"] is True
+    assert body["exemplars"] == [
+        {
+            "persona": "contracting_officer",
+            "user": "Firm-fixed price, 28 FTE.",
+            "support_delta": 2,
+            "note": "Backed.",
+        }
+    ]
+
+
+def test_a_saved_persona_shows_up_on_the_next_get(client: TestClient) -> None:
+    client.put("/content/personas/contracting_officer", json=a_payload())
+
+    marcus = next(
+        p
+        for p in client.get("/content/personas").json()
+        if p["id"] == "contracting_officer"
+    )
+    assert marcus["display_name"] == "Mira"
+    assert marcus["is_customized"] is True
+
+
+def test_save_reloads_the_content_on_app_state(client: TestClient) -> None:
+    before = app.state.content
+
+    client.put("/content/personas/contracting_officer", json=a_payload())
+
+    assert app.state.content is not before
+    assert app.state.content.personas["contracting_officer"].display_name == "Mira"
+
+
+def test_save_ignores_locked_fields_in_the_payload(client: TestClient) -> None:
+    r = client.put(
+        "/content/personas/contracting_officer",
+        json=a_payload(id="impostor", priorities=["risk"], rubric_version=99),
+    )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["id"] == "contracting_officer"
+    assert body["priorities"] == [
+        "compliance_security",
+        "cost_realism",
+        "past_performance",
+    ]
+    assert body["rubric_version"] == 1
+
+
+def test_an_out_of_range_support_delta_is_a_422(
+    client: TestClient, store: Path
+) -> None:
+    path = store / "personas" / "contracting_officer.md"
+    before = path.read_bytes()
+
+    r = client.put(
+        "/content/personas/contracting_officer",
+        json=a_payload(exemplars=[{"user": "u", "support_delta": 5, "note": "n"}]),
+    )
+
+    assert r.status_code == 422
+    locs = [error["loc"] for error in r.json()["detail"]]
+    assert ["body", "exemplars", 0, "support_delta"] in locs
+    assert path.read_bytes() == before, "a rejected save must not touch the file"
+
+
+def test_an_empty_intro_is_a_422(client: TestClient) -> None:
+    r = client.put("/content/personas/contracting_officer", json=a_payload(intro=""))
+
+    assert r.status_code == 422
+    locs = [error["loc"] for error in r.json()["detail"]]
+    assert ["body", "intro"] in locs
+
+
+def test_saving_an_unknown_persona_is_a_404(client: TestClient) -> None:
+    r = client.put("/content/personas/nobody", json=a_payload())
+    assert r.status_code == 404
