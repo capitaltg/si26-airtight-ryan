@@ -117,23 +117,39 @@ def persona_update(persona: dict) -> dict:
 def replay_with_personas(base_url: str, scenario: dict, quiet: bool, want_report: bool) -> dict:
     """Replay with temporary persona changes, then restore each changed persona."""
     requested = scenario.get("personas", {})
+    if not requested:
+        return replay(base_url, scenario, quiet, want_report)
     live = {persona["id"]: persona for persona in _get(base_url, "/content/personas")}
     unknown = set(requested) - set(live)
     if unknown:
         raise ValueError(f"unknown persona customization: {sorted(unknown)}")
     originals: list[tuple[str, dict]] = []
+    original_error: Exception | None = None
     try:
         for persona_id, overrides in requested.items():
             original = live[persona_id]
-            originals.append((persona_id, persona_update(original)))
             customized = persona_update({**original, **overrides})
             if "exemplars" not in overrides:
                 customized.pop("exemplars", None)
             _put(base_url, f"/content/personas/{persona_id}", customized)
+            originals.append((persona_id, persona_update(original)))
         return replay(base_url, scenario, quiet, want_report)
+    except Exception as exc:
+        original_error = exc
+        raise
     finally:
+        restore_errors: list[Exception] = []
         for persona_id, original in reversed(originals):
-            _put(base_url, f"/content/personas/{persona_id}", original)
+            try:
+                _put(base_url, f"/content/personas/{persona_id}", original)
+            except Exception as exc:
+                restore_errors.append(exc)
+        if restore_errors:
+            message = "; ".join(f"restore failed: {exc}" for exc in restore_errors)
+            if original_error is not None:
+                original_error.add_note(message)
+            else:
+                raise RuntimeError(message) from restore_errors[0]
 
 
 def _fmt_prompt(prompt: dict) -> str:

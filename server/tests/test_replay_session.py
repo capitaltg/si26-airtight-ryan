@@ -74,3 +74,95 @@ def test_replay_with_personas_restores_snapshot_when_replay_raises(
             {"display_name": "Dana", "exemplars": []},
         ),
     ]
+
+
+def test_replay_with_personas_bypasses_persona_api_without_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Baseline replays must not make an unnecessary persona API request."""
+    from replay_session import replay_with_personas
+
+    monkeypatch.setattr(
+        "replay_session._get",
+        lambda *_: pytest.fail("persona API must not be called"),
+    )
+    sentinel = {"name": "baseline"}
+    monkeypatch.setattr("replay_session.replay", lambda *_: sentinel)
+
+    assert replay_with_personas("http://api", {"concerns": {}}, True, False) == sentinel
+
+
+def test_replay_with_personas_attempts_every_restore(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed restore must not prevent restoration of an earlier persona."""
+    from replay_session import replay_with_personas
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "replay_session._get",
+        lambda *_: [
+            {"id": "technical_evaluator", "display_name": "Dana"},
+            {"id": "contracting_officer", "display_name": "Marcus"},
+        ],
+    )
+
+    def put(_base: str, path: str, _body: dict) -> dict:
+        calls.append(path)
+        if len(calls) == 3:
+            raise RuntimeError("restore failed")
+        return {}
+
+    monkeypatch.setattr("replay_session._put", put)
+    monkeypatch.setattr("replay_session.replay", lambda *_: {"name": "run"})
+
+    with pytest.raises(RuntimeError, match="restore failed"):
+        replay_with_personas(
+            "http://api",
+            {"personas": {"technical_evaluator": {}, "contracting_officer": {}}},
+            True,
+            False,
+        )
+
+    assert calls == [
+        "/content/personas/technical_evaluator",
+        "/content/personas/contracting_officer",
+        "/content/personas/contracting_officer",
+        "/content/personas/technical_evaluator",
+    ]
+
+
+def test_replay_with_personas_preserves_replay_error_when_restore_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Replay failure remains primary when cleanup also reports a failure."""
+    from replay_session import replay_with_personas
+
+    calls = 0
+    monkeypatch.setattr(
+        "replay_session._get",
+        lambda *_: [{"id": "technical_evaluator", "display_name": "Dana"}],
+    )
+
+    def put(*_args: object) -> dict:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError("restore failed")
+        return {}
+
+    monkeypatch.setattr("replay_session._put", put)
+    monkeypatch.setattr(
+        "replay_session.replay",
+        lambda *_: (_ for _ in ()).throw(RuntimeError("replay failed")),
+    )
+
+    with pytest.raises(RuntimeError, match="replay failed") as caught:
+        replay_with_personas(
+            "http://api",
+            {"personas": {"technical_evaluator": {}}},
+            True,
+            False,
+        )
+
+    assert caught.value.__notes__ == ["restore failed: restore failed"]
