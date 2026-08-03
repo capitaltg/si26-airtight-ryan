@@ -90,6 +90,8 @@ airtight/
 │  └─ PULL_REQUEST_TEMPLATE.md
 ├─ .superpowers/
 │  └─ sdd/
+│     ├─ 2026-08-02-persona-customization-replays/
+│     │  └─ task-4-report.md
 │     └─ custom-persona-editor/
 │        └─ task-12-report.md
 ├─ docs/

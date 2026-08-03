@@ -2,7 +2,8 @@
   "name": "Customized Priya replay",
   "notes": [
     "Temporarily reskins the program representative while preserving her fixed identity and agenda ownership.",
-    "Run this fixture alone: persona customization is global for the duration of the replay."
+    "Run this fixture alone: persona customization is global for the duration of the replay.",
+    "Baseline and customized runs receive identical answers; score differences are observations from persona-context extraction and are not guaranteed."
   ],
   "personas": {
     "program_rep": {
@@ -28,6 +29,6 @@
     "compliance_security": {"answer": "We build to the NIST SP 800-53 moderate baseline in FedRAMP Moderate AWS GovCloud. No production case data enters the system before ATO approval.", "followup": "The ATO package is prepared against the full moderate control set, while synthetic data supports testing during the government's roughly 120-day review."},
     "cost_realism": {"answer": "We staff 28 FTE at steady state, sized to the 1.2 million annual cases. Pricing is firm-fixed for the base period and both option periods with no assumed adjustment.", "followup": "The staffing basis separates the base-period migration load from steady-state adjudication support."},
     "past_performance": {"answer": "The Veterans Claims Office modernization moved 1.8 million cases to a cloud-native platform on schedule with zero data loss and an Exceptional CPARS rating.", "followup": "Its live-user case-management migration and phased data conversion are directly comparable to LCS."},
-    "operational_impact": {"answer": "All 2,400 adjudicators train before cutover. LCS stays live through the 60-day parallel run with daily reconciliation, and the staffed help desk responds to Severity-1 incidents within 30 minutes.", "followup": "If a wave fails reconciliation, users keep working in LCS while the team rolls back and corrects the issue."}
+    "operational_impact": {"answer": "Cutover will be carefully managed, users will receive communications, and the help desk will be ready. We will monitor transition, triage issues quickly, and keep managers informed.", "followup": "Teams will get materials and support while the delivery team coordinates issue resolution."}
   }
 }

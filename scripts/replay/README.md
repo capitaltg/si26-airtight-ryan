@@ -161,3 +161,10 @@ Persona customization changes shared, file-backed content for the duration of a
 run. Do not run these scenarios concurrently with another customized replay or
 any persona-writing activity. The runner restores its prior snapshot, but a
 second writer can otherwise be overwritten by that restoration.
+
+## Persona-discriminator fixtures
+
+The three custom fixtures send identical answers to their shipped-default and
+customized runs. Their target-concern answers deliberately withhold proof that
+the temporary persona emphasizes. A score change or a reaction-only change is
+useful evidence; neither result is guaranteed.

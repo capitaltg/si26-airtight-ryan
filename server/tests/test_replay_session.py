@@ -57,6 +57,44 @@ def test_custom_persona_scenarios_define_one_editable_persona(
     assert all(set(item) == {"user", "support_delta", "note"} for item in override["exemplars"])
 
 
+@pytest.mark.parametrize(
+    "filename,persona_id,concern_id,required_phrases",
+    [
+        (
+            "scenario-custom-dana.json",
+            "technical_evaluator",
+            "technical_approach",
+            ("containerized services", "versioned apis", "validate traffic"),
+        ),
+        (
+            "scenario-custom-marcus.json",
+            "contracting_officer",
+            "cost_realism",
+            ("firm-fixed", "28-fte", "requirements that surface"),
+        ),
+        (
+            "scenario-custom-priya.json",
+            "program_rep",
+            "operational_impact",
+            ("help desk", "triage issues", "managers informed"),
+        ),
+    ],
+)
+def test_custom_persona_scenarios_keep_their_persona_discriminator(
+    filename: str,
+    persona_id: str,
+    concern_id: str,
+    required_phrases: tuple[str, ...],
+) -> None:
+    """Target answers withhold proof emphasized by each custom persona."""
+    scenario = json.loads((REPLAY_DIR / filename).read_text())
+    answer = scenario["concerns"][concern_id]["answer"].lower()
+
+    assert set(scenario["personas"]) == {persona_id}
+    assert all(phrase in answer for phrase in required_phrases)
+    assert any("not guaranteed" in note.lower() for note in scenario["notes"])
+
+
 def test_persona_update_omits_locked_and_server_owned_fields() -> None:
     """Only editable persona content reaches the update endpoint."""
     from replay_session import persona_update

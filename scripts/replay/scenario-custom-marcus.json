@@ -2,7 +2,8 @@
   "name": "Customized Marcus replay",
   "notes": [
     "Temporarily reskins the contracting officer while preserving his fixed identity and agenda ownership.",
-    "Run this fixture alone: persona customization is global for the duration of the replay."
+    "Run this fixture alone: persona customization is global for the duration of the replay.",
+    "Baseline and customized runs receive identical answers; score differences are observations from persona-context extraction and are not guaranteed."
   ],
   "personas": {
     "contracting_officer": {
@@ -26,7 +27,7 @@
     "transition": {"answer": "We submit the Transition-In Plan within 10 business days of award and complete transition-in within 90 calendar days. Meridian provides structured knowledge transfer during the first 30 days.", "followup": "We use three oldest-first migration waves with reconciliation after every wave and retain LCS for a 60-day parallel run before retirement."},
     "risk": {"answer": "The top risk is migration data integrity across 42 million case records. We mitigate it with wave-level reconciliation, rollback gates, and the 60-day parallel run.", "followup": "A second risk is incumbent knowledge loss, addressed through shadowing, written runbooks, and acceptance checks before handoff."},
     "compliance_security": {"answer": "We build to the NIST SP 800-53 moderate baseline in FedRAMP Moderate AWS GovCloud. No production case data enters the system before ATO approval.", "followup": "The ATO package is prepared against the full moderate control set, while synthetic data supports testing during the government's roughly 120-day review."},
-    "cost_realism": {"answer": "We staff 28 FTE at steady state, sized to the 1.2 million annual cases. Pricing is firm-fixed for the base period and both option periods with no assumed adjustment.", "followup": "The staffing basis separates the base-period migration load from steady-state adjudication support."},
+    "cost_realism": {"answer": "Price is firm-fixed for the planned work. Staffing is based on a lean 28-FTE operating model, and we will work collaboratively on any requirements that surface during performance.", "followup": "We track burn and adjust team mix to maintain outcomes."},
     "past_performance": {"answer": "The Veterans Claims Office modernization moved 1.8 million cases to a cloud-native platform on schedule with zero data loss and an Exceptional CPARS rating.", "followup": "Its live-user case-management migration and phased data conversion are directly comparable to LCS."},
     "operational_impact": {"answer": "All 2,400 adjudicators train before cutover. LCS stays live through the 60-day parallel run with daily reconciliation, and the staffed help desk responds to Severity-1 incidents within 30 minutes.", "followup": "If a wave fails reconciliation, users keep working in LCS while the team rolls back and corrects the issue."}
   }

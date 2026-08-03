@@ -2,7 +2,8 @@
   "name": "Customized Dana replay",
   "notes": [
     "Temporarily reskins the technical evaluator while preserving her fixed identity and agenda ownership.",
-    "Run this fixture alone: persona customization is global for the duration of the replay."
+    "Run this fixture alone: persona customization is global for the duration of the replay.",
+    "Baseline and customized runs receive identical answers; score differences are observations from persona-context extraction and are not guaranteed."
   ],
   "personas": {
     "technical_evaluator": {
@@ -21,7 +22,7 @@
     }
   },
   "concerns": {
-    "technical_approach": {"answer": "We run containerized microservices in AWS GovCloud at FedRAMP Moderate. PostgreSQL is the system of record, an event bus connects services, and versioned REST APIs serve the Payments Engine, Benefits Portal, and data warehouse.", "followup": "Integration contracts are versioned, tested in a staging environment, and monitored for failed events before each release."},
+    "technical_approach": {"answer": "CMS runs as containerized services in AWS GovCloud at FedRAMP Moderate, with PostgreSQL and an event bus. Our integration team will configure versioned APIs for the Payments Engine, Benefits Portal, and data warehouse, then validate traffic during transition.", "followup": "We use our standard migration playbook and established tooling to check interfaces before go-live."},
     "key_personnel": {"answer": "Karen Holloway is the PM with twelve years of federal delivery and a PMP since 2015. Samuel Ortiz is Lead Solutions Architect with nine years in cloud-native design, and Anil Kapoor leads migration with seven years on large data migrations.", "followup": "All three are committed full time for the base period, with their qualifications and roles documented in the proposal."},
     "transition": {"answer": "We submit the Transition-In Plan within 10 business days of award and complete transition-in within 90 calendar days. Meridian provides structured knowledge transfer during the first 30 days.", "followup": "We use three oldest-first migration waves with reconciliation after every wave and retain LCS for a 60-day parallel run before retirement."},
     "risk": {"answer": "The top risk is migration data integrity across 42 million case records. We mitigate it with wave-level reconciliation, rollback gates, and the 60-day parallel run.", "followup": "A second risk is incumbent knowledge loss, addressed through shadowing, written runbooks, and acceptance checks before handoff."},
