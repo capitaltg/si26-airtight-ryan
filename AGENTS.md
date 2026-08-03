@@ -100,7 +100,8 @@ airtight/
 │  │  └─ response-cache-flag-was-never-implemented.md
 │  └─ superpowers/
 │     ├─ plans/
-│     │  └─ 2026-08-02-persona-customization-replays.md
+│     │  ├─ 2026-08-02-persona-customization-replays.md
+│     │  └─ 2026-08-03-lock-browser-exemplar-deltas.md
 │     └─ specs/
 │        ├─ 2026-07-30-cancel-microphone-input-design.md
 │        ├─ 2026-07-30-editable-voice-transcript-design.md
