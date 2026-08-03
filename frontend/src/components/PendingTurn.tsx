@@ -6,6 +6,7 @@
 
 import type { Prompt, Stage } from "../types"
 import { PRESENTER_BUBBLE, REPLY_BUBBLE, prettify } from "../lib"
+import { PersonaAvatar } from "./PersonaAvatar"
 import { PromptIntro } from "./PromptIntro"
 import { StageStepper } from "./StageStepper"
 
@@ -36,6 +37,7 @@ export function PendingTurn({
       {/* question */}
       <div className="space-y-1">
         <div className="flex items-center gap-2 text-sm">
+          <PersonaAvatar personaId={prompt.persona_id} size={28} />
           <span className="font-semibold text-slate-800">{prettify(prompt.persona_id)}</span>
           <span className="text-slate-400">·</span>
           <span className="text-slate-500">{prettify(prompt.concern_id)}</span>

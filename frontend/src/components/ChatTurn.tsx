@@ -5,6 +5,7 @@
 
 import type { TranscriptTurn } from "../types"
 import { PRESENTER_BUBBLE, REPLY_BUBBLE, prettify, rowLabel } from "../lib"
+import { PersonaAvatar } from "./PersonaAvatar"
 import { PromptIntro } from "./PromptIntro"
 
 function DeltaBadge({
@@ -54,6 +55,7 @@ export function ChatTurn({ turn }: { turn: TranscriptTurn }) {
       {/* question */}
       <div className="space-y-1">
         <div className="flex items-center gap-2 text-sm">
+          <PersonaAvatar personaId={turn.personaId} size={28} />
           <span className="font-semibold text-slate-800">
             {turn.displayName}, {prettify(turn.personaId)}
           </span>
@@ -103,6 +105,7 @@ export function ChatTurn({ turn }: { turn: TranscriptTurn }) {
       <div className="flex justify-start">
         <div className={REPLY_BUBBLE}>
           <div className="flex items-center gap-2">
+            <PersonaAvatar personaId={turn.personaId} size={28} />
             <span className="text-xs font-semibold text-slate-500">
               {turn.displayName}, {prettify(turn.personaId)}
             </span>
