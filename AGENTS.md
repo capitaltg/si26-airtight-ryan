@@ -180,6 +180,7 @@ airtight/
 │  │  │  ├─ __init__.py
 │  │  │  ├─ content.py
 │  │  │  ├─ deps.py
+│  │  │  ├─ personas.py
 │  │  │  └─ sessions.py
 │  │  ├─ bedrock/
 │  │  │  ├─ __init__.py
