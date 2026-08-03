@@ -10,6 +10,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.config import settings
@@ -163,6 +164,28 @@ def test_save_reloads_the_content_on_app_state(client: TestClient) -> None:
 
     assert app.state.content is not before
     assert app.state.content.personas["contracting_officer"].display_name == "Mira"
+
+
+def test_reload_failure_rolls_back_saved_bytes_and_app_state(
+    client: TestClient, store: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api import personas as personas_api
+
+    path = store / "personas" / "contracting_officer.md"
+    before_bytes = path.read_bytes()
+    before_content = app.state.content
+
+    def fail_reload(application: FastAPI) -> None:
+        application.state.content = object()
+        raise RuntimeError("reload failed")
+
+    monkeypatch.setattr(personas_api, "reload_content", fail_reload)
+
+    with pytest.raises(RuntimeError, match="reload failed"):
+        client.put("/content/personas/contracting_officer", json=a_payload())
+
+    assert path.read_bytes() == before_bytes
+    assert app.state.content is before_content
 
 
 def test_save_ignores_locked_fields_in_the_payload(client: TestClient) -> None:

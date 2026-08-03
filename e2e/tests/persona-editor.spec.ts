@@ -195,6 +195,24 @@ test("confirming a reset restores the shipped values in the form", async ({ page
   await expect(page.getByTestId("customized-contracting_officer")).toHaveCount(0)
 })
 
+test("closing the editor returns to the active rehearsal with its draft intact", async ({
+  page,
+}) => {
+  await mockList(page, [DANA, MARCUS])
+  await page.goto("/")
+  await page.getByRole("button", { name: "Start rehearsal" }).click()
+
+  const answer = page.getByPlaceholder("Your answer… (⌘/Ctrl+Enter to submit)")
+  await answer.fill("Our technical lead owns the migration plan.")
+  await page.getByTestId("open-persona-editor").click()
+  await expect(page.getByRole("heading", { name: "Personas" })).toBeVisible()
+
+  await page.getByTestId("close-persona-editor").click()
+
+  await expect(page.getByRole("button", { name: "How you're scored" })).toBeVisible()
+  await expect(answer).toHaveValue("Our technical lead owns the migration plan.")
+})
+
 test("the editor has no WCAG 2.1 AA contrast violations", async ({ page }) => {
   await mockList(page, [DANA, MARCUS])
   await openEditor(page)

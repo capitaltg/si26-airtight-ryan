@@ -193,6 +193,39 @@ def test_reset_restores_the_default_bytes_exactly(store: Path) -> None:
     assert restored.display_name == "Marcus"
 
 
+def test_malformed_default_leaves_the_live_persona_untouched(store: Path) -> None:
+    from app.content.persona_writer import default_path, live_path, reset_persona
+
+    default_path("contracting_officer", store).write_text("---\nid: contracting_officer\n---\n")
+    live = live_path("contracting_officer", store)
+    before = live.read_bytes()
+
+    with pytest.raises(ValidationError):
+        reset_persona("contracting_officer", store)
+
+    assert live.read_bytes() == before
+
+
+def test_interrupted_reset_copy_leaves_the_live_persona_untouched(
+    store: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.content import persona_writer
+
+    live = persona_writer.live_path("contracting_officer", store)
+    before = live.read_bytes()
+
+    def interrupt_copy(_source: Path, destination: Path) -> None:
+        Path(destination).write_bytes(b"partial copy")
+        raise OSError("copy interrupted")
+
+    monkeypatch.setattr(persona_writer.shutil, "copyfile", interrupt_copy)
+
+    with pytest.raises(OSError, match="copy interrupted"):
+        persona_writer.reset_persona("contracting_officer", store)
+
+    assert live.read_bytes() == before
+
+
 def test_is_customized_tracks_save_and_reset(store: Path) -> None:
     from app.content.persona_writer import is_customized, reset_persona, save_persona
 

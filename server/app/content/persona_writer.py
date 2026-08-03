@@ -7,7 +7,9 @@ the file changes.
 
 from __future__ import annotations
 
+import os
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +26,7 @@ __all__ = [
     "live_path",
     "render_persona_file",
     "reset_persona",
+    "restore_persona_bytes",
     "save_persona",
 ]
 
@@ -88,24 +91,61 @@ def render_persona_file(
     return text, round_tripped
 
 
+def _atomic_write_bytes(destination: Path, content: bytes) -> None:
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=destination.parent, prefix=f".{destination.name}.", suffix=".tmp"
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as candidate:
+            candidate.write(content)
+            candidate.flush()
+            os.fsync(candidate.fileno())
+        shutil.copymode(destination, temporary)
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def save_persona(
     persona_id: str, update: PersonaUpdate, content_dir: Path | None = None
 ) -> PersonaDefinition:
     """Validate and save editable content for one persona."""
     path = live_path(persona_id, content_dir)
     text, definition = render_persona_file(path, persona_id, update)
-    path.write_text(text, encoding="utf-8")
+    _atomic_write_bytes(path, text.encode("utf-8"))
     return definition
 
 
+def restore_persona_bytes(
+    persona_id: str, content: bytes, content_dir: Path | None = None
+) -> None:
+    """Atomically restore previously validated live persona bytes."""
+    _atomic_write_bytes(live_path(persona_id, content_dir), content)
+
+
 def reset_persona(persona_id: str, content_dir: Path | None = None) -> PersonaDefinition:
-    """Restore the frozen file bytes, then parse the restored persona."""
+    """Validate and atomically restore the frozen file bytes."""
     source = default_path(persona_id, content_dir)
     if not source.is_file():
         raise FileNotFoundError(f"missing frozen default: {source}")
     destination = live_path(persona_id, content_dir)
-    shutil.copyfile(source, destination)
-    return load_persona(destination)
+    persona = load_persona(source)
+    if persona.id != persona_id:
+        raise ValueError(f"frozen default id {persona.id!r} does not match {persona_id!r}")
+
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=destination.parent, prefix=f".{destination.name}.", suffix=".tmp"
+    )
+    os.close(descriptor)
+    temporary = Path(temporary_name)
+    try:
+        shutil.copyfile(source, temporary)
+        shutil.copymode(destination, temporary)
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return persona
 
 
 def is_customized(persona_id: str, content_dir: Path | None = None) -> bool:

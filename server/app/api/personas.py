@@ -74,11 +74,20 @@ def update_persona(
     content: Content = Depends(get_content),
 ) -> PersonaDTO:
     _require_known(content, persona_id)
+    previous_bytes = persona_writer.live_path(persona_id).read_bytes()
+    previous_content = request.app.state.content
     try:
         persona = persona_writer.save_persona(persona_id, update)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=_field_errors(exc)) from exc
-    reload_content(request.app)
+    try:
+        reload_content(request.app)
+    except Exception:
+        try:
+            persona_writer.restore_persona_bytes(persona_id, previous_bytes)
+        finally:
+            request.app.state.content = previous_content
+        raise
     return _to_dto(persona)
 
 
