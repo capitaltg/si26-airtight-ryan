@@ -188,6 +188,10 @@ airtight/
 │  │  ├─ content/
 │  │  │  ├─ store/
 │  │  │  │  ├─ personas/
+│  │  │  │  │  ├─ defaults/
+│  │  │  │  │  │  ├─ contracting_officer.md
+│  │  │  │  │  │  ├─ program_rep.md
+│  │  │  │  │  │  └─ technical_evaluator.md
 │  │  │  │  │  ├─ contracting_officer.md
 │  │  │  │  │  ├─ program_rep.md
 │  │  │  │  │  └─ technical_evaluator.md
@@ -251,6 +255,7 @@ airtight/
 │  │  ├─ test_grounding.py
 │  │  ├─ test_images_install_ffmpeg.py
 │  │  ├─ test_orchestrator.py
+│  │  ├─ test_persona_writer.py
 │  │  ├─ test_reaction.py
 │  │  ├─ test_repo.py
 │  │  ├─ test_report.py
