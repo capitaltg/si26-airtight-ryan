@@ -212,8 +212,6 @@ export function PersonaForm({
                   <span className={LABEL}>Support delta</span>
                   <input
                     type="number"
-                    min={-2}
-                    max={2}
                     step={1}
                     className={INPUT}
                     data-testid={`exemplar-delta-${i}`}

@@ -88,6 +88,10 @@ airtight/
 │  │  ├─ frontend.yml            # oxlint + oxfmt + build/typecheck (on frontend changes)
 │  │  └─ server.yml              # ruff + mypy + pytest (on server changes)
 │  └─ PULL_REQUEST_TEMPLATE.md
+├─ .superpowers/
+│  └─ sdd/
+│     └─ custom-persona-editor/
+│        └─ task-12-report.md
 ├─ docs/
 │  ├─ issues/                    # tracked implementation findings and follow-up work
 │  │  ├─ persona-exemplars-never-reach-the-model.md
@@ -103,6 +107,7 @@ airtight/
 │  │  ├─ health.spec.ts
 │  │  ├─ mic-check.spec.ts       # device pickers, level meter, loopback (fake media project)
 │  │  ├─ persona-avatars.spec.ts # deterministic, accessible evaluator avatars
+│  │  ├─ persona-editor.spec.ts  # mocked editor coverage; never writes shared persona store
 │  │  ├─ persona-intro.spec.ts
 │  │  ├─ scoring-legibility.spec.ts # row applications, clamp marker, rubric combination rules
 │  │  ├─ session-history.spec.ts # past-rehearsals list and archive view
