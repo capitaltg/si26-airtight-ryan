@@ -118,6 +118,7 @@ export function PersonaForm({
     <form
       data-testid={`persona-form-${persona.id}`}
       className="space-y-5 border-t border-slate-200 px-4 py-5"
+      noValidate
       onSubmit={(event) => {
         event.preventDefault()
         onSave(draft)
@@ -212,6 +213,8 @@ export function PersonaForm({
                   <span className={LABEL}>Support delta</span>
                   <input
                     type="number"
+                    min={-2}
+                    max={2}
                     step={1}
                     className={INPUT}
                     data-testid={`exemplar-delta-${i}`}

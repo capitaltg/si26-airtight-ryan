@@ -112,7 +112,10 @@ test("a 422 renders against the field that caused it", async ({ page }) => {
 
   await openEditor(page)
   await page.getByTestId("toggle-contracting_officer").click()
-  await page.getByTestId("exemplar-delta-0").fill("5")
+  const supportDelta = page.getByTestId("exemplar-delta-0")
+  await expect(supportDelta).toHaveAttribute("min", "-2")
+  await expect(supportDelta).toHaveAttribute("max", "2")
+  await supportDelta.fill("5")
   await page.getByRole("button", { name: "Save persona" }).click()
 
   await expect(page.getByRole("alert")).toHaveText("Input should be less than or equal to 2")
