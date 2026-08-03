@@ -24,8 +24,9 @@ optional.
 
 `scripts/consistency_check.py --compare-baseline` snapshots every live persona
 targeted by the scenario, resets those IDs through the existing content API,
-then runs the same answers first against shipped defaults and next against the
-temporary override. The override starts from the reset default state. A final
+then runs the same scripted initial answer for each concern first against
+shipped defaults and next against the temporary override. Follow-up delivery
+remains adaptive. The override starts from the reset default state. A final
 cleanup restores every pre-comparison snapshot, including when reset, replay,
 or response handling fails. It reports changed matched rows, deltas, meters,
 statuses, replies, and rationales. A comparison with no differences still
@@ -50,10 +51,10 @@ frozen concern red line, but omits the proof its temporary evaluator emphasizes:
 Mara receives architecture claims without named, testable controls; Elias
 receives price and scope assurances without a bounded contractual basis; Nadia
 receives continuity assurances without a concrete frontline fallback. The
-baseline and customized runs receive byte-identical answers. A comparison can
-therefore show an extraction and score difference caused by evaluator context,
-but neither the fixture nor the CLI treats a difference as guaranteed or as a
-test failure.
+baseline and customized runs share each concern's scripted initial answer,
+while follow-up delivery remains adaptive. A comparison can therefore show an
+extraction and score difference caused by evaluator context, but neither the
+fixture nor the CLI treats a difference as guaranteed or as a test failure.
 
 ## Failure handling and testing
 

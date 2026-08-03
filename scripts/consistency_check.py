@@ -24,8 +24,9 @@ Three modes test different things:
 
   --compare-baseline
       Snapshots targeted live personas, resets them to shipped defaults through
-      the content API, then runs the same answers against shipped defaults and
-      temporary overrides. Both runs make normal model/cache requests. It
+      the content API, then runs each concern's same scripted initial answer
+      against shipped defaults and temporary overrides. Follow-ups stay
+      adaptive. Both runs make normal model/cache requests. It
       restores the pre-comparison live snapshots afterward.
 
 Usage (stack must be up — `cd e2e && npm run stack:up`):
@@ -216,6 +217,134 @@ def _score_differences(base: dict[str, Any], other: dict[str, Any]) -> list[str]
 
     if base["final_meters"] != other["final_meters"]:
         changed.append("final meters")
+    return changed
+
+
+def _baseline_attempt(turn: dict[str, Any]) -> str:
+    """Return the replay attempt label used to align baseline turns."""
+    if turn.get("kind") != "answer":
+        return str(turn.get("kind", "unknown"))
+    return "follow-up" if turn.get("is_follow_up") else "initial"
+
+
+def _baseline_difference_records(base: dict, other: dict) -> list[dict[str, Any]]:
+    """Compare adaptive baseline runs by concern and attempt, never position."""
+    base_turns = {
+        (turn.get("concern_id"), _baseline_attempt(turn)): turn for turn in base["turns"]
+    }
+    other_turns = {
+        (turn.get("concern_id"), _baseline_attempt(turn)): turn
+        for turn in other["turns"]
+    }
+    differences: list[dict[str, Any]] = []
+
+    for key, base_turn in base_turns.items():
+        concern_id, attempt = key
+        other_turn = other_turns.get(key)
+        if other_turn is None:
+            differences.append(
+                {
+                    "scope": "turn",
+                    "concern_id": concern_id,
+                    "attempt": attempt,
+                    "field": "removed_turn",
+                    "run_1": base_turn,
+                    "this": None,
+                }
+            )
+            continue
+        for field in COMPARED:
+            if base_turn.get(field) != other_turn.get(field):
+                differences.append(
+                    {
+                        "scope": "turn",
+                        "concern_id": concern_id,
+                        "attempt": attempt,
+                        "field": field,
+                        "run_1": base_turn.get(field),
+                        "this": other_turn.get(field),
+                    }
+                )
+
+    for key, other_turn in other_turns.items():
+        if key in base_turns:
+            continue
+        concern_id, attempt = key
+        differences.append(
+            {
+                "scope": "turn",
+                "concern_id": concern_id,
+                "attempt": attempt,
+                "field": "added_turn",
+                "run_1": None,
+                "this": other_turn,
+            }
+        )
+
+    for field in ("final_meters", "concern_status"):
+        if base[field] != other[field]:
+            differences.append(
+                {
+                    "scope": "session",
+                    "field": field,
+                    "run_1": base[field],
+                    "this": other[field],
+                }
+            )
+    return differences
+
+
+def _baseline_diff_runs(base: dict, other: dict) -> list[str]:
+    """Format adaptive baseline differences without positional turn labels."""
+    diffs: list[str] = []
+    for difference in _baseline_difference_records(base, other):
+        field = difference["field"]
+        if difference["scope"] == "turn":
+            label = f"{difference['concern_id']} {difference['attempt']}"
+            if field == "added_turn":
+                diffs.append(
+                    f"added turn: {label}\n"
+                    "      baseline: (missing)\n"
+                    f"      customized: {_abbrev(difference['this'])}"
+                )
+                continue
+            if field == "removed_turn":
+                diffs.append(
+                    f"removed turn: {label}\n"
+                    f"      baseline: {_abbrev(difference['run_1'])}\n"
+                    "      customized: (missing)"
+                )
+                continue
+            diffs.append(
+                f"turn {label} {field}:\n"
+                f"      baseline: {_abbrev(difference['run_1'])}\n"
+                f"      customized: {_abbrev(difference['this'])}"
+            )
+            continue
+        label = field.replace("_", " ")
+        diffs.append(
+            f"{label}:\n"
+            f"      baseline: {_abbrev(difference['run_1'])}\n"
+            f"      customized: {_abbrev(difference['this'])}"
+        )
+    return diffs
+
+
+def _baseline_score_differences(base: dict, other: dict) -> list[str]:
+    """Name score-bearing changes after adaptive baseline alignment."""
+    changed: list[str] = []
+    for difference in _baseline_difference_records(base, other):
+        field = difference["field"]
+        if field in SCORE_FIELDS and field not in changed:
+            changed.append(field)
+        elif field in {"added_turn", "removed_turn"}:
+            turn = difference["this"] or difference["run_1"]
+            if turn.get("kind") == "answer":
+                label = field.replace("_", " ")
+                if label not in changed:
+                    changed.append(label)
+        elif field == "final_meters" and "final meters" not in changed:
+            changed.append("final meters")
     return changed
 
 
@@ -414,8 +543,8 @@ def compare_baseline(
         raise
     finally:
         _restore_personas(base_url, originals, original_error, put=_put)
-    diffs = diff_runs(baseline, customized)
-    score_diffs = _score_differences(baseline, customized)
+    diffs = _baseline_diff_runs(baseline, customized)
+    score_diffs = _baseline_score_differences(baseline, customized)
 
     print(c(f"\n=== baseline comparison: {scenario.get('name', '(unnamed)')} ===", "1;35"))
     print(c(f"  baseline score: {_score_summary(baseline)}", "2"))
@@ -436,6 +565,13 @@ def compare_baseline(
             passed=True,
             scenario_path=scenario_path,
         )
+        report["comparisons"] = [
+            {
+                "run": 2,
+                "differences": _baseline_difference_records(baseline, customized),
+                "score_differences": _baseline_score_differences(baseline, customized),
+            }
+        ]
         report["comparison_mode"] = "baseline"
         report_scenarios.append(report)
     return True

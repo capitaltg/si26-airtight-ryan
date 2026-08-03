@@ -3,7 +3,7 @@
   "notes": [
     "Temporarily reskins the technical evaluator while preserving her fixed identity and agenda ownership.",
     "Run this fixture alone: persona customization is global for the duration of the replay.",
-    "Baseline and customized runs receive identical answers; score differences are observations from persona-context extraction and are not guaranteed."
+    "Baseline and customized runs receive the same scripted initial answer for each concern; follow-up delivery is adaptive, and score differences are observations from persona-context extraction and are not guaranteed."
   ],
   "personas": {
     "technical_evaluator": {

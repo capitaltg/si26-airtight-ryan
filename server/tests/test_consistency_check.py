@@ -141,6 +141,70 @@ def test_compare_baseline_succeeds_when_results_match(
     assert "no scoring or reaction differences" in capsys.readouterr().out
 
 
+def test_compare_baseline_aligns_later_concerns_after_one_sided_followup(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A custom-only follow-up must not be compared with the next concern."""
+    baseline = _run(
+        _turn(),
+        _turn(
+            persona_id="contracting_officer",
+            concern_id="cost_realism",
+            prompt="Explain the price basis.",
+            sent="Firm-fixed pricing for planned work.",
+        ),
+    )
+    customized = _run(
+        _turn(),
+        _turn(
+            is_follow_up=True,
+            prompt="Name the validation control.",
+            sent="We use our standard migration playbook.",
+        ),
+        _turn(
+            persona_id="contracting_officer",
+            concern_id="cost_realism",
+            prompt="Explain the price basis.",
+            sent="Firm-fixed pricing for planned work.",
+        ),
+    )
+    reports: list[dict] = []
+    monkeypatch.setattr("consistency_check.replay", lambda *_args: baseline)
+    monkeypatch.setattr(
+        "consistency_check.replay_with_personas", lambda *_args: customized
+    )
+    monkeypatch.setattr(
+        "consistency_check._persona_snapshots",
+        lambda *_args, **_kwargs: {"technical_evaluator": {}},
+    )
+    monkeypatch.setattr("consistency_check._post", lambda *_args: {})
+    monkeypatch.setattr(
+        "consistency_check._restore_personas", lambda *_args, **_kwargs: None
+    )
+
+    assert compare_baseline(
+        "http://api.example",
+        {"name": "fixture", "personas": {"technical_evaluator": {}}},
+        quiet=True,
+        report_scenarios=reports,
+    )
+
+    differences = reports[0]["comparisons"][0]["differences"]
+    assert differences == [
+        {
+            "scope": "turn",
+            "concern_id": "technical_approach",
+            "attempt": "follow-up",
+            "field": "added_turn",
+            "run_1": None,
+            "this": customized["turns"][1],
+        }
+    ]
+    output = capsys.readouterr().out
+    assert "added turn: technical_approach follow-up" in output
+    assert "turn 2 (cost_realism)" not in output
+
+
 def test_compare_baseline_requires_nonempty_personas_mapping() -> None:
     with pytest.raises(ValueError, match="requires a nonempty personas object"):
         compare_baseline(

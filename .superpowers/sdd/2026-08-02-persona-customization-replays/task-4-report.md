@@ -70,3 +70,66 @@ Skipped. No API was listening on `localhost:8000`, and AWS credentials were not 
 ## Concerns
 
 - Live baseline comparisons remain unrun because prerequisites were unavailable.
+
+## Fix Round: Adaptive Baseline Alignment
+
+### Changes
+
+- Kept generic repeat-run comparison positional and unchanged.
+- Added baseline-only comparison keyed by concern and attempt (`initial`,
+  `follow-up`, or clarification), with added and removed turns reported
+  explicitly.
+- Updated baseline reports to use aligned differences and aligned
+  score-bearing fields.
+- Added one-sided-follow-up regression coverage and forbidden-proof checks for
+  Mara's rollback/reconciliation, Elias's bounded/auditable treatment, and
+  Nadia's fallback.
+- Corrected fixture, README, plan, and design wording: the pair shares each
+  concern's scripted initial answer; follow-up delivery is adaptive.
+
+### TDD Evidence
+
+RED:
+
+```bash
+cd server && .venv/bin/pytest tests/test_consistency_check.py -k one_sided_followup -v
+```
+
+Result: failed as expected. Positional comparison treated the customized
+technical follow-up as baseline `cost_realism`, then reported misleading
+score-bearing differences.
+
+GREEN:
+
+```bash
+cd server && .venv/bin/pytest tests/test_consistency_check.py -k 'compare_baseline or one_sided_followup' -v
+cd server && .venv/bin/pytest tests/test_replay_session.py -k discriminator -v
+```
+
+Result: 13 baseline-comparison tests passed; 3 discriminator tests passed.
+
+### Verification
+
+```bash
+cd server && .venv/bin/pytest tests/test_consistency_check.py tests/test_replay_session.py -v
+python3 -m json.tool scripts/replay/scenario-custom-dana.json >/dev/null
+python3 -m json.tool scripts/replay/scenario-custom-marcus.json >/dev/null
+python3 -m json.tool scripts/replay/scenario-custom-priya.json >/dev/null
+git diff --check
+```
+
+Result: 46 tests passed; all JSON commands exited 0; diff check passed.
+
+Focused Ruff found two new long format strings, which were split. Full-file Ruff
+still reports six pre-existing issues in `scripts/consistency_check.py`: two
+`B905` calls without `strict=`, two `UP017` UTC aliases, and two existing long
+argparse lines. They are outside this fix round.
+
+### Self-review
+
+- A custom-only follow-up is now an explicit added turn, not compared against
+  the next concern.
+- Later `cost_realism` turns align by key and do not create a false difference.
+- Added or removed answer turns remain score-bearing observations; generic
+  consistency comparison behavior remains unchanged.
+- No live service was started, and no score outcome is asserted.

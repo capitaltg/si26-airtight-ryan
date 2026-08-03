@@ -74,8 +74,9 @@ fail. The pure comparison logic is unit-tested in
 
 `--compare-baseline` requires a scenario with a nonempty `personas` object. It
 snapshots each targeted live persona, resets those IDs to shipped defaults,
-runs the same answers against the defaults, then runs them with temporary
-overrides applied from that default state. It restores all pre-comparison live
+uses the same scripted initial answer for each concern against the defaults,
+then runs them with temporary overrides applied from that default state.
+Follow-up delivery stays adaptive. It restores all pre-comparison live
 snapshots afterward, including on failure. Score changes are observations from
 different validated extraction facts, not failures. Reactions are always
 compared too. This mode runs exactly one shipped-default/customized pair, so it
@@ -164,7 +165,8 @@ second writer can otherwise be overwritten by that restoration.
 
 ## Persona-discriminator fixtures
 
-The three custom fixtures send identical answers to their shipped-default and
-customized runs. Their target-concern answers deliberately withhold proof that
-the temporary persona emphasizes. A score change or a reaction-only change is
-useful evidence; neither result is guaranteed.
+The three custom fixtures send the same scripted initial answer for each concern
+to their shipped-default and customized runs. Follow-up delivery is adaptive.
+Their target-concern answers deliberately withhold proof that the temporary
+persona emphasizes. A score change or a reaction-only change is useful evidence;
+neither result is guaranteed.

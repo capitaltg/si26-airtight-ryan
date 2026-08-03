@@ -58,25 +58,28 @@ def test_custom_persona_scenarios_define_one_editable_persona(
 
 
 @pytest.mark.parametrize(
-    "filename,persona_id,concern_id,required_phrases",
+    "filename,persona_id,concern_id,required_phrases,forbidden_phrases",
     [
         (
             "scenario-custom-dana.json",
             "technical_evaluator",
             "technical_approach",
             ("containerized services", "versioned apis", "validate traffic"),
+            ("rollback", "reconciliation"),
         ),
         (
             "scenario-custom-marcus.json",
             "contracting_officer",
             "cost_realism",
             ("firm-fixed", "28-fte", "requirements that surface"),
+            ("bounded", "auditable"),
         ),
         (
             "scenario-custom-priya.json",
             "program_rep",
             "operational_impact",
             ("help desk", "triage issues", "managers informed"),
+            ("fallback",),
         ),
     ],
 )
@@ -85,6 +88,7 @@ def test_custom_persona_scenarios_keep_their_persona_discriminator(
     persona_id: str,
     concern_id: str,
     required_phrases: tuple[str, ...],
+    forbidden_phrases: tuple[str, ...],
 ) -> None:
     """Target answers withhold proof emphasized by each custom persona."""
     scenario = json.loads((REPLAY_DIR / filename).read_text())
@@ -92,6 +96,7 @@ def test_custom_persona_scenarios_keep_their_persona_discriminator(
 
     assert set(scenario["personas"]) == {persona_id}
     assert all(phrase in answer for phrase in required_phrases)
+    assert not any(phrase in answer for phrase in forbidden_phrases)
     assert any("not guaranteed" in note.lower() for note in scenario["notes"])
 
 

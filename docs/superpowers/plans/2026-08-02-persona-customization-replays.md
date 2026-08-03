@@ -4,7 +4,7 @@
 
 **Goal:** Add three repeatable session fixtures that temporarily customize an evaluator, run a full rehearsal, and restore the prior personas.
 
-**Architecture:** `scripts/replay_session.py` gains an optional top-level `personas` scenario field. It snapshots each targeted persona through the content API, sends only editable fields to the existing `PUT` endpoint, runs the normal replay, then restores every snapshot in `finally`. Baseline comparison snapshots the live targeted personas, resets those IDs through the content API, runs the same answers against shipped defaults and temporary overrides, then restores the live snapshots. Three JSON files exercise Dana, Marcus, and Priya without changing fixed IDs, priorities, or rubric version.
+**Architecture:** `scripts/replay_session.py` gains an optional top-level `personas` scenario field. It snapshots each targeted persona through the content API, sends only editable fields to the existing `PUT` endpoint, runs the normal replay, then restores every snapshot in `finally`. Baseline comparison snapshots the live targeted personas, resets those IDs through the content API, runs the same scripted initial answer for each concern against shipped defaults and temporary overrides while follow-up delivery remains adaptive, then restores the live snapshots. Three JSON files exercise Dana, Marcus, and Priya without changing fixed IDs, priorities, or rubric version.
 
 **Tech Stack:** Python standard-library HTTP client, existing FastAPI persona API, pytest.
 
@@ -540,8 +540,9 @@ git commit -m "feat: compare customized replays with baseline"
 - Modify: `server/tests/test_replay_session.py`
 
 **Interfaces:**
-- Consumes: the baseline comparison, which sends every fixture answer unchanged
-  to both the shipped-default and temporary-custom persona.
+- Consumes: the baseline comparison, which sends each concern's scripted initial
+  answer unchanged to both the shipped-default and temporary-custom persona;
+  follow-up delivery remains adaptive.
 - Produces: fixtures where a plausible target-concern answer omits the proof
   emphasized by its custom persona.
 
@@ -624,9 +625,10 @@ fallback, and user recovery path. It does not promise a seamless or risk-free
 cutover.
 
 Add `## Persona-discriminator fixtures` to the README. State that the three
-custom fixtures use identical answers for shipped-default and customized runs,
-deliberately withhold proof the temporary persona emphasizes, and treat either a
-score change or a reaction-only change as useful evidence.
+custom fixtures use the same scripted initial answer for each concern in
+shipped-default and customized runs, follow-up delivery remains adaptive, they
+deliberately withhold proof the temporary persona emphasizes, and either a score
+change or a reaction-only change is useful evidence.
 
 - [ ] **Step 4: Verify GREEN and JSON**
 
