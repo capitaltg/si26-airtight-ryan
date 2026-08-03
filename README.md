@@ -91,6 +91,18 @@ npm install
 npm run dev
 ```
 
+### Editing the personas
+
+The three evaluator personas live in `server/app/content/store/personas/*.md` and can be
+edited in the app: click **Edit personas** on the rehearsal screen. Name, intro, voice,
+demographics, values, wants, non-negotiables, Polly voice, and exemplars are editable and
+take effect on the next question asked — no restart. Each persona's shipped version is
+frozen under `personas/defaults/`, and **Reset to default** restores it.
+
+`id`, `priorities`, and `rubric_version` are not editable. Together with `PERSONA_ORDER`
+in `app/pipeline/orchestrator.py` they guarantee each of the eight concerns has exactly
+one owner, so changing them is a scenario change, not a reskin.
+
 ## Constraints baked into this scaffold
 
 - The model is pinned via `BEDROCK_MODEL_ID` (default Sonnet 4.5) and never computes the score.
