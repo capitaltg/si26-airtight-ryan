@@ -44,6 +44,17 @@ the intended evaluator behavior. No fixture declares a scoring-row expectation:
 persona character can affect model extraction and reaction, while deterministic
 scoring remains owned by the rubric once extraction facts are validated.
 
+The three customized fixtures replace their generic clean-answer variants with
+persona-discriminator answers. Each stays plausible and avoids an explicit
+frozen concern red line, but omits the proof its temporary evaluator emphasizes:
+Mara receives architecture claims without named, testable controls; Elias
+receives price and scope assurances without a bounded contractual basis; Nadia
+receives continuity assurances without a concrete frontline fallback. The
+baseline and customized runs receive byte-identical answers. A comparison can
+therefore show an extraction and score difference caused by evaluator context,
+but neither the fixture nor the CLI treats a difference as guaranteed or as a
+test failure.
+
 ## Failure handling and testing
 
 If applying a customization fails, the runner stops before creating a session.
