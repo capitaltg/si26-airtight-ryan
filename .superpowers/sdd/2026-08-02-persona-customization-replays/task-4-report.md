@@ -133,3 +133,41 @@ argparse lines. They are outside this fix round.
 - Added or removed answer turns remain score-bearing observations; generic
   consistency comparison behavior remains unchanged.
 - No live service was started, and no score outcome is asserted.
+
+## Final Fix: Repeated Clarifications
+
+### Changes
+
+- Baseline alignment now gives non-answer turns a per-concern, per-kind
+  occurrence ordinal.
+- Answer keys remain `initial` and `follow-up`; repeated clarifications become
+  `clarify 1`, `clarify 2`, and so on.
+- Added regression coverage where only the first of two same-concern
+  clarifications changes its reply.
+
+### TDD Evidence
+
+RED:
+
+```bash
+cd server && .venv/bin/pytest tests/test_consistency_check.py -k same_concern_clarification -v
+```
+
+Result: failed as expected. The old key collapsed both `clarify` records, so
+the changed first reply was absent from the baseline comparison.
+
+GREEN:
+
+```bash
+cd server && .venv/bin/pytest tests/test_consistency_check.py -k 'same_concern_clarification or one_sided_followup' -v
+```
+
+Result: 2 passed. The first clarification reports as `clarify 1`, and the
+one-sided-follow-up alignment remains covered.
+
+### Self-review
+
+- Generic consistency comparison remains positional and unchanged.
+- Repeated clarification records cannot overwrite prior records for the same
+  concern and kind.
+- No API, fixture content, or unrelated persona formatting changed.

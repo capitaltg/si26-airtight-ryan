@@ -227,15 +227,28 @@ def _baseline_attempt(turn: dict[str, Any]) -> str:
     return "follow-up" if turn.get("is_follow_up") else "initial"
 
 
+def _baseline_turns_by_key(turns: list[dict]) -> dict[tuple[object, str], dict]:
+    """Key answers by attempt and non-answer turns by per-kind occurrence."""
+    aligned: dict[tuple[object, str], dict] = {}
+    occurrences: dict[tuple[object, object], int] = {}
+    for turn in turns:
+        concern_id = turn.get("concern_id")
+        kind = turn.get("kind")
+        attempt = _baseline_attempt(turn)
+        if kind == "answer":
+            aligned[(concern_id, attempt)] = turn
+            continue
+        occurrence_key = (concern_id, kind)
+        occurrence = occurrences.get(occurrence_key, 0) + 1
+        occurrences[occurrence_key] = occurrence
+        aligned[(concern_id, f"{attempt} {occurrence}")] = turn
+    return aligned
+
+
 def _baseline_difference_records(base: dict, other: dict) -> list[dict[str, Any]]:
     """Compare adaptive baseline runs by concern and attempt, never position."""
-    base_turns = {
-        (turn.get("concern_id"), _baseline_attempt(turn)): turn for turn in base["turns"]
-    }
-    other_turns = {
-        (turn.get("concern_id"), _baseline_attempt(turn)): turn
-        for turn in other["turns"]
-    }
+    base_turns = _baseline_turns_by_key(base["turns"])
+    other_turns = _baseline_turns_by_key(other["turns"])
     differences: list[dict[str, Any]] = []
 
     for key, base_turn in base_turns.items():

@@ -59,8 +59,8 @@ def _run(*turns: dict) -> dict:
     }
 
 
-def _clarification() -> dict:
-    return {
+def _clarification(**over: object) -> dict:
+    clarification = {
         "kind": "clarify",
         "persona_id": "technical_evaluator",
         "concern_id": "technical_approach",
@@ -68,6 +68,8 @@ def _clarification() -> dict:
         "reply": "The baseline assumes three named leads.",
         "remaining": 1,
     }
+    clarification.update(over)
+    return clarification
 
 
 def test_identical_runs_have_no_diff() -> None:
@@ -203,6 +205,59 @@ def test_compare_baseline_aligns_later_concerns_after_one_sided_followup(
     output = capsys.readouterr().out
     assert "added turn: technical_approach follow-up" in output
     assert "turn 2 (cost_realism)" not in output
+
+
+def test_compare_baseline_keeps_each_same_concern_clarification_occurrence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A later clarification must not overwrite an earlier one in alignment."""
+    baseline = _run(
+        _clarification(reply="First baseline clarification."),
+        _clarification(
+            sent="Could you clarify the transition timing?",
+            reply="Second clarification is unchanged.",
+        ),
+        _turn(),
+    )
+    customized = _run(
+        _clarification(reply="First customized clarification."),
+        _clarification(
+            sent="Could you clarify the transition timing?",
+            reply="Second clarification is unchanged.",
+        ),
+        _turn(),
+    )
+    reports: list[dict] = []
+    monkeypatch.setattr("consistency_check.replay", lambda *_args: baseline)
+    monkeypatch.setattr(
+        "consistency_check.replay_with_personas", lambda *_args: customized
+    )
+    monkeypatch.setattr(
+        "consistency_check._persona_snapshots",
+        lambda *_args, **_kwargs: {"technical_evaluator": {}},
+    )
+    monkeypatch.setattr("consistency_check._post", lambda *_args: {})
+    monkeypatch.setattr(
+        "consistency_check._restore_personas", lambda *_args, **_kwargs: None
+    )
+
+    assert compare_baseline(
+        "http://api.example",
+        {"name": "fixture", "personas": {"technical_evaluator": {}}},
+        quiet=True,
+        report_scenarios=reports,
+    )
+
+    assert reports[0]["comparisons"][0]["differences"] == [
+        {
+            "scope": "turn",
+            "concern_id": "technical_approach",
+            "attempt": "clarify 1",
+            "field": "reply",
+            "run_1": "First baseline clarification.",
+            "this": "First customized clarification.",
+        }
+    ]
 
 
 def test_compare_baseline_requires_nonempty_personas_mapping() -> None:
