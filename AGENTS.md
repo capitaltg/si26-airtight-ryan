@@ -128,6 +128,7 @@ airtight/
 │  │  │  ├─ MicCheck.tsx
 │  │  │  ├─ PendingTurn.tsx
 │  │  │  ├─ PersonaAvatar.tsx    # local deterministic DiceBear evaluator avatar
+│  │  │  ├─ PersonaEditor.tsx    # fixed-persona accordion, edits, reset, error routing
 │  │  │  ├─ PersonaForm.tsx
 │  │  │  ├─ PromptIntro.tsx
 │  │  │  ├─ Rehearsal.tsx
