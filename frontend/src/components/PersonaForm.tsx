@@ -209,20 +209,13 @@ export function PersonaForm({
                 <FieldMessage message={errorFor(errors, `exemplars.${i}.user`)} />
               </label>
               <div className="grid gap-2 sm:grid-cols-[8rem_1fr]">
-                <label className="block">
-                  <span className={LABEL}>Support delta</span>
-                  <input
-                    type="number"
-                    min={-2}
-                    max={2}
-                    step={1}
-                    className={INPUT}
-                    data-testid={`exemplar-delta-${i}`}
-                    value={exemplar.support_delta}
-                    onChange={(e) => setExemplar(i, { support_delta: Number(e.target.value) })}
-                  />
-                  <FieldMessage message={errorFor(errors, `exemplars.${i}.support_delta`)} />
-                </label>
+                <p
+                  className="block rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-700"
+                  data-testid={`exemplar-delta-${i}`}
+                >
+                  Score calibration: {exemplar.support_delta >= 0 ? "+" : ""}
+                  {exemplar.support_delta} (locked)
+                </p>
                 <label className="block">
                   <span className={LABEL}>Note</span>
                   <input

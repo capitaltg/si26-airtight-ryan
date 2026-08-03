@@ -55,7 +55,10 @@ test("the form pre-fills from the server and shows the locked fields read-only",
   await expect(page.getByTestId("field-intro")).toHaveValue(
     "Marcus Reyes, contracting officer on this acquisition.",
   )
-  await expect(page.getByTestId("exemplar-delta-0")).toHaveValue("2")
+  const supportDelta = page.getByTestId("exemplar-delta-0")
+  await expect(supportDelta).toHaveText("Score calibration: +2 (locked)")
+  await expect(supportDelta).toHaveJSProperty("tagName", "P")
+  await expect(page.locator('input[data-testid="exemplar-delta-0"]')).toHaveCount(0)
   await expect(page.getByTestId("locked-id")).toHaveText("contracting_officer")
   await expect(page.getByTestId("locked-rubric-version")).toHaveText("1")
   // Locked fields render as text, not inputs — there is nothing to type into.
@@ -92,7 +95,7 @@ test("saving PUTs only the editable fields", async ({ page }) => {
   ])
 })
 
-test("a 422 renders against the field that caused it", async ({ page }) => {
+test("a 422 renders against the editable exemplar field that caused it", async ({ page }) => {
   await mockList(page, [MARCUS])
   await page.route("**/api/content/personas/contracting_officer", (route) =>
     route.fulfill({
@@ -101,9 +104,9 @@ test("a 422 renders against the field that caused it", async ({ page }) => {
       body: JSON.stringify({
         detail: [
           {
-            loc: ["body", "exemplars", 0, "support_delta"],
-            msg: "Input should be less than or equal to 2",
-            type: "less_than_equal",
+            loc: ["body", "exemplars", 0, "note"],
+            msg: "Note is required",
+            type: "missing",
           },
         ],
       }),
@@ -112,13 +115,9 @@ test("a 422 renders against the field that caused it", async ({ page }) => {
 
   await openEditor(page)
   await page.getByTestId("toggle-contracting_officer").click()
-  const supportDelta = page.getByTestId("exemplar-delta-0")
-  await expect(supportDelta).toHaveAttribute("min", "-2")
-  await expect(supportDelta).toHaveAttribute("max", "2")
-  await supportDelta.fill("5")
   await page.getByRole("button", { name: "Save persona" }).click()
 
-  await expect(page.getByRole("alert")).toHaveText("Input should be less than or equal to 2")
+  await expect(page.getByRole("alert")).toHaveText("Note is required")
   await expect(page.getByRole("status")).toHaveCount(0)
 })
 
