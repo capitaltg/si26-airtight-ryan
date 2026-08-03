@@ -152,6 +152,23 @@ def test_save_round_trips_an_empty_exemplar_list(store: Path) -> None:
     assert load_persona(live_path("contracting_officer", store)).exemplars == []
 
 
+def test_save_round_trips_an_exemplar_with_literal_fence_text(store: Path) -> None:
+    from app.content.loader import load_persona
+    from app.content.persona_writer import live_path, save_persona
+
+    saved = save_persona(
+        "contracting_officer",
+        an_update(
+            exemplars=[
+                {"user": "First line\n```\nLast line", "support_delta": 2, "note": "Backed."}
+            ]
+        ),
+        store,
+    )
+
+    assert load_persona(live_path("contracting_officer", store)) == saved
+
+
 def test_an_invalid_merge_raises_and_leaves_the_file_untouched(store: Path) -> None:
     from app.content.persona_writer import live_path, save_persona
 
@@ -184,6 +201,15 @@ def test_is_customized_tracks_save_and_reset(store: Path) -> None:
     assert is_customized("contracting_officer", store) is True
     reset_persona("contracting_officer", store)
     assert is_customized("contracting_officer", store) is False
+
+
+def test_is_customized_raises_when_the_frozen_default_is_missing(store: Path) -> None:
+    from app.content.persona_writer import default_path, is_customized
+
+    default_path("contracting_officer", store).unlink()
+
+    with pytest.raises(FileNotFoundError):
+        is_customized("contracting_officer", store)
 
 
 def test_saving_identical_content_is_not_a_customization(store: Path) -> None:

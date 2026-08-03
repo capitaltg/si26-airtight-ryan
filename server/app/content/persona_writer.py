@@ -15,7 +15,7 @@ import frontmatter
 import yaml
 
 from app.config import settings
-from app.content.loader import YAML_FENCE, load_persona
+from app.content.loader import YAML_FENCE, load_persona, parse_persona
 from app.schemas.content import PersonaDefinition, PersonaUpdate
 
 __all__ = [
@@ -81,7 +81,11 @@ def render_persona_file(
 
     body = _replace_exemplars(post.content, exemplars)
     text = frontmatter.dumps(frontmatter.Post(body, **metadata))
-    return (text if text.endswith("\n") else text + "\n"), definition
+    text = text if text.endswith("\n") else text + "\n"
+    round_tripped = parse_persona(text)
+    if round_tripped != definition:
+        raise ValueError("rendered persona does not round-trip to the merged definition")
+    return text, round_tripped
 
 
 def save_persona(
@@ -108,5 +112,5 @@ def is_customized(persona_id: str, content_dir: Path | None = None) -> bool:
     """Whether live and frozen parsed persona definitions differ."""
     default = default_path(persona_id, content_dir)
     if not default.is_file():
-        return False
+        raise FileNotFoundError(f"missing frozen default: {default}")
     return load_persona(live_path(persona_id, content_dir)) != load_persona(default)

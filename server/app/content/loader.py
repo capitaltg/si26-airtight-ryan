@@ -30,8 +30,10 @@ import yaml
 from app.config import settings
 from app.schemas.content import Concern, PersonaDefinition, Rubric
 
-# Matches the single ```yaml ... ``` fenced block in a persona body.
-YAML_FENCE = re.compile(r"```yaml\n(.*?)```", re.DOTALL)
+# Matches the single ```yaml ... ``` fenced block in a persona body. Both
+# markers must occupy their own lines so literal backticks in YAML scalar text
+# cannot terminate the block early.
+YAML_FENCE = re.compile(r"^```yaml[ \t]*\r?\n(.*?)^```[ \t]*\r?$", re.DOTALL | re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -84,16 +86,25 @@ def _parse_exemplars(body: str) -> list[dict[str, Any]]:
     return list(block.get("exemplars", []))
 
 
+def parse_persona(text: str) -> PersonaDefinition:
+    """Parse and validate serialized persona markdown.
+
+    Public so the write side validates a rendered candidate with the same
+    parsing path used for files, before it writes anything to disk.
+    """
+    post = frontmatter.loads(text)
+    data: dict[str, Any] = dict(post.metadata)
+    data["exemplars"] = _parse_exemplars(post.content)
+    return PersonaDefinition.model_validate(data)
+
+
 def load_persona(path: Path) -> PersonaDefinition:
     """Parse and validate one persona markdown file.
 
     Public because the write side (``app.content.persona_writer``) reads files
     back through it — a persona is defined by this parse, not by its bytes.
     """
-    post = frontmatter.load(path)
-    data: dict[str, Any] = dict(post.metadata)
-    data["exemplars"] = _parse_exemplars(post.content)
-    return PersonaDefinition.model_validate(data)
+    return parse_persona(_read_text(path))
 
 
 def _load_personas(personas_dir: Path) -> dict[str, PersonaDefinition]:
