@@ -2,13 +2,16 @@
 // Vite proxies `/api/*` to FastAPI and strips the `/api` prefix (vite.config.ts),
 // so the browser calls `/api/sessions` and the backend sees `/sessions`.
 
-import { useMutation, useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import type {
   AnswerResponse,
   ArchivedTranscript,
   ClarifyResponse,
+  FieldError,
   HistorySummary,
+  Persona,
+  PersonaUpdate,
   PromptAudio,
   Report,
   RubricDisclosure,
@@ -19,20 +22,32 @@ import type {
   VoiceAnswerResponse,
 } from "../types"
 
+// A 422 carries per-field detail the persona editor renders inline, so it gets
+// its own error type instead of being flattened into a generic message.
+export class ApiValidationError extends Error {
+  readonly fieldErrors: FieldError[]
+
+  constructor(fieldErrors: FieldError[]) {
+    super("Validation failed")
+    this.name = "ApiValidationError"
+    this.fieldErrors = fieldErrors
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
     headers: { "Content-Type": "application/json" },
     ...init,
   })
   if (!res.ok) {
-    let detail = `HTTP ${res.status}`
+    let body: { detail?: string | FieldError[] } | null = null
     try {
-      const body = (await res.json()) as { detail?: string }
-      if (body.detail) detail = body.detail
+      body = (await res.json()) as { detail?: string | FieldError[] }
     } catch {
       // non-JSON error body — keep the status line
     }
-    throw new Error(detail)
+    if (body && Array.isArray(body.detail)) throw new ApiValidationError(body.detail)
+    throw new Error(typeof body?.detail === "string" ? body.detail : `HTTP ${res.status}`)
   }
   return res.json() as Promise<T>
 }
@@ -156,6 +171,14 @@ export const api = {
       body: JSON.stringify({ question }),
     }),
   getRubric: () => request<RubricDisclosure>("/content/rubric"),
+  getPersonas: () => request<Persona[]>("/content/personas"),
+  updatePersona: (id: string, update: PersonaUpdate) =>
+    request<Persona>(`/content/personas/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(update),
+    }),
+  resetPersona: (id: string) =>
+    request<Persona>(`/content/personas/${id}/reset`, { method: "POST" }),
   getTangentLimits: () => request<TangentLimits>("/content/tangent-limits"),
   getReport: (id: string) => request<Report>(`/sessions/${id}/report`),
   getHistory: () => request<HistorySummary[]>("/sessions/history"),
@@ -238,6 +261,33 @@ export function useRubric() {
     queryKey: ["rubric"],
     queryFn: api.getRubric,
     staleTime: Infinity,
+  })
+}
+
+// Editable personas change after a save or reset, so mutations invalidate this
+// key instead of caching it indefinitely like the authored rubric.
+export function usePersonas() {
+  return useQuery({ queryKey: ["personas"], queryFn: api.getPersonas })
+}
+
+export function useSavePersona() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, update }: { id: string; update: PersonaUpdate }) =>
+      api.updatePersona(id, update),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["personas"] })
+    },
+  })
+}
+
+export function useResetPersona() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.resetPersona(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["personas"] })
+    },
   })
 }
 

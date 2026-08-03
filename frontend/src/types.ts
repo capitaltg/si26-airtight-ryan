@@ -271,3 +271,49 @@ export interface ArchivedTurn {
 export interface ArchivedTranscript {
   turns: ArchivedTurn[]
 }
+
+// --- persona editor (server/app/api/personas.py) ---
+
+export interface PersonaExemplar {
+  persona: string
+  user: string
+  support_delta: number
+  note: string
+}
+
+// Read shape: includes the fields the editor renders read-only.
+export interface Persona {
+  id: string
+  display_name: string
+  intro: string
+  voice: string
+  demographics: string
+  values: string[]
+  wants: string[]
+  priorities: string[]
+  non_negotiables: string[]
+  rubric_version: number
+  polly_voice_id: string
+  exemplars: PersonaExemplar[]
+  is_customized: boolean
+}
+
+// Write shape: structural server-owned fields stay out of the client contract.
+export interface PersonaUpdate {
+  display_name: string
+  intro: string
+  voice: string
+  demographics: string
+  values: string[]
+  wants: string[]
+  non_negotiables: string[]
+  polly_voice_id: string
+  exemplars: { user: string; support_delta: number; note: string }[]
+}
+
+// FastAPI 422 locations look like ["body", "intro"] or
+// ["body", "exemplars", 0, "support_delta"].
+export interface FieldError {
+  loc: (string | number)[]
+  msg: string
+}
