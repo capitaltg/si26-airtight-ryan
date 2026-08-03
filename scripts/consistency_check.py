@@ -484,8 +484,8 @@ def main() -> int:
         with open(path) as f:
             scenario = json.load(f)
         if args.compare_baseline:
-            if "personas" not in scenario:
-                sys.exit("--compare-baseline requires a scenario with personas")
+            if not isinstance(scenario.get("personas"), dict):
+                sys.exit("--compare-baseline requires personas as an object")
             ok = compare_baseline(
                 args.base_url,
                 scenario,

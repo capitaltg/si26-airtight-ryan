@@ -311,6 +311,78 @@ def test_main_saves_invocation_metadata_when_a_scenario_fails(
     }
 
 
+@pytest.mark.parametrize(
+    ("scenario_body", "case"),
+    [
+        ({}, "missing"),
+        ({"personas": None}, "null"),
+        ({"personas": ["technical_evaluator"]}, "non-mapping"),
+    ],
+)
+def test_main_compare_baseline_rejects_invalid_personas(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    scenario_body: dict[str, object],
+    case: str,
+) -> None:
+    scenario = tmp_path / f"scenario-{case}.json"
+    scenario.write_text(json.dumps(scenario_body))
+    monkeypatch.setattr("consistency_check._get", lambda *_args: {})
+    monkeypatch.setattr("consistency_check._resolve", lambda _args: [str(scenario)])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["consistency_check.py", "--compare-baseline"],
+    )
+
+    with pytest.raises(SystemExit, match="--compare-baseline requires personas as an object"):
+        main()
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        (["--compare-baseline", "--no-cache"], "does not support --no-cache"),
+        (["--compare-baseline", "--runs", "3"], "omit --runs"),
+    ],
+)
+def test_main_compare_baseline_rejects_incompatible_flags(
+    monkeypatch: pytest.MonkeyPatch, args: list[str], message: str
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["consistency_check.py", *args])
+
+    with pytest.raises(SystemExit, match=message):
+        main()
+
+
+def test_main_compare_baseline_records_invocation_metadata(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    scenario = tmp_path / "scenario.json"
+    scenario.write_text(json.dumps({"name": "fixture", "personas": {}}))
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr("consistency_check._get", lambda *_args: {})
+    monkeypatch.setattr("consistency_check._resolve", lambda _args: [str(scenario)])
+    monkeypatch.setattr(sys, "argv", ["consistency_check.py", "--compare-baseline", "--report"])
+    monkeypatch.setattr("consistency_check.compare_baseline", lambda *_args: True)
+    monkeypatch.setattr(
+        "consistency_check.write_report",
+        lambda report: captured.update(report) or tmp_path / "report.json",
+    )
+
+    assert main() == 0
+    assert captured["invocation"] == {
+        "base_url": "http://localhost:8000",
+        "compare_baseline": True,
+        "expect_rows": [],
+        "no_cache": False,
+        "reset_cmd": None,
+        "runs": 2,
+        "scenarios": [str(scenario)],
+    }
+
+
 def test_row_order_is_not_a_divergence() -> None:
     """matched_rows is a set upstream; _turn_record sorts it so order can't matter."""
     base = _run(_turn(matched_rows=["approach_cited", "contradiction"]))
