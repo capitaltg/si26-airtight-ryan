@@ -242,6 +242,7 @@ airtight/
 │  │  │  └─ test_golden.py
 │  │  ├─ __init__.py
 │  │  ├─ test_api.py
+│  │  ├─ test_api_personas.py
 │  │  ├─ test_api_voice.py
 │  │  ├─ test_bedrock_client.py
 │  │  ├─ test_conciseness.py
