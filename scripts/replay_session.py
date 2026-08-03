@@ -41,6 +41,7 @@ import re
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 DEFAULT_BASE_URL = os.environ.get("AIRTIGHT_API_URL", "http://localhost:8000")
@@ -51,6 +52,18 @@ REPORT_DIR = os.path.join(os.path.dirname(__file__), "..", "docs", "reports")
 # caps every concern at 2 attempts across at most 8 concerns, so a complete run
 # is well under this.
 MAX_TURNS = 40
+
+EDITABLE_PERSONA_FIELDS = (
+    "display_name",
+    "intro",
+    "voice",
+    "demographics",
+    "values",
+    "wants",
+    "non_negotiables",
+    "polly_voice_id",
+    "exemplars",
+)
 
 _COLOR = sys.stdout.isatty() and "NO_COLOR" not in os.environ
 
@@ -78,6 +91,89 @@ def _post(base_url: str, path: str, body: dict | None) -> dict:
 def _get(base_url: str, path: str) -> dict:
     with urllib.request.urlopen(f"{base_url}{path}", timeout=120) as resp:
         return json.loads(resp.read())
+
+
+def _put(base_url: str, path: str, body: dict) -> dict:
+    data = json.dumps(body).encode()
+    req = urllib.request.Request(
+        f"{base_url}{path}",
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="PUT",
+    )
+    with urllib.request.urlopen(req, timeout=120) as response:
+        return json.loads(response.read())
+
+
+def persona_update(persona: dict) -> dict:
+    """Return only API-editable persona fields, with safe exemplar payloads."""
+    update = {key: persona[key] for key in EDITABLE_PERSONA_FIELDS if key in persona}
+    update["exemplars"] = [
+        {key: exemplar[key] for key in ("user", "support_delta", "note")}
+        for exemplar in update.get("exemplars", [])
+    ]
+    return update
+
+
+def _persona_snapshots(
+    base_url: str,
+    requested: dict,
+    get: Callable[[str, str], object] | None = None,
+) -> dict[str, dict]:
+    """Snapshot targeted personas as safe API update payloads."""
+    response = (get or _get)(base_url, "/content/personas")
+    if not isinstance(response, list):
+        raise TypeError("persona list response must be an array")
+    live = {persona["id"]: persona for persona in response}
+    unknown = set(requested) - set(live)
+    if unknown:
+        raise ValueError(f"unknown persona customization: {sorted(unknown)}")
+    return {persona_id: persona_update(live[persona_id]) for persona_id in requested}
+
+
+def _restore_personas(
+    base_url: str,
+    originals: list[tuple[str, dict]],
+    original_error: Exception | None,
+    put: Callable[[str, str, dict], dict] | None = None,
+) -> None:
+    """Attempt every restore, preserving an earlier operation failure."""
+    restore_errors: list[Exception] = []
+    put_request = put or _put
+    for persona_id, original in reversed(originals):
+        try:
+            put_request(base_url, f"/content/personas/{persona_id}", original)
+        except Exception as exc:
+            restore_errors.append(exc)
+    if not restore_errors:
+        return
+    message = "; ".join(f"restore failed: {exc}" for exc in restore_errors)
+    if original_error is not None:
+        original_error.add_note(message)
+    else:
+        raise RuntimeError(message) from restore_errors[0]
+
+
+def replay_with_personas(base_url: str, scenario: dict, quiet: bool, want_report: bool) -> dict:
+    """Replay with temporary persona changes, then restore each changed persona."""
+    requested = scenario.get("personas", {})
+    if not requested:
+        return replay(base_url, scenario, quiet, want_report)
+    snapshots = _persona_snapshots(base_url, requested)
+    originals: list[tuple[str, dict]] = []
+    original_error: Exception | None = None
+    try:
+        for persona_id, overrides in requested.items():
+            original = snapshots[persona_id]
+            customized = persona_update({**original, **overrides})
+            originals.append((persona_id, original))
+            _put(base_url, f"/content/personas/{persona_id}", customized)
+        return replay(base_url, scenario, quiet, want_report)
+    except Exception as exc:
+        original_error = exc
+        raise
+    finally:
+        _restore_personas(base_url, originals, original_error)
 
 
 def _fmt_prompt(prompt: dict) -> str:
@@ -290,7 +386,7 @@ def main() -> int:
         for path in _resolve(args):
             with open(path) as f:
                 scenario = json.load(f)
-            replay(args.base_url, scenario, args.quiet, args.report)
+            replay_with_personas(args.base_url, scenario, args.quiet, args.report)
     return 0
 
 

@@ -88,14 +88,25 @@ airtight/
 │  │  ├─ frontend.yml            # oxlint + oxfmt + build/typecheck (on frontend changes)
 │  │  └─ server.yml              # ruff + mypy + pytest (on server changes)
 │  └─ PULL_REQUEST_TEMPLATE.md
+├─ .superpowers/
+│  └─ sdd/
+│     ├─ 2026-08-02-persona-customization-replays/
+│     │  └─ task-4-report.md
+│     └─ custom-persona-editor/
+│        └─ task-12-report.md
 ├─ docs/
 │  ├─ issues/                    # tracked implementation findings and follow-up work
 │  │  ├─ persona-exemplars-never-reach-the-model.md
 │  │  └─ response-cache-flag-was-never-implemented.md
 │  └─ superpowers/
+│     ├─ plans/
+│     │  ├─ 2026-08-02-persona-customization-replays.md
+│     │  └─ 2026-08-03-lock-browser-exemplar-deltas.md
 │     └─ specs/
 │        ├─ 2026-07-30-cancel-microphone-input-design.md
-│        └─ 2026-07-30-editable-voice-transcript-design.md
+│        ├─ 2026-07-30-editable-voice-transcript-design.md
+│        ├─ 2026-08-02-persona-customization-replays-design.md
+│        └─ 2026-08-03-lock-browser-exemplar-deltas-design.md
 ├─ e2e/                          # Playwright e2e smoke tests (boots stack via docker compose)
 │  ├─ tests/
 │  │  ├─ a11y-contrast.spec.ts   # axe-core WCAG 2.1 AA color-contrast check
@@ -103,6 +114,7 @@ airtight/
 │  │  ├─ health.spec.ts
 │  │  ├─ mic-check.spec.ts       # device pickers, level meter, loopback (fake media project)
 │  │  ├─ persona-avatars.spec.ts # deterministic, accessible evaluator avatars
+│  │  ├─ persona-editor.spec.ts  # mocked editor coverage; never writes shared persona store
 │  │  ├─ persona-intro.spec.ts
 │  │  ├─ scoring-legibility.spec.ts # row applications, clamp marker, rubric combination rules
 │  │  ├─ session-history.spec.ts # past-rehearsals list and archive view
@@ -128,6 +140,8 @@ airtight/
 │  │  │  ├─ MicCheck.tsx
 │  │  │  ├─ PendingTurn.tsx
 │  │  │  ├─ PersonaAvatar.tsx    # local deterministic DiceBear evaluator avatar
+│  │  │  ├─ PersonaEditor.tsx    # fixed-persona accordion, edits, reset, error routing
+│  │  │  ├─ PersonaForm.tsx
 │  │  │  ├─ PromptIntro.tsx
 │  │  │  ├─ Rehearsal.tsx
 │  │  │  ├─ RubricPanel.tsx
@@ -156,6 +170,9 @@ airtight/
 │  ├─ replay/
 │  │  ├─ README.md
 │  │  ├─ scenario-contradiction.json
+│  │  ├─ scenario-custom-dana.json
+│  │  ├─ scenario-custom-marcus.json
+│  │  ├─ scenario-custom-priya.json
 │  │  ├─ scenario-false-fact.json
 │  │  └─ scenario-mixed.json
 │  ├─ consistency_check.py
@@ -180,6 +197,7 @@ airtight/
 │  │  │  ├─ __init__.py
 │  │  │  ├─ content.py
 │  │  │  ├─ deps.py
+│  │  │  ├─ personas.py
 │  │  │  └─ sessions.py
 │  │  ├─ bedrock/
 │  │  │  ├─ __init__.py
@@ -188,6 +206,10 @@ airtight/
 │  │  ├─ content/
 │  │  │  ├─ store/
 │  │  │  │  ├─ personas/
+│  │  │  │  │  ├─ defaults/
+│  │  │  │  │  │  ├─ contracting_officer.md
+│  │  │  │  │  │  ├─ program_rep.md
+│  │  │  │  │  │  └─ technical_evaluator.md
 │  │  │  │  │  ├─ contracting_officer.md
 │  │  │  │  │  ├─ program_rep.md
 │  │  │  │  │  └─ technical_evaluator.md
@@ -196,7 +218,8 @@ airtight/
 │  │  │  │  ├─ rubric.yaml
 │  │  │  │  └─ written_proposal.md
 │  │  │  ├─ __init__.py
-│  │  │  └─ loader.py
+│  │  │  ├─ loader.py
+│  │  │  └─ persona_writer.py
 │  │  ├─ db/
 │  │  │  ├─ __init__.py
 │  │  │  ├─ models.py
@@ -238,6 +261,7 @@ airtight/
 │  │  │  └─ test_golden.py
 │  │  ├─ __init__.py
 │  │  ├─ test_api.py
+│  │  ├─ test_api_personas.py
 │  │  ├─ test_api_voice.py
 │  │  ├─ test_bedrock_client.py
 │  │  ├─ test_conciseness.py
@@ -251,7 +275,9 @@ airtight/
 │  │  ├─ test_grounding.py
 │  │  ├─ test_images_install_ffmpeg.py
 │  │  ├─ test_orchestrator.py
+│  │  ├─ test_persona_writer.py
 │  │  ├─ test_reaction.py
+│  │  ├─ test_replay_session.py
 │  │  ├─ test_repo.py
 │  │  ├─ test_report.py
 │  │  ├─ test_response_cache.py

@@ -5,7 +5,7 @@ This is the executable form of the consistency claim in
 docs/ideation/2-scoring-and-drift.md: the same answer to the same prompt must
 produce the same rows, the same delta, the same meter, and the same reply.
 
-Two modes, testing two different things:
+Three modes test different things:
 
   default (cache on)
       Run 1 populates ``model_response_cache``; runs 2..N replay it. A pass
@@ -22,15 +22,24 @@ Two modes, testing two different things:
       A divergent turn is an unanchored case that wants an exemplar. Costs one
       full session of Sonnet calls per run.
 
+  --compare-baseline
+      Snapshots targeted live personas, resets them to shipped defaults through
+      the content API, then runs each concern's same scripted initial answer
+      against shipped defaults and temporary overrides. Follow-ups stay
+      adaptive. Both runs make normal model/cache requests. It
+      restores the pre-comparison live snapshots afterward.
+
 Usage (stack must be up — `cd e2e && npm run stack:up`):
 
     python3 scripts/consistency_check.py scripts/replay/scenario-contradiction.json
     python3 scripts/consistency_check.py --all --runs 3
     python3 scripts/consistency_check.py scripts/replay/scenario-false-fact.json --no-cache
+    python3 scripts/consistency_check.py scripts/replay/scenario-custom-dana.json --compare-baseline
     python3 scripts/consistency_check.py --all --expect-row contradiction
 
-Exit code is 0 only if every run of every scenario agreed and every expected
-rubric row actually fired.
+In repeat modes, exit code is 0 only if every run agreed and every expected
+rubric row fired. Baseline comparison is observational, so score or reaction
+differences do not make it fail.
 """
 
 from __future__ import annotations
@@ -45,7 +54,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from replay_session import DEFAULT_BASE_URL, FIXTURE_DIR, _format_rows, _get, c, replay
+from replay_session import (
+    DEFAULT_BASE_URL,
+    FIXTURE_DIR,
+    _format_rows,
+    _get,
+    _persona_snapshots,
+    _post,
+    _put,
+    _restore_personas,
+    c,
+    replay,
+    replay_with_personas,
+)
 
 # Truncating the cache table is what forces fresh Bedrock calls. Overridable
 # with --reset-cmd for a stack that isn't the compose one (a local Postgres, a
@@ -196,6 +217,147 @@ def _score_differences(base: dict[str, Any], other: dict[str, Any]) -> list[str]
 
     if base["final_meters"] != other["final_meters"]:
         changed.append("final meters")
+    return changed
+
+
+def _baseline_attempt(turn: dict[str, Any]) -> str:
+    """Return the replay attempt label used to align baseline turns."""
+    if turn.get("kind") != "answer":
+        return str(turn.get("kind", "unknown"))
+    return "follow-up" if turn.get("is_follow_up") else "initial"
+
+
+def _baseline_turns_by_key(turns: list[dict]) -> dict[tuple[object, str], dict]:
+    """Key answers by attempt and non-answer turns by per-kind occurrence."""
+    aligned: dict[tuple[object, str], dict] = {}
+    occurrences: dict[tuple[object, object], int] = {}
+    for turn in turns:
+        concern_id = turn.get("concern_id")
+        kind = turn.get("kind")
+        attempt = _baseline_attempt(turn)
+        if kind == "answer":
+            aligned[(concern_id, attempt)] = turn
+            continue
+        occurrence_key = (concern_id, kind)
+        occurrence = occurrences.get(occurrence_key, 0) + 1
+        occurrences[occurrence_key] = occurrence
+        aligned[(concern_id, f"{attempt} {occurrence}")] = turn
+    return aligned
+
+
+def _baseline_difference_records(base: dict, other: dict) -> list[dict[str, Any]]:
+    """Compare adaptive baseline runs by concern and attempt, never position."""
+    base_turns = _baseline_turns_by_key(base["turns"])
+    other_turns = _baseline_turns_by_key(other["turns"])
+    differences: list[dict[str, Any]] = []
+
+    for key, base_turn in base_turns.items():
+        concern_id, attempt = key
+        other_turn = other_turns.get(key)
+        if other_turn is None:
+            differences.append(
+                {
+                    "scope": "turn",
+                    "concern_id": concern_id,
+                    "attempt": attempt,
+                    "field": "removed_turn",
+                    "run_1": base_turn,
+                    "this": None,
+                }
+            )
+            continue
+        for field in COMPARED:
+            if base_turn.get(field) != other_turn.get(field):
+                differences.append(
+                    {
+                        "scope": "turn",
+                        "concern_id": concern_id,
+                        "attempt": attempt,
+                        "field": field,
+                        "run_1": base_turn.get(field),
+                        "this": other_turn.get(field),
+                    }
+                )
+
+    for key, other_turn in other_turns.items():
+        if key in base_turns:
+            continue
+        concern_id, attempt = key
+        differences.append(
+            {
+                "scope": "turn",
+                "concern_id": concern_id,
+                "attempt": attempt,
+                "field": "added_turn",
+                "run_1": None,
+                "this": other_turn,
+            }
+        )
+
+    for field in ("final_meters", "concern_status"):
+        if base[field] != other[field]:
+            differences.append(
+                {
+                    "scope": "session",
+                    "field": field,
+                    "run_1": base[field],
+                    "this": other[field],
+                }
+            )
+    return differences
+
+
+def _baseline_diff_runs(base: dict, other: dict) -> list[str]:
+    """Format adaptive baseline differences without positional turn labels."""
+    diffs: list[str] = []
+    for difference in _baseline_difference_records(base, other):
+        field = difference["field"]
+        if difference["scope"] == "turn":
+            label = f"{difference['concern_id']} {difference['attempt']}"
+            if field == "added_turn":
+                diffs.append(
+                    f"added turn: {label}\n"
+                    "      baseline: (missing)\n"
+                    f"      customized: {_abbrev(difference['this'])}"
+                )
+                continue
+            if field == "removed_turn":
+                diffs.append(
+                    f"removed turn: {label}\n"
+                    f"      baseline: {_abbrev(difference['run_1'])}\n"
+                    "      customized: (missing)"
+                )
+                continue
+            diffs.append(
+                f"turn {label} {field}:\n"
+                f"      baseline: {_abbrev(difference['run_1'])}\n"
+                f"      customized: {_abbrev(difference['this'])}"
+            )
+            continue
+        label = field.replace("_", " ")
+        diffs.append(
+            f"{label}:\n"
+            f"      baseline: {_abbrev(difference['run_1'])}\n"
+            f"      customized: {_abbrev(difference['this'])}"
+        )
+    return diffs
+
+
+def _baseline_score_differences(base: dict, other: dict) -> list[str]:
+    """Name score-bearing changes after adaptive baseline alignment."""
+    changed: list[str] = []
+    for difference in _baseline_difference_records(base, other):
+        field = difference["field"]
+        if field in SCORE_FIELDS and field not in changed:
+            changed.append(field)
+        elif field in {"added_turn", "removed_turn"}:
+            turn = difference["this"] or difference["run_1"]
+            if turn.get("kind") == "answer":
+                label = field.replace("_", " ")
+                if label not in changed:
+                    changed.append(label)
+        elif field == "final_meters" and "final meters" not in changed:
+            changed.append("final meters")
     return changed
 
 
@@ -368,6 +530,66 @@ def check_scenario(
     return ok
 
 
+def compare_baseline(
+    base_url: str,
+    scenario: dict,
+    quiet: bool,
+    report_scenarios: list[dict[str, Any]] | None = None,
+    scenario_path: str | None = None,
+) -> bool:
+    """Compare shipped defaults with overrides, then restore live personas."""
+    requested = scenario.get("personas")
+    if not isinstance(requested, dict) or not requested:
+        raise ValueError("baseline comparison requires a nonempty personas object")
+    originals = list(_persona_snapshots(base_url, requested, get=_get).items())
+    baseline_scenario = {
+        key: value for key, value in scenario.items() if key != "personas"
+    }
+    original_error: Exception | None = None
+    try:
+        for persona_id in requested:
+            _post(base_url, f"/content/personas/{persona_id}/reset", None)
+        baseline = replay(base_url, baseline_scenario, quiet, False)
+        customized = replay_with_personas(base_url, scenario, quiet, False)
+    except Exception as exc:
+        original_error = exc
+        raise
+    finally:
+        _restore_personas(base_url, originals, original_error, put=_put)
+    diffs = _baseline_diff_runs(baseline, customized)
+    score_diffs = _baseline_score_differences(baseline, customized)
+
+    print(c(f"\n=== baseline comparison: {scenario.get('name', '(unnamed)')} ===", "1;35"))
+    print(c(f"  baseline score: {_score_summary(baseline)}", "2"))
+    print(c(f"  customized score: {_score_summary(customized)}", "2"))
+    if not diffs:
+        print(c("  no scoring or reaction differences", "2"))
+    elif score_diffs:
+        print(c(f"  SCORE CHANGED: {', '.join(score_diffs)}", "33"))
+    else:
+        print(c("  score unchanged; reaction changed", "33"))
+    for diff in diffs:
+        print(f"    - {diff}")
+
+    if report_scenarios is not None:
+        report = consistency_report(
+            scenario.get("name", "(unnamed)"),
+            [baseline, customized],
+            passed=True,
+            scenario_path=scenario_path,
+        )
+        report["comparisons"] = [
+            {
+                "run": 2,
+                "differences": _baseline_difference_records(baseline, customized),
+                "score_differences": _baseline_score_differences(baseline, customized),
+            }
+        ]
+        report["comparison_mode"] = "baseline"
+        report_scenarios.append(report)
+    return True
+
+
 def _resolve(args: argparse.Namespace) -> list[str]:
     if args.all:
         return sorted(glob.glob(os.path.join(FIXTURE_DIR, "scenario-*.json")))
@@ -389,6 +611,14 @@ def main() -> int:
         action="store_true",
         help="truncate the response cache between runs so every run hits Bedrock (costs money)",
     )
+    ap.add_argument(
+        "--compare-baseline",
+        action="store_true",
+        help=(
+            "reset targeted personas to shipped defaults, then compare with "
+            "temporary overrides"
+        ),
+    )
     ap.add_argument("--reset-cmd", default=DEFAULT_RESET_CMD, help="command used by --no-cache")
     ap.add_argument(
         "--expect-row",
@@ -403,6 +633,10 @@ def main() -> int:
 
     if args.runs < 2:
         sys.exit("--runs must be at least 2; comparing one run to itself proves nothing")
+    if args.compare_baseline and args.runs != 2:
+        sys.exit("--compare-baseline always runs one baseline/customized pair; omit --runs")
+    if args.compare_baseline and args.no_cache:
+        sys.exit("--compare-baseline does not support --no-cache")
 
     try:
         _get(args.base_url, "/health")
@@ -424,16 +658,27 @@ def main() -> int:
     for path in scenario_paths:
         with open(path) as f:
             scenario = json.load(f)
-        ok = check_scenario(
-            args.base_url,
-            scenario,
-            runs=args.runs,
-            quiet=args.quiet,
-            reset_cmd=reset_cmd,
-            expect_rows=args.expect_row,
-            report_scenarios=report_scenarios,
-            scenario_path=path,
-        )
+        if args.compare_baseline:
+            if not isinstance(scenario.get("personas"), dict) or not scenario["personas"]:
+                sys.exit("--compare-baseline requires a nonempty personas object")
+            ok = compare_baseline(
+                args.base_url,
+                scenario,
+                args.quiet,
+                report_scenarios,
+                path,
+            )
+        else:
+            ok = check_scenario(
+                args.base_url,
+                scenario,
+                runs=args.runs,
+                quiet=args.quiet,
+                reset_cmd=reset_cmd,
+                expect_rows=args.expect_row,
+                report_scenarios=report_scenarios,
+                scenario_path=path,
+            )
         if not ok:
             failed.append(scenario.get("name", os.path.basename(path)))
 
@@ -446,6 +691,7 @@ def main() -> int:
                     "base_url": args.base_url,
                     "runs": args.runs,
                     "no_cache": args.no_cache,
+                    "compare_baseline": args.compare_baseline,
                     "reset_cmd": reset_cmd,
                     "expect_rows": args.expect_row,
                     "scenarios": scenario_paths,
@@ -461,8 +707,12 @@ def main() -> int:
         print(c(f"report saved: {display_path}", "2"))
 
     if failed:
-        print(c(f"FAIL: {len(failed)} scenario(s) inconsistent: {', '.join(failed)}", "1;31"))
+        label = "comparison(s) failed" if args.compare_baseline else "scenario(s) inconsistent"
+        print(c(f"FAIL: {len(failed)} {label}: {', '.join(failed)}", "1;31"))
         return 1
+    if args.compare_baseline:
+        print(c("PASS: every baseline comparison completed", "1;32"))
+        return 0
     print(c("PASS: every scenario reproduced identically", "1;32"))
     return 0
 

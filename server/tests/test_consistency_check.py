@@ -17,6 +17,7 @@ from consistency_check import (
     _score_differences,
     _score_summary,
     check_scenario,
+    compare_baseline,
     consistency_report,
     diff_runs,
     main,
@@ -58,8 +59,8 @@ def _run(*turns: dict) -> dict:
     }
 
 
-def _clarification() -> dict:
-    return {
+def _clarification(**over: object) -> dict:
+    clarification = {
         "kind": "clarify",
         "persona_id": "technical_evaluator",
         "concern_id": "technical_approach",
@@ -67,6 +68,8 @@ def _clarification() -> dict:
         "reply": "The baseline assumes three named leads.",
         "remaining": 1,
     }
+    clarification.update(over)
+    return clarification
 
 
 def test_identical_runs_have_no_diff() -> None:
@@ -87,6 +90,297 @@ def test_changed_reply_is_reported() -> None:
     diffs = diff_runs(_run(_turn()), _run(_turn(reply="Different wording entirely.")))
     assert len(diffs) == 1
     assert "reply" in diffs[0]
+
+
+def test_compare_baseline_reports_score_and_reaction_differences(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    baseline = _run(_turn())
+    customized = _run(_turn(support_delta=-1, meter=49, reply="Different voice."))
+    monkeypatch.setattr("consistency_check.replay", lambda *_args: baseline)
+    monkeypatch.setattr(
+        "consistency_check.replay_with_personas", lambda *_args: customized
+    )
+    monkeypatch.setattr(
+        "consistency_check._persona_snapshots",
+        lambda *_args, **_kwargs: {"technical_evaluator": {}},
+    )
+    monkeypatch.setattr("consistency_check._post", lambda *_args: {})
+    monkeypatch.setattr("consistency_check._restore_personas", lambda *_args, **_kwargs: None)
+
+    assert compare_baseline(
+        "http://api.example",
+        {"name": "fixture", "personas": {"technical_evaluator": {}}},
+        quiet=True,
+    )
+
+    output = capsys.readouterr().out
+    assert "baseline score:" in output
+    assert "customized score:" in output
+    assert "SCORE CHANGED: support_delta, meter" in output
+    assert "reply" in output
+
+
+def test_compare_baseline_succeeds_when_results_match(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = _run(_turn())
+    monkeypatch.setattr("consistency_check.replay", lambda *_args: run)
+    monkeypatch.setattr("consistency_check.replay_with_personas", lambda *_args: run)
+    monkeypatch.setattr(
+        "consistency_check._persona_snapshots",
+        lambda *_args, **_kwargs: {"technical_evaluator": {}},
+    )
+    monkeypatch.setattr("consistency_check._post", lambda *_args: {})
+    monkeypatch.setattr("consistency_check._restore_personas", lambda *_args, **_kwargs: None)
+
+    assert compare_baseline(
+        "http://api.example",
+        {"name": "fixture", "personas": {"technical_evaluator": {}}},
+        quiet=True,
+    )
+
+    assert "no scoring or reaction differences" in capsys.readouterr().out
+
+
+def test_compare_baseline_aligns_later_concerns_after_one_sided_followup(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A custom-only follow-up must not be compared with the next concern."""
+    baseline = _run(
+        _turn(),
+        _turn(
+            persona_id="contracting_officer",
+            concern_id="cost_realism",
+            prompt="Explain the price basis.",
+            sent="Firm-fixed pricing for planned work.",
+        ),
+    )
+    customized = _run(
+        _turn(),
+        _turn(
+            is_follow_up=True,
+            prompt="Name the validation control.",
+            sent="We use our standard migration playbook.",
+        ),
+        _turn(
+            persona_id="contracting_officer",
+            concern_id="cost_realism",
+            prompt="Explain the price basis.",
+            sent="Firm-fixed pricing for planned work.",
+        ),
+    )
+    reports: list[dict] = []
+    monkeypatch.setattr("consistency_check.replay", lambda *_args: baseline)
+    monkeypatch.setattr(
+        "consistency_check.replay_with_personas", lambda *_args: customized
+    )
+    monkeypatch.setattr(
+        "consistency_check._persona_snapshots",
+        lambda *_args, **_kwargs: {"technical_evaluator": {}},
+    )
+    monkeypatch.setattr("consistency_check._post", lambda *_args: {})
+    monkeypatch.setattr(
+        "consistency_check._restore_personas", lambda *_args, **_kwargs: None
+    )
+
+    assert compare_baseline(
+        "http://api.example",
+        {"name": "fixture", "personas": {"technical_evaluator": {}}},
+        quiet=True,
+        report_scenarios=reports,
+    )
+
+    differences = reports[0]["comparisons"][0]["differences"]
+    assert differences == [
+        {
+            "scope": "turn",
+            "concern_id": "technical_approach",
+            "attempt": "follow-up",
+            "field": "added_turn",
+            "run_1": None,
+            "this": customized["turns"][1],
+        }
+    ]
+    output = capsys.readouterr().out
+    assert "added turn: technical_approach follow-up" in output
+    assert "turn 2 (cost_realism)" not in output
+
+
+def test_compare_baseline_keeps_each_same_concern_clarification_occurrence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A later clarification must not overwrite an earlier one in alignment."""
+    baseline = _run(
+        _clarification(reply="First baseline clarification."),
+        _clarification(
+            sent="Could you clarify the transition timing?",
+            reply="Second clarification is unchanged.",
+        ),
+        _turn(),
+    )
+    customized = _run(
+        _clarification(reply="First customized clarification."),
+        _clarification(
+            sent="Could you clarify the transition timing?",
+            reply="Second clarification is unchanged.",
+        ),
+        _turn(),
+    )
+    reports: list[dict] = []
+    monkeypatch.setattr("consistency_check.replay", lambda *_args: baseline)
+    monkeypatch.setattr(
+        "consistency_check.replay_with_personas", lambda *_args: customized
+    )
+    monkeypatch.setattr(
+        "consistency_check._persona_snapshots",
+        lambda *_args, **_kwargs: {"technical_evaluator": {}},
+    )
+    monkeypatch.setattr("consistency_check._post", lambda *_args: {})
+    monkeypatch.setattr(
+        "consistency_check._restore_personas", lambda *_args, **_kwargs: None
+    )
+
+    assert compare_baseline(
+        "http://api.example",
+        {"name": "fixture", "personas": {"technical_evaluator": {}}},
+        quiet=True,
+        report_scenarios=reports,
+    )
+
+    assert reports[0]["comparisons"][0]["differences"] == [
+        {
+            "scope": "turn",
+            "concern_id": "technical_approach",
+            "attempt": "clarify 1",
+            "field": "reply",
+            "run_1": "First baseline clarification.",
+            "this": "First customized clarification.",
+        }
+    ]
+
+
+def test_compare_baseline_requires_nonempty_personas_mapping() -> None:
+    with pytest.raises(ValueError, match="requires a nonempty personas object"):
+        compare_baseline(
+            "http://api.example",
+            {"name": "fixture", "personas": {}},
+            quiet=True,
+        )
+
+
+def test_compare_baseline_resets_target_to_shipped_default_then_restores_live_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both comparison runs start from defaults; pre-comparison live state returns."""
+    live = {
+        "id": "technical_evaluator",
+        "display_name": "Live Dana",
+        "exemplars": [
+            {
+                "persona": "technical_evaluator",
+                "user": "existing",
+                "support_delta": 1,
+                "note": "keep",
+            }
+        ],
+    }
+    state = {"display_name": "Live Dana"}
+    calls: list[tuple[str, str, dict | None]] = []
+    baseline = _run(_turn())
+    customized = _run(_turn(reply="Custom reaction."))
+
+    monkeypatch.setattr("consistency_check._get", lambda *_args: [live])
+
+    def post(_base: str, path: str, body: dict | None) -> dict:
+        calls.append(("POST", path, body))
+        state["display_name"] = "Dana"
+        return {"display_name": "Dana"}
+
+    def put(_base: str, path: str, body: dict) -> dict:
+        calls.append(("PUT", path, body))
+        state["display_name"] = body["display_name"]
+        return body
+
+    def replay(_base: str, scenario: dict, _quiet: bool, _report: bool) -> dict:
+        assert state["display_name"] == "Dana"
+        assert "personas" not in scenario
+        return baseline
+
+    def replay_customized(
+        _base: str, scenario: dict, _quiet: bool, _report: bool
+    ) -> dict:
+        assert state["display_name"] == "Dana"
+        assert set(scenario["personas"]) == {"technical_evaluator"}
+        return customized
+
+    monkeypatch.setattr("consistency_check._post", post)
+    monkeypatch.setattr("consistency_check._put", put)
+    monkeypatch.setattr("consistency_check.replay", replay)
+    monkeypatch.setattr("consistency_check.replay_with_personas", replay_customized)
+
+    assert compare_baseline(
+        "http://api",
+        {"name": "fixture", "personas": {"technical_evaluator": {"display_name": "Mara"}}},
+        quiet=True,
+    )
+
+    assert calls[0] == (
+        "POST",
+        "/content/personas/technical_evaluator/reset",
+        None,
+    )
+    assert calls[-1] == (
+        "PUT",
+        "/content/personas/technical_evaluator",
+        {
+            "display_name": "Live Dana",
+            "exemplars": [{"user": "existing", "support_delta": 1, "note": "keep"}],
+        },
+    )
+    assert state["display_name"] == "Live Dana"
+
+
+def test_compare_baseline_restores_all_live_snapshots_when_reset_response_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reset response failure cannot strand any targeted persona at defaults."""
+    live = [
+        {"id": "technical_evaluator", "display_name": "Live Dana"},
+        {"id": "contracting_officer", "display_name": "Live Marcus"},
+    ]
+    restored: list[tuple[str, dict]] = []
+    monkeypatch.setattr("consistency_check._get", lambda *_args: live)
+    monkeypatch.setattr(
+        "consistency_check._post",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("reset response lost")),
+    )
+    monkeypatch.setattr(
+        "consistency_check._put",
+        lambda _base, path, body: restored.append((path, body)) or body,
+    )
+    monkeypatch.setattr(
+        "consistency_check.replay",
+        lambda *_args: pytest.fail("baseline must not start after reset failure"),
+    )
+
+    with pytest.raises(RuntimeError, match="reset response lost"):
+        compare_baseline(
+            "http://api",
+            {
+                "name": "fixture",
+                "personas": {
+                    "technical_evaluator": {"display_name": "Mara"},
+                    "contracting_officer": {"display_name": "Elias"},
+                },
+            },
+            quiet=True,
+        )
+
+    assert restored == [
+        ("/content/personas/contracting_officer", {"display_name": "Live Marcus", "exemplars": []}),
+        ("/content/personas/technical_evaluator", {"display_name": "Live Dana", "exemplars": []}),
+    ]
 
 
 def test_check_scenario_prints_score_summaries_and_score_divergence(
@@ -259,6 +553,7 @@ def test_main_saves_invocation_metadata_when_a_scenario_fails(
     assert captured["passed"] is False
     assert captured["invocation"] == {
         "base_url": "http://localhost:8000",
+        "compare_baseline": False,
         "expect_rows": ["contradiction"],
         "no_cache": True,
         "reset_cmd": (
@@ -268,6 +563,108 @@ def test_main_saves_invocation_metadata_when_a_scenario_fails(
         "runs": 2,
         "scenarios": [str(scenario)],
     }
+
+
+@pytest.mark.parametrize(
+    ("scenario_body", "case"),
+    [
+        ({}, "missing"),
+        ({"personas": None}, "null"),
+        ({"personas": ["technical_evaluator"]}, "non-mapping"),
+        ({"personas": {}}, "empty"),
+    ],
+)
+def test_main_compare_baseline_rejects_invalid_personas(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    scenario_body: dict[str, object],
+    case: str,
+) -> None:
+    scenario = tmp_path / f"scenario-{case}.json"
+    scenario.write_text(json.dumps(scenario_body))
+    monkeypatch.setattr("consistency_check._get", lambda *_args: {})
+    monkeypatch.setattr("consistency_check._resolve", lambda _args: [str(scenario)])
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["consistency_check.py", "--compare-baseline"],
+    )
+
+    with pytest.raises(
+        SystemExit, match="--compare-baseline requires a nonempty personas object"
+    ):
+        main()
+
+
+@pytest.mark.parametrize(
+    ("args", "message"),
+    [
+        (["--compare-baseline", "--no-cache"], "does not support --no-cache"),
+        (["--compare-baseline", "--runs", "3"], "omit --runs"),
+    ],
+)
+def test_main_compare_baseline_rejects_incompatible_flags(
+    monkeypatch: pytest.MonkeyPatch, args: list[str], message: str
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["consistency_check.py", *args])
+
+    with pytest.raises(SystemExit, match=message):
+        main()
+
+
+def test_main_compare_baseline_records_invocation_metadata(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    scenario = tmp_path / "scenario.json"
+    scenario.write_text(
+        json.dumps(
+            {
+                "name": "fixture",
+                "personas": {"technical_evaluator": {"display_name": "Mara"}},
+            }
+        )
+    )
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr("consistency_check._get", lambda *_args: {})
+    monkeypatch.setattr("consistency_check._resolve", lambda _args: [str(scenario)])
+    monkeypatch.setattr(sys, "argv", ["consistency_check.py", "--compare-baseline", "--report"])
+    monkeypatch.setattr("consistency_check.compare_baseline", lambda *_args: True)
+    monkeypatch.setattr(
+        "consistency_check.write_report",
+        lambda report: captured.update(report) or tmp_path / "report.json",
+    )
+
+    assert main() == 0
+    assert captured["invocation"] == {
+        "base_url": "http://localhost:8000",
+        "compare_baseline": True,
+        "expect_rows": [],
+        "no_cache": False,
+        "reset_cmd": None,
+        "runs": 2,
+        "scenarios": [str(scenario)],
+    }
+
+
+def test_main_uses_comparison_specific_success_text(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    scenario = tmp_path / "scenario.json"
+    scenario.write_text(
+        json.dumps({"personas": {"technical_evaluator": {"display_name": "Mara"}}})
+    )
+    monkeypatch.setattr("consistency_check._get", lambda *_args: {})
+    monkeypatch.setattr("consistency_check._resolve", lambda _args: [str(scenario)])
+    monkeypatch.setattr("consistency_check.compare_baseline", lambda *_args: True)
+    monkeypatch.setattr(sys, "argv", ["consistency_check.py", "--compare-baseline"])
+
+    assert main() == 0
+    output = capsys.readouterr().out
+    assert "PASS: every baseline comparison completed" in output
+    assert "reproduced identically" not in output
 
 
 def test_row_order_is_not_a_divergence() -> None:

@@ -29,6 +29,9 @@ Point at a non-default API with `--base-url` or `AIRTIGHT_API_URL`.
 | `scenario-mixed.json`         | a believable full rehearsal: a clarify, clean passes, a coverage-gap follow-up that recovers, an over-claim, a concern that closes failed        |
 | `scenario-contradiction.json` | Tier-0 `contradiction`: four conflicts between two things the presenter said, on facts absent from the RFP and proposal so nothing else can fire |
 | `scenario-false-fact.json`    | Tier-1 `false_fact`: six claims refutable against the RFP or written proposal, chosen to stay off the authored red lines                         |
+| `scenario-custom-dana.json`   | full agenda with a temporary technical-evaluator customization                                                                             |
+| `scenario-custom-marcus.json` | full agenda with a temporary contracting-officer customization                                                                            |
+| `scenario-custom-priya.json`  | full agenda with a temporary program-representative customization                                                                          |
 
 A scenario may declare `"expect_rows": ["contradiction"]` — the rubric rows that
 must fire somewhere in the run. `consistency_check.py` treats an expected row
@@ -46,9 +49,10 @@ excluded; they are supposed to differ.
 python3 scripts/consistency_check.py scripts/replay/scenario-contradiction.json
 python3 scripts/consistency_check.py --all --runs 3 --quiet
 python3 scripts/consistency_check.py scripts/replay/scenario-false-fact.json --no-cache
+python3 scripts/consistency_check.py scripts/replay/scenario-custom-dana.json --compare-baseline
 ```
 
-Two modes testing two different things:
+The repeat-run modes test two different things:
 
 - **default (cache on).** Run 1 populates `model_response_cache`; later runs
   replay it. A pass means the request bytes hash identically across separate
@@ -63,9 +67,22 @@ Two modes testing two different things:
   session of Sonnet calls per run. Override the truncate with `--reset-cmd` if
   your Postgres isn't the compose one.
 
-Exit code is 0 only if every run agreed and every expected row fired. The pure
-comparison logic is unit-tested in
+For repeat-run modes, exit code is 0 only if every run agreed and every expected
+row fired. Baseline comparison is observational, so differences do not make it
+fail. The pure comparison logic is unit-tested in
 [`server/tests/test_consistency_check.py`](../../server/tests/test_consistency_check.py).
+
+`--compare-baseline` requires a scenario with a nonempty `personas` object. It
+snapshots each targeted live persona, resets those IDs to shipped defaults,
+uses the same scripted initial answer for each concern against the defaults,
+then runs them with temporary overrides applied from that default state.
+Follow-up delivery stays adaptive. It restores all pre-comparison live
+snapshots afterward, including on failure. Score changes are observations from
+different validated extraction facts, not failures. Reactions are always
+compared too. This mode runs exactly one shipped-default/customized pair, so it
+cannot be combined with `--no-cache` or a non-default `--runs` value. A
+successful command reports that each baseline comparison completed; it does
+not claim that the two runs reproduced identically.
 
 ## Why scenarios are keyed by concern
 
@@ -112,3 +129,44 @@ sessions.
 
 The exact classification and meter for each turn are decided **live by the
 engine** — a scenario shapes the inputs, not the outcome.
+
+## Temporary persona customization
+
+A scenario can include one or more evaluator overrides. The runner snapshots the
+current persona, applies only editable fields through the content API, runs the
+rehearsal, then restores that snapshot even if the replay fails. If an override
+omits `exemplars`, the runner carries the snapshot's complete exemplar set into
+the apply request instead of clearing it.
+
+```json
+"personas": {
+  "technical_evaluator": {
+    "display_name": "Mara",
+    "intro": "Mara Velez, senior technical evaluator. I'll press on testable architecture and controlled migration.",
+    "voice": "Direct and architecture-first.",
+    "values": ["operationally testable architecture"],
+    "wants": ["named integration and migration controls"],
+    "non_negotiables": ["do not trade migration safety for speed"],
+    "polly_voice_id": "Ruth",
+    "exemplars": [{"user": "...", "support_delta": 2, "note": "..."}]
+  }
+}
+```
+
+Allowed fields are `display_name`, `intro`, `voice`, `demographics`, `values`,
+`wants`, `non_negotiables`, `polly_voice_id`, and `exemplars`. IDs, priorities,
+and rubric versions stay fixed. Each custom fixture includes all eight concern
+answers because the agenda does not change with a reskinned evaluator.
+
+Persona customization changes shared, file-backed content for the duration of a
+run. Do not run these scenarios concurrently with another customized replay or
+any persona-writing activity. The runner restores its prior snapshot, but a
+second writer can otherwise be overwritten by that restoration.
+
+## Persona-discriminator fixtures
+
+The three custom fixtures send the same scripted initial answer for each concern
+to their shipped-default and customized runs. Follow-up delivery is adaptive.
+Their target-concern answers deliberately withhold proof that the temporary
+persona emphasizes. A score change or a reaction-only change is useful evidence;
+neither result is guaranteed.

@@ -10,12 +10,13 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from fastapi import Request
+from fastapi import FastAPI, Request
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.bedrock.cache import DbResponseCache
 from app.bedrock.client import BedrockClient
-from app.content.loader import Content
+from app.config import settings
+from app.content.loader import Content, load_content
 from app.db.session import SessionLocal, get_db  # re-exported for routers to depend on
 from app.pipeline.extraction_pin import DbExtractionPin, ExtractionPin
 from app.voice.polly import synthesize_speech
@@ -24,6 +25,7 @@ from app.voice.transcribe import TranscriptionResult, measure_duration, transcri
 __all__ = [
     "get_db",
     "get_content",
+    "reload_content",
     "get_bedrock_client",
     "get_extraction_pin",
     "get_session_factory",
@@ -35,6 +37,19 @@ __all__ = [
 
 def get_content(request: Request) -> Content:
     return request.app.state.content  # type: ignore[no-any-return]
+
+
+def reload_content(app: FastAPI) -> Content:
+    """Re-read authored content and replace the bundle on ``app.state``.
+
+    Content is swapped as one reference: requests already in flight keep the
+    bundle they read, while later requests receive this newly validated one.
+    ``settings.content_dir`` is evaluated here because ``load_content`` binds
+    its default argument during import.
+    """
+    content = load_content(settings.content_dir)
+    app.state.content = content
+    return content
 
 
 def get_bedrock_client() -> BedrockClient:
