@@ -4,7 +4,9 @@
 
 Add three runnable fixtures under `scripts/replay/` that demonstrate how a
 customized evaluator changes the rehearsal experience without changing the
-fixed scenario structure or scoring ownership.
+fixed scenario structure or scoring ownership. Add an opt-in comparison that
+runs the same fixture with default and customized personas, then shows their
+scoring and reaction differences.
 
 ## Approach
 
@@ -20,6 +22,12 @@ mapping only controls the temporary customizations applied around that run.
 The existing scenarios retain their current behavior because the mapping is
 optional.
 
+`scripts/consistency_check.py --compare-baseline` runs a customized scenario
+twice: first without its `personas` mapping, then with the temporary override.
+It reports changed matched rows, deltas, meters, statuses, replies, and
+rationales. A comparison with no differences still succeeds. The comparison
+observes a result; it does not claim that a persona edit must change a score.
+
 ## Fixtures
 
 - `scenario-custom-dana.json`: incisive architecture and transition focus.
@@ -29,8 +37,8 @@ optional.
 Every fixture exercises a complete eight-concern run and changes only editable
 persona character fields. Notes describe the temporary nature of the edit and
 the intended evaluator behavior. No fixture declares a scoring-row expectation:
-persona character affects model reaction, while deterministic scoring remains
-owned by the rubric.
+persona character can affect model extraction and reaction, while deterministic
+scoring remains owned by the rubric once extraction facts are validated.
 
 ## Failure handling and testing
 
@@ -41,4 +49,6 @@ runs. Restoration failures are reported alongside the original failure.
 Unit tests cover payload filtering, applying multiple customizations, and
 restoration after both success and replay failure. Existing scenarios verify
 backward compatibility. The three fixtures are validated as JSON and exercised
-against a running API when available.
+against a running API when available. Comparison tests use fabricated baseline
+and customized run records to verify both score-bearing and reaction-only
+differences are reported, without requiring a difference to pass.
