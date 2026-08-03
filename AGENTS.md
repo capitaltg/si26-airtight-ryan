@@ -128,6 +128,7 @@ airtight/
 │  │  │  ├─ MicCheck.tsx
 │  │  │  ├─ PendingTurn.tsx
 │  │  │  ├─ PersonaAvatar.tsx    # local deterministic DiceBear evaluator avatar
+│  │  │  ├─ PersonaForm.tsx
 │  │  │  ├─ PromptIntro.tsx
 │  │  │  ├─ Rehearsal.tsx
 │  │  │  ├─ RubricPanel.tsx
