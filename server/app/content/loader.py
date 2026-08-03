@@ -31,7 +31,7 @@ from app.config import settings
 from app.schemas.content import Concern, PersonaDefinition, Rubric
 
 # Matches the single ```yaml ... ``` fenced block in a persona body.
-_YAML_FENCE = re.compile(r"```yaml\n(.*?)```", re.DOTALL)
+YAML_FENCE = re.compile(r"```yaml\n(.*?)```", re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -77,14 +77,19 @@ def _read_text(path: Path) -> str:
 
 
 def _parse_exemplars(body: str) -> list[dict[str, Any]]:
-    match = _YAML_FENCE.search(body)
+    match = YAML_FENCE.search(body)
     if match is None:
         return []
     block = yaml.safe_load(match.group(1)) or {}
     return list(block.get("exemplars", []))
 
 
-def _load_persona(path: Path) -> PersonaDefinition:
+def load_persona(path: Path) -> PersonaDefinition:
+    """Parse and validate one persona markdown file.
+
+    Public because the write side (``app.content.persona_writer``) reads files
+    back through it — a persona is defined by this parse, not by its bytes.
+    """
     post = frontmatter.load(path)
     data: dict[str, Any] = dict(post.metadata)
     data["exemplars"] = _parse_exemplars(post.content)
@@ -94,7 +99,7 @@ def _load_persona(path: Path) -> PersonaDefinition:
 def _load_personas(personas_dir: Path) -> dict[str, PersonaDefinition]:
     if not personas_dir.is_dir():
         raise FileNotFoundError(f"missing personas directory: {personas_dir}")
-    personas = [_load_persona(p) for p in sorted(personas_dir.glob("*.md"))]
+    personas = [load_persona(p) for p in sorted(personas_dir.glob("*.md"))]
     return {persona.id: persona for persona in personas}
 
 

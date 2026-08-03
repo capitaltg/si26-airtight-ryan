@@ -34,3 +34,14 @@ def test_defaults_are_invisible_to_the_loader() -> None:
     content = load_content()
     assert len(content.personas) == 3
     assert set(content.personas) == set(PERSONA_IDS)
+
+
+def test_loader_publishes_the_persona_file_conventions() -> None:
+    """The writer rewrites the same fenced block the loader reads, so both must
+    come from one definition rather than two copies that can drift."""
+    from app.content.loader import YAML_FENCE, load_persona
+
+    persona = load_persona(PERSONAS / "contracting_officer.md")
+    assert persona.id == "contracting_officer"
+    assert persona.exemplars, "exemplars come from the fenced yaml block"
+    assert YAML_FENCE.search("```yaml\nexemplars: []\n```") is not None
