@@ -80,3 +80,15 @@ def update_persona(
         raise HTTPException(status_code=422, detail=_field_errors(exc)) from exc
     reload_content(request.app)
     return _to_dto(persona)
+
+
+@router.post("/{persona_id}/reset", response_model=PersonaDTO)
+def reset_persona(
+    persona_id: str,
+    request: Request,
+    content: Content = Depends(get_content),
+) -> PersonaDTO:
+    _require_known(content, persona_id)
+    persona = persona_writer.reset_persona(persona_id)
+    reload_content(request.app)
+    return _to_dto(persona)

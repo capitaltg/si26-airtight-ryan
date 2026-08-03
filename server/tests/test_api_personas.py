@@ -210,3 +210,30 @@ def test_an_empty_intro_is_a_422(client: TestClient) -> None:
 def test_saving_an_unknown_persona_is_a_404(client: TestClient) -> None:
     r = client.put("/content/personas/nobody", json=a_payload())
     assert r.status_code == 404
+
+
+def test_reset_restores_the_shipped_persona(client: TestClient, store: Path) -> None:
+    path = store / "personas" / "contracting_officer.md"
+    default = store / "personas" / "defaults" / "contracting_officer.md"
+    client.put("/content/personas/contracting_officer", json=a_payload())
+    assert path.read_bytes() != default.read_bytes()
+
+    r = client.post("/content/personas/contracting_officer/reset")
+
+    assert r.status_code == 200
+    assert r.json()["display_name"] == "Marcus"
+    assert r.json()["is_customized"] is False
+    assert path.read_bytes() == default.read_bytes()
+
+
+def test_reset_reloads_the_content_on_app_state(client: TestClient) -> None:
+    client.put("/content/personas/contracting_officer", json=a_payload())
+    assert app.state.content.personas["contracting_officer"].display_name == "Mira"
+
+    client.post("/content/personas/contracting_officer/reset")
+
+    assert app.state.content.personas["contracting_officer"].display_name == "Marcus"
+
+
+def test_resetting_an_unknown_persona_is_a_404(client: TestClient) -> None:
+    assert client.post("/content/personas/nobody/reset").status_code == 404
