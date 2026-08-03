@@ -46,7 +46,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // non-JSON error body — keep the status line
     }
-    if (body && Array.isArray(body.detail)) throw new ApiValidationError(body.detail)
+    if (res.status === 422 && body && Array.isArray(body.detail)) {
+      throw new ApiValidationError(body.detail)
+    }
     throw new Error(typeof body?.detail === "string" ? body.detail : `HTTP ${res.status}`)
   }
   return res.json() as Promise<T>
