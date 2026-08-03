@@ -163,8 +163,8 @@ def test_persona_missing_intro_raises(tmp_path: Path) -> None:
     store = tmp_path / "store"
     shutil.copytree(STORE, store)
     persona = store / "personas" / "technical_evaluator.md"
-    # Drop the whole folded-block `intro:` entry from the frontmatter.
-    stripped = re.sub(r"\nintro: >-\n(?:  .*\n)+", "\n", persona.read_text(), count=1)
+    # Drop either a folded or wrapped plain-scalar `intro:` entry.
+    stripped = re.sub(r"\nintro:.*\n(?:  .*\n)*", "\n", persona.read_text(), count=1)
     assert "intro:" not in stripped, "the intro block was not removed; fix the pattern"
     persona.write_text(stripped)
     with pytest.raises(ValidationError):
@@ -177,7 +177,9 @@ def test_persona_empty_intro_raises(tmp_path: Path) -> None:
     store = tmp_path / "store"
     shutil.copytree(STORE, store)
     persona = store / "personas" / "technical_evaluator.md"
-    stripped = re.sub(r"\nintro: >-\n(?:  .*\n)+", "\nintro: ''\n", persona.read_text(), count=1)
+    stripped = re.sub(
+        r"\nintro:.*\n(?:  .*\n)*", "\nintro: ''\n", persona.read_text(), count=1
+    )
     assert "intro: ''" in stripped, "the intro block was not replaced; fix the pattern"
     persona.write_text(stripped)
     with pytest.raises(ValidationError):
