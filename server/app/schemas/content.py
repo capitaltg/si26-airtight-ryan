@@ -7,7 +7,7 @@ stored in the DB.
 
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Requires(StrEnum):
@@ -42,6 +42,38 @@ class PersonaDefinition(BaseModel):
     rubric_version: int
     polly_voice_id: str
     exemplars: list[Exemplar] = Field(default_factory=list)
+
+
+class ExemplarUpdate(BaseModel):
+    """One exemplar as the editor sends it.
+
+    No ``persona`` field: the server stamps it from the requested persona id.
+    """
+
+    user: str
+    support_delta: int = Field(ge=-2, le=2)
+    note: str
+
+
+class PersonaUpdate(BaseModel):
+    """The editable subset of ``PersonaDefinition``.
+
+    Locked identity and rubric ownership fields are absent by construction.
+    Extra fields are ignored so a stale editor payload still saves its editable
+    content without accepting a locked-field change.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    display_name: str
+    intro: str = Field(min_length=1)
+    voice: str
+    demographics: str
+    values: list[str] = Field(default_factory=list)
+    wants: list[str] = Field(default_factory=list)
+    non_negotiables: list[str] = Field(default_factory=list)
+    polly_voice_id: str
+    exemplars: list[ExemplarUpdate] = Field(default_factory=list)
 
 
 class SubQuestion(BaseModel):

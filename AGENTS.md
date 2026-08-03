@@ -200,7 +200,8 @@ airtight/
 │  │  │  │  ├─ rubric.yaml
 │  │  │  │  └─ written_proposal.md
 │  │  │  ├─ __init__.py
-│  │  │  └─ loader.py
+│  │  │  ├─ loader.py
+│  │  │  └─ persona_writer.py
 │  │  ├─ db/
 │  │  │  ├─ __init__.py
 │  │  │  ├─ models.py

@@ -1,9 +1,13 @@
 """Write-side persona store coverage: frozen defaults, merge, reset."""
 
+import shutil
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from app.content.loader import load_content
-from app.schemas.content import PersonaDefinition
+from app.schemas.content import PersonaDefinition, PersonaUpdate
 
 STORE = Path(__file__).resolve().parent.parent / "app" / "content" / "store"
 PERSONAS = STORE / "personas"
@@ -45,3 +49,155 @@ def test_loader_publishes_the_persona_file_conventions() -> None:
     assert persona.id == "contracting_officer"
     assert persona.exemplars, "exemplars come from the fenced yaml block"
     assert YAML_FENCE.search("```yaml\nexemplars: []\n```") is not None
+
+
+@pytest.fixture
+def store(tmp_path: Path) -> Path:
+    copy = tmp_path / "store"
+    shutil.copytree(STORE, copy)
+    return copy
+
+
+def an_update(**overrides: object) -> PersonaUpdate:
+    """A full, valid editable payload for contracting_officer."""
+    data: dict[str, object] = {
+        "display_name": "Mira",
+        "intro": "Mira Alvarez, contracting officer on this acquisition.",
+        "voice": "Clipped and procedural.",
+        "demographics": "Contracting officer with warrant authority.",
+        "values": ["compliance with the RFP"],
+        "wants": ["answers that stay inside the PWS"],
+        "non_negotiables": ["do not promise work outside the PWS"],
+        "polly_voice_id": "Joanna",
+        "exemplars": [{"user": "Firm-fixed price, 28 FTE.", "support_delta": 2, "note": "Backed."}],
+    }
+    data.update(overrides)
+    return PersonaUpdate.model_validate(data)
+
+
+def test_save_persists_the_editable_fields(store: Path) -> None:
+    from app.content.loader import load_persona
+    from app.content.persona_writer import live_path, save_persona
+
+    saved = save_persona("contracting_officer", an_update(), store)
+
+    assert saved.display_name == "Mira"
+    assert saved.polly_voice_id == "Joanna"
+    reread = load_persona(live_path("contracting_officer", store))
+    assert reread.display_name == "Mira"
+    assert reread.values == ["compliance with the RFP"]
+
+
+def test_save_keeps_the_locked_fields(store: Path) -> None:
+    from app.content.loader import load_persona
+    from app.content.persona_writer import live_path, save_persona
+
+    before = load_persona(live_path("contracting_officer", store))
+    save_persona("contracting_officer", an_update(), store)
+    after = load_persona(live_path("contracting_officer", store))
+
+    assert after.id == before.id
+    assert after.priorities == before.priorities
+    assert after.rubric_version == before.rubric_version
+
+
+def test_smuggled_locked_fields_are_ignored_not_rejected(store: Path) -> None:
+    from app.content.loader import load_persona
+    from app.content.persona_writer import live_path, save_persona
+
+    payload = PersonaUpdate.model_validate(
+        {
+            **an_update().model_dump(),
+            "id": "impostor",
+            "priorities": ["risk"],
+            "rubric_version": 99,
+        }
+    )
+    save_persona("contracting_officer", payload, store)
+
+    after = load_persona(live_path("contracting_officer", store))
+    assert after.id == "contracting_officer"
+    assert after.priorities == ["compliance_security", "cost_realism", "past_performance"]
+    assert after.rubric_version == 1
+
+
+def test_save_preserves_the_body_prose(store: Path) -> None:
+    from app.content.persona_writer import live_path, save_persona
+
+    save_persona("contracting_officer", an_update(), store)
+
+    text = live_path("contracting_officer", store).read_text()
+    assert "# Marcus, Contracting Officer" in text
+    assert "Marcus rewards discipline." in text
+
+
+def test_save_stamps_the_persona_on_every_exemplar(store: Path) -> None:
+    from app.content.loader import load_persona
+    from app.content.persona_writer import live_path, save_persona
+
+    saved = save_persona("contracting_officer", an_update(), store)
+
+    assert [e.persona for e in saved.exemplars] == ["contracting_officer"]
+    reread = load_persona(live_path("contracting_officer", store))
+    assert [e.persona for e in reread.exemplars] == ["contracting_officer"]
+    assert reread.exemplars[0].support_delta == 2
+
+
+def test_save_round_trips_an_empty_exemplar_list(store: Path) -> None:
+    from app.content.loader import load_persona
+    from app.content.persona_writer import live_path, save_persona
+
+    save_persona("contracting_officer", an_update(exemplars=[]), store)
+
+    assert load_persona(live_path("contracting_officer", store)).exemplars == []
+
+
+def test_an_invalid_merge_raises_and_leaves_the_file_untouched(store: Path) -> None:
+    from app.content.persona_writer import live_path, save_persona
+
+    path = live_path("contracting_officer", store)
+    before = path.read_bytes()
+    with pytest.raises(ValidationError):
+        save_persona("contracting_officer", an_update(intro=""), store)
+
+    assert path.read_bytes() == before
+
+
+def test_reset_restores_the_default_bytes_exactly(store: Path) -> None:
+    from app.content.persona_writer import default_path, live_path, reset_persona, save_persona
+
+    path = live_path("contracting_officer", store)
+    save_persona("contracting_officer", an_update(), store)
+    assert path.read_bytes() != default_path("contracting_officer", store).read_bytes()
+
+    restored = reset_persona("contracting_officer", store)
+
+    assert path.read_bytes() == default_path("contracting_officer", store).read_bytes()
+    assert restored.display_name == "Marcus"
+
+
+def test_is_customized_tracks_save_and_reset(store: Path) -> None:
+    from app.content.persona_writer import is_customized, reset_persona, save_persona
+
+    assert is_customized("contracting_officer", store) is False
+    save_persona("contracting_officer", an_update(), store)
+    assert is_customized("contracting_officer", store) is True
+    reset_persona("contracting_officer", store)
+    assert is_customized("contracting_officer", store) is False
+
+
+def test_saving_identical_content_is_not_a_customization(store: Path) -> None:
+    """The customization flag compares parsed personas, not YAML bytes."""
+    from app.content.loader import load_persona
+    from app.content.persona_writer import is_customized, live_path, save_persona
+
+    current = load_persona(live_path("contracting_officer", store))
+    unchanged = PersonaUpdate.model_validate(
+        {
+            **current.model_dump(exclude={"id", "priorities", "rubric_version", "exemplars"}),
+            "exemplars": [e.model_dump(exclude={"persona"}) for e in current.exemplars],
+        }
+    )
+    save_persona("contracting_officer", unchanged, store)
+
+    assert is_customized("contracting_officer", store) is False
