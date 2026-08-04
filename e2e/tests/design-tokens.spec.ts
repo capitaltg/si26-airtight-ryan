@@ -139,7 +139,8 @@ test("Tag renders every state at 24px and stays clickable when given onClick", a
 
   // A Tag with onClick is a real button; one without is not focusable.
   await expect(page.getByTestId("gallery-tag-selected")).toHaveRole("button")
-  await expect(page.getByTestId("gallery-tag-default")).toHaveRole("generic")
+  await expect(page.getByTestId("gallery-tag-default")).toHaveJSProperty("tagName", "SPAN")
+  await expect(page.getByRole("button", { name: "Transition risk" })).toHaveCount(0)
 })
 
 const VERDICTS = ["evidenceBacked", "approachCited", "unsubstantiated", "dodge", "redLine"] as const
@@ -197,7 +198,10 @@ test("the whole gallery has no WCAG 2.1 AA contrast violations", async ({ page }
   await expect(page.getByRole("heading", { name: "Airtight design system" })).toBeVisible()
   await expect(page.getByTestId("gallery-swatch-amber-600")).toBeVisible()
 
-  const results = await new AxeBuilder({ page }).withRules(["color-contrast"]).analyze()
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa"])
+    .disableRules(["region", "landmark-one-main"])
+    .analyze()
 
   expect(results.violations).toEqual([])
 })

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { useId } from "react"
 
 type TextareaProps = {
   rows?: number
@@ -24,6 +25,9 @@ export function Textarea({
   inverse = false,
   ...rest
 }: TextareaProps) {
+  const generatedId = useId()
+  const hintId = hint ? `${rest.id ?? generatedId}-hint` : undefined
+
   return (
     <div className="flex w-full flex-col gap-1.5">
       <textarea
@@ -32,6 +36,7 @@ export function Textarea({
         placeholder={placeholder}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        aria-describedby={hintId}
         className={[
           "w-full resize-none rounded-control border p-3 font-ui text-body",
           "transition-colors duration-hover ease-in",
@@ -43,6 +48,7 @@ export function Textarea({
       />
       {hint ? (
         <div
+          id={hintId}
           className={[
             "font-data text-[12px]",
             inverse ? "text-text-inverse-muted" : "text-text-muted",

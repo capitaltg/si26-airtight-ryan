@@ -47,7 +47,7 @@ export function Tag({
 
   if (!onClick) {
     return (
-      <span {...rest} role="generic" className={classes}>
+      <span {...rest} className={classes}>
         {content}
       </span>
     )
