@@ -30,6 +30,11 @@ const SWATCHES: { token: string; className: string }[] = [
   { token: "sand-50", className: "bg-sand-50" },
   { token: "moss-600", className: "bg-moss-600" },
   { token: "amber-600", className: "bg-amber-600" },
+  // The two tints. No `scrim` swatch: a 40%-alpha fill over the gallery's own
+  // ground reports a blended color and tells you nothing — Modal and Sheet
+  // exercise it instead.
+  { token: "moss-100", className: "bg-moss-100" },
+  { token: "amber-100", className: "bg-amber-100" },
 ]
 
 const TEXT_TOKENS = [
@@ -207,6 +212,24 @@ export default function Gallery() {
           <p className="max-w-[68ch] text-body text-text-body">
             Body · 15px/1.65, capped at 68ch. Five questions, three evaluators, about ten minutes,
             scored against a rubric you can read before you start.
+          </p>
+          <p
+            data-testid="gallery-type-display-xs"
+            className="font-display text-display-xs font-semibold text-text-strong"
+          >
+            Display extra small · 24px
+          </p>
+          <p
+            data-testid="gallery-type-heading"
+            className="text-heading font-semibold text-text-strong"
+          >
+            Heading · 17px/1.3
+          </p>
+          <p
+            data-testid="gallery-type-subheading"
+            className="text-subheading font-semibold text-text-strong"
+          >
+            Subheading · 15px/1.35
           </p>
           <p className="text-body-sm text-text-muted">Body small · 13px/1.5</p>
           <MicroCaps>Micro-caps · 12px / 600 / 0.09em</MicroCaps>

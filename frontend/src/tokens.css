@@ -30,6 +30,10 @@
                              body size. Fill, border, or icon behind dark text
                              only. A partial-verdict *label* needs a darker
                              amber, which is a question for the design bundle. */
+  --moss-100: #E1E4DC; /* moss-600 at 10% into sand-50 — success tint behind dark text */
+  --amber-100: #EFE5D9; /* amber-600 at 10% into sand-50. amber-600 itself may
+                           never be text (3.77:1); this is how "partial" is
+                           expressed — dark text on the tint reaches 9.31:1. */
   --white: #FFFFFF; /* card and topbar fill only; never the page ground */
 
   /* ---- Semantic aliases ------------------------------------------------ */
@@ -48,6 +52,10 @@
   --border-default: var(--sand-300);
   --border-inverse: rgba(255, 255, 255, 0.14);
   --status-live: var(--crimson-600);
+  --scrim: rgba(12, 30, 42, 0.40); /* navy-900 at 40% — every dialog and drawer
+                                      overlay. Authored as rgba() because it sits
+                                      over content; a token color cannot take a
+                                      Tailwind opacity modifier. */
 
   /* ---- Type ------------------------------------------------------------ */
   /* Scale: 10/11/12/13/15/17/20/24/30/38/48/62px. Body capped at 68ch.

@@ -39,6 +39,9 @@ test("the raw palette anchors resolve to their handoff values", async ({ page })
       sand50: read("--sand-50"),
       moss: read("--moss-600"),
       amber: read("--amber-600"),
+      moss100: read("--moss-100"),
+      amber100: read("--amber-100"),
+      scrim: read("--scrim"),
     }
   })
 
@@ -50,7 +53,23 @@ test("the raw palette anchors resolve to their handoff values", async ({ page })
     sand50: "#F5F1EC",
     moss: "#2F6B4F",
     amber: "#B4762A",
+    moss100: "#E1E4DC",
+    amber100: "#EFE5D9",
+    scrim: "rgba(12, 30, 42, 0.40)",
   })
+})
+
+// The regression guard for the bug in spec §1.3: `bg-amber-600/10` compiled to
+// no CSS rule at all, so the fill was invisible with no error anywhere.
+test("tint utilities resolve to a real fill", async ({ page }) => {
+  await page.goto("/?gallery")
+  for (const token of ["moss-100", "amber-100"]) {
+    const swatch = page.getByTestId(`gallery-swatch-${token}`)
+    await expect(swatch).toBeVisible()
+    const bg = await swatch.evaluate((el) => getComputedStyle(el).backgroundColor)
+    expect(bg).not.toBe("rgba(0, 0, 0, 0)")
+    expect(bg).not.toBe("transparent")
+  }
 })
 
 test("the gallery is reachable and renders icons and micro-caps labels", async ({ page }) => {

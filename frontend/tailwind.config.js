@@ -20,8 +20,8 @@ export default {
         teal: { 600: "var(--teal-600)" },
         taupe: { 600: "var(--taupe-600)" },
         sand: { 300: "var(--sand-300)", 200: "var(--sand-200)", 50: "var(--sand-50)" },
-        moss: { 600: "var(--moss-600)" },
-        amber: { 600: "var(--amber-600)" },
+        moss: { 600: "var(--moss-600)", 100: "var(--moss-100)" },
+        amber: { 600: "var(--amber-600)", 100: "var(--amber-100)" },
         // Semantic text ramp. `colors.text.muted` yields `text-text-muted`,
         // which is the authoring API the design spec names.
         text: {
@@ -36,6 +36,9 @@ export default {
         },
         status: { live: "var(--status-live)" },
       },
+      // `bg-scrim`. A separate key so the utility reads `bg-scrim` rather than
+      // `bg-scrim-scrim`, and because the scrim is never a text or border color.
+      backgroundColor: { scrim: "var(--scrim)" },
       // Separate from `colors` so the utilities read `border-subtle` rather
       // than `border-border-subtle`, and bare `border` picks up the default.
       borderColor: {
@@ -53,7 +56,10 @@ export default {
         micro: ["12px", { lineHeight: "1.2", letterSpacing: "0.09em" }],
         "body-sm": ["13px", { lineHeight: "1.5" }],
         body: ["15px", { lineHeight: "1.65" }],
+        heading: ["17px", { lineHeight: "1.3", letterSpacing: "-0.01em" }],
+        subheading: ["15px", { lineHeight: "1.35" }],
         quote: ["20px", { lineHeight: "1.4", letterSpacing: "-0.01em" }],
+        "display-xs": ["24px", { lineHeight: "1.2", letterSpacing: "-0.02em" }],
         "display-sm": ["30px", { lineHeight: "1.15", letterSpacing: "-0.02em" }],
         display: ["38px", { lineHeight: "1.1", letterSpacing: "-0.02em" }],
       },
@@ -66,6 +72,8 @@ export default {
         pill: "var(--radius-pill)",
       },
       boxShadow: {
+        // A bare `shadow` is the card surface, warm rather than neutral black.
+        DEFAULT: "var(--shadow-sm)",
         xs: "var(--shadow-xs)",
         sm: "var(--shadow-sm)",
         md: "var(--shadow-md)",
