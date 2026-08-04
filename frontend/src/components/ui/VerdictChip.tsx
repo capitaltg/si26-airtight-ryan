@@ -56,15 +56,20 @@ const LABELS: Record<RubricRow, string> = {
 // between them stay tinted.
 //
 // Contrast, measured, all AA at 12px: moss tint 4.89, crimson tint 8.07,
-// text-body on amber 9.87, text-inverse on solid moss 5.57, on solid crimson 9.62.
+// text-body on amber 9.87 and on sand-200 8.93, text-inverse on solid moss 5.57,
+// on solid crimson 9.62.
 const TONES: Record<RubricRow, string> = {
   evidence_backed: "border-moss-600 bg-moss-600 text-text-inverse",
   // Moss, not teal: the two positive rows now share one family, and the tint is
   // the quieter of the pair against `evidence_backed`'s solid fill.
   approach_cited: "border-moss-600 bg-moss-100 text-moss-600",
-  // The three cautionary rows share amber. amber-600 cannot be text (3.77:1), so
-  // amber is the one tone whose label is text-body rather than the accent itself.
-  unsubstantiated: "border-amber-600 bg-amber-100 text-text-body",
+  // Neutral, because `unsubstantiated` is the only row in the rubric worth 0
+  // (server/app/content/store/rubric.yaml:52): it costs the presenter nothing, so
+  // it must not read as a penalty next to the two amber rows that each cost -1.
+  // Taupe border on the sand fill, label in text-body at 8.93:1.
+  unsubstantiated: "border-taupe-600 bg-sand-200 text-text-body",
+  // The two -1 rows share amber. amber-600 cannot be text (3.77:1), so amber is
+  // the one tone whose label is text-body rather than the accent itself.
   contradiction: "border-amber-600 bg-amber-100 text-text-body",
   over_limit: "border-amber-600 bg-amber-100 text-text-body",
   dodge: "border-crimson-700 bg-crimson-100 text-crimson-700",
