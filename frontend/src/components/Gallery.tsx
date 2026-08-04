@@ -317,6 +317,25 @@ export default function Gallery() {
         ))}
         <Row label="IconButton">
           <IconButton name="x" aria-label="Close" data-testid="gallery-iconbutton" />
+          <IconButton
+            name="x"
+            aria-label="Dismiss, small"
+            size="sm"
+            data-testid="gallery-icon-button-sm"
+          />
+          <IconButton
+            name="x"
+            aria-label="Dismiss, medium"
+            size="md"
+            data-testid="gallery-icon-button-md"
+          />
+        </Row>
+        <Row label="Attribute passthrough">
+          {/* `title` and `disabled` are native attributes the SP1 prop type
+              could not express; 39 call sites need that. */}
+          <Button disabled title="Passthrough" data-testid="gallery-button-titled">
+            Disabled with a title
+          </Button>
         </Row>
       </Section>
 

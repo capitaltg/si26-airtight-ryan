@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import type { ButtonHTMLAttributes } from "react"
 
 import { Icon, type IconName } from "./Icon"
 
@@ -25,19 +25,16 @@ const VARIANTS: Record<ButtonVariant, string> = {
   danger: "bg-transparent text-crimson-700 border border-crimson-700 hover:bg-crimson-100",
 }
 
-type ButtonProps = {
+// Every native button attribute passes through: 39 call sites across the app
+// need `title`, `autoFocus`, `onKeyDown`, and `aria-*` that a hand-listed prop
+// type cannot express.
+type ButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className"> & {
   variant?: ButtonVariant
   size?: ButtonSize
   block?: boolean
   iconLeft?: IconName
   iconRight?: IconName
-  type?: "button" | "submit"
-  disabled?: boolean
-  onClick?: () => void
   className?: string
-  children: ReactNode
-  "aria-label"?: string
-  "data-testid"?: string
 }
 
 export function Button({
@@ -46,9 +43,9 @@ export function Button({
   block = false,
   iconLeft,
   iconRight,
+  // A bare <button> inside a form defaults to `submit`; three PersonaForm call
+  // sites rely on this staying `button` unless asked otherwise.
   type = "button",
-  disabled = false,
-  onClick,
   className,
   children,
   ...rest
@@ -58,8 +55,6 @@ export function Button({
     <button
       {...rest}
       type={type}
-      disabled={disabled}
-      onClick={onClick}
       className={[
         "inline-flex items-center justify-center gap-2 rounded-control font-ui font-semibold",
         "transition-colors duration-hover ease-in",

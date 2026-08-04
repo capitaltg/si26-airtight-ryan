@@ -120,6 +120,24 @@ test("every Button variant and size renders at its handoff height", async ({ pag
   }
 })
 
+test("buttons carry through arbitrary attributes", async ({ page }) => {
+  await page.goto("/?gallery")
+  const titled = page.getByTestId("gallery-button-titled")
+  await expect(titled).toHaveAttribute("title", "Passthrough")
+  await expect(titled).toBeDisabled()
+})
+
+test("icon buttons render at both sizes", async ({ page }) => {
+  await page.goto("/?gallery")
+  for (const [size, px] of [
+    ["sm", 28],
+    ["md", 32],
+  ] as const) {
+    const box = await page.getByTestId(`gallery-icon-button-${size}`).boundingBox()
+    expect(box?.height).toBeCloseTo(px, 0)
+  }
+})
+
 test("IconButton is square and carries an accessible name", async ({ page }) => {
   await page.goto("/?gallery")
   const close = page.getByRole("button", { name: "Close" })
