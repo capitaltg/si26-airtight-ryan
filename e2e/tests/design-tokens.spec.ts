@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright"
 import { expect, test } from "@playwright/test"
 
 // SP1 lands only the token layer and the primitives; it restyles no screen.
@@ -171,4 +172,32 @@ test("every VerdictChip renders at 26px at size lg", async ({ page }) => {
     await expect(chip).toBeVisible()
     expect((await chip.boundingBox())?.height, verdict).toBe(26)
   }
+})
+
+test("the gallery renders every token specimen", async ({ page }) => {
+  await page.goto("/?gallery")
+
+  await expect(page.getByTestId("gallery-swatch-crimson-700")).toBeVisible()
+  await expect(page.getByTestId("gallery-swatch-sand-50")).toBeVisible()
+  await expect(page.getByTestId("gallery-swatch-amber-600")).toBeVisible()
+
+  // The three families are wired to real bundled faces, not fallbacks.
+  await expect(page.getByTestId("gallery-type-display")).toHaveCSS("font-family", /Source Serif 4/)
+  await expect(page.getByTestId("gallery-type-quote")).toHaveCSS("font-style", "italic")
+  await expect(page.getByTestId("gallery-type-data")).toHaveCSS("font-family", /IBM Plex Mono/)
+
+  await expect(page.getByTestId("gallery-radius-card")).toHaveCSS("border-radius", "14px")
+  await expect(page.getByTestId("gallery-shadow-overlay")).not.toHaveCSS("box-shadow", "none")
+})
+
+// Strictly stronger than a11y-contrast.spec.ts, which scans one screen: the
+// gallery renders every token pair and every primitive variant at once.
+test("the whole gallery has no WCAG 2.1 AA contrast violations", async ({ page }) => {
+  await page.goto("/?gallery")
+  await expect(page.getByRole("heading", { name: "Airtight design system" })).toBeVisible()
+  await expect(page.getByTestId("gallery-swatch-amber-600")).toBeVisible()
+
+  const results = await new AxeBuilder({ page }).withRules(["color-contrast"]).analyze()
+
+  expect(results.violations).toEqual([])
 })

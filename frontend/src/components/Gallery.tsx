@@ -17,6 +17,33 @@ import { VerdictChip, VERDICTS } from "./ui/VerdictChip"
 const BUTTON_VARIANTS: ButtonVariant[] = ["primary", "secondary", "ghost", "inverse", "danger"]
 const BUTTON_SIZES: ButtonSize[] = ["sm", "md", "lg"]
 
+const SWATCHES: { token: string; className: string }[] = [
+  { token: "crimson-700", className: "bg-crimson-700" },
+  { token: "crimson-600", className: "bg-crimson-600" },
+  { token: "crimson-100", className: "bg-crimson-100" },
+  { token: "navy-900", className: "bg-navy-900" },
+  { token: "navy-800", className: "bg-navy-800" },
+  { token: "teal-600", className: "bg-teal-600" },
+  { token: "taupe-600", className: "bg-taupe-600" },
+  { token: "sand-300", className: "bg-sand-300" },
+  { token: "sand-200", className: "bg-sand-200" },
+  { token: "sand-50", className: "bg-sand-50" },
+  { token: "moss-600", className: "bg-moss-600" },
+  { token: "amber-600", className: "bg-amber-600" },
+]
+
+const TEXT_TOKENS = [
+  "text-body",
+  "text-strong",
+  "text-muted",
+  "text-faint",
+  "text-link",
+  "text-link-hover",
+] as const
+
+const RADII = ["chip", "control", "block", "card", "panel"] as const
+const SHADOWS = ["xs", "sm", "md", "lg", "overlay"] as const
+
 export function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-4">
@@ -80,6 +107,46 @@ function TextareaSpecimen() {
   )
 }
 
+// WCAG 2.1 relative luminance, so the gallery reports the real ratio for a
+// pair rather than a number copied from the spec that could drift from the
+// tokens. Reads the computed color off a probe element.
+function luminance(rgb: string): number {
+  const [r, g, b] = (rgb.match(/\d+(\.\d+)?/g) ?? ["0", "0", "0"]).slice(0, 3).map(Number)
+  const channel = (v: number) => {
+    const s = v / 255
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+  }
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+}
+
+function ratio(a: string, b: string): string {
+  const [hi, lo] = [luminance(a), luminance(b)].toSorted((x, y) => y - x)
+  return ((hi + 0.05) / (lo + 0.05)).toFixed(2)
+}
+
+function ContrastCell({ token, ground }: { token: string; ground: string }) {
+  const [value, setValue] = useState("—")
+
+  return (
+    <span
+      ref={(node) => {
+        if (!node) return
+        const probe = node.parentElement?.querySelector<HTMLElement>("[data-probe]")
+        const groundProbe = document.querySelector<HTMLElement>(`[data-ground="${ground}"]`)
+        if (!probe || !groundProbe) return
+        const next = ratio(
+          getComputedStyle(probe).color,
+          getComputedStyle(groundProbe).backgroundColor,
+        )
+        if (next !== value) setValue(next)
+      }}
+      className="font-data text-body-sm text-text-body"
+    >
+      {token} on {ground}: {value}
+    </span>
+  )
+}
+
 export default function Gallery() {
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-10 px-8 py-10">
@@ -92,6 +159,92 @@ export default function Gallery() {
           can be checked before a screen consumes it. Development only.
         </p>
       </header>
+
+      <Section title="Color">
+        <div className="flex flex-wrap gap-3">
+          {SWATCHES.map(({ token, className }) => (
+            <div key={token} className="flex w-32 flex-col gap-1.5">
+              <div
+                data-testid={`gallery-swatch-${token}`}
+                data-ground={token}
+                className={`h-14 rounded-block border border-subtle ${className}`}
+              />
+              {/* Label in text-body, never in the swatch color: amber-600 and
+                  taupe-600 both fail AA as text. */}
+              <span className="font-data text-[12px] text-text-body">{token}</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-col gap-1 rounded-card border border-subtle bg-white p-4">
+          {TEXT_TOKENS.map((token) => (
+            <div key={token} className="flex flex-wrap items-center gap-3">
+              <span data-probe className={`text-body text-${token}`}>
+                The panel may interrupt.
+              </span>
+              <ContrastCell token={token} ground="sand-50" />
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Type">
+        <div className="flex flex-col gap-3 rounded-card border border-subtle bg-white p-6">
+          <p
+            data-testid="gallery-type-display"
+            className="font-display text-display font-semibold text-text-strong"
+          >
+            Get grilled before they do.
+          </p>
+          <p className="font-display text-display-sm font-semibold text-text-strong">
+            Display small · 30px
+          </p>
+          <p
+            data-testid="gallery-type-quote"
+            className="font-display text-quote font-semibold italic text-text-body"
+          >
+            How do you know that number holds at scale?
+          </p>
+          <p className="max-w-[68ch] text-body text-text-body">
+            Body · 15px/1.65, capped at 68ch. Five questions, three evaluators, about ten minutes,
+            scored against a rubric you can read before you start.
+          </p>
+          <p className="text-body-sm text-text-muted">Body small · 13px/1.5</p>
+          <MicroCaps>Micro-caps · 12px / 600 / 0.09em</MicroCaps>
+          <p data-testid="gallery-type-data" className="font-data text-body-sm text-text-body">
+            Data · 04:12 · −2 · SES-4417
+          </p>
+        </div>
+      </Section>
+
+      <Section title="Radius, shadow, motion">
+        <Row label="Radius">
+          {RADII.map((radius) => (
+            <div
+              key={radius}
+              data-testid={`gallery-radius-${radius}`}
+              className={`flex h-16 w-24 items-center justify-center border border-subtle bg-white font-data text-[12px] text-text-body rounded-${radius}`}
+            >
+              {radius}
+            </div>
+          ))}
+        </Row>
+        <Row label="Shadow">
+          {SHADOWS.map((shadow) => (
+            <div
+              key={shadow}
+              data-testid={`gallery-shadow-${shadow}`}
+              className={`flex h-16 w-24 items-center justify-center rounded-card bg-white font-data text-[12px] text-text-body shadow-${shadow}`}
+            >
+              {shadow}
+            </div>
+          ))}
+        </Row>
+        <Row label="Motion">
+          <span className="font-data text-body-sm text-text-body">
+            press 80ms · hover 130ms · enter 200ms · panel 320ms · no bounce anywhere
+          </span>
+        </Row>
+      </Section>
 
       <Section title="Icons">
         <div className="flex flex-wrap gap-4">

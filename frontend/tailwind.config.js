@@ -1,6 +1,13 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
+  // The gallery builds radius and shadow utilities by interpolation, which the
+  // content scanner cannot see. Only the gallery does this; screens must not.
+  safelist: [
+    { pattern: /^rounded-(chip|control|block|card|panel|pill)$/ },
+    { pattern: /^shadow-(xs|sm|md|lg|overlay)$/ },
+    { pattern: /^text-text-(body|strong|muted|faint|link|link-hover)$/ },
+  ],
   theme: {
     extend: {
       colors: {
