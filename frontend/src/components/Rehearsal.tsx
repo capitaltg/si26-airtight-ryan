@@ -791,8 +791,13 @@ export function Rehearsal() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-sand-50 px-6 text-center">
         <div className="space-y-2">
-          {/* The one place the display face carries a headline. */}
-          <h1 className="font-display text-display font-semibold text-text-strong">Airtight</h1>
+          {/* The one place the display face carries a headline. The logo is
+              `alt=""` in both lockups: the wordmark beside it already carries
+              the name, so a described image would read it out twice. */}
+          <div className="flex items-center justify-center gap-3">
+            <img src="/airtight-logo.svg" alt="" className="h-11 w-auto" />
+            <h1 className="font-display text-display font-semibold text-text-strong">Airtight</h1>
+          </div>
           <p className="max-w-md text-body text-text-muted">
             Rehearse a federal-orals evaluation. Answer three evaluator personas; every turn earns a
             deterministic, code-owned score.
@@ -861,7 +866,10 @@ export function Rehearsal() {
   return (
     <div className="mx-auto flex min-h-screen max-w-5xl flex-col gap-4 px-4 py-6">
       <header className="flex items-center justify-between">
-        <h1 className="text-display-xs font-semibold text-text-strong">Airtight rehearsal</h1>
+        <div className="flex items-center gap-2.5">
+          <img src="/airtight-logo.svg" alt="" className="h-7 w-auto" />
+          <h1 className="text-display-xs font-semibold text-text-strong">Airtight rehearsal</h1>
+        </div>
         <Button variant="secondary" size="sm" onClick={() => setRubricOpen(true)}>
           How you&apos;re scored
         </Button>

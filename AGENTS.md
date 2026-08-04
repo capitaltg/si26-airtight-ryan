@@ -129,6 +129,8 @@ airtight/
 │  ├─ playwright.config.ts
 │  └─ README.md
 ├─ frontend/                     # React 18 + Vite + TS + Tailwind + TanStack Query
+│  ├─ public/
+│  │  └─ airtight-logo.svg
 │  ├─ src/
 │  │  ├─ api/
 │  │  │  └─ client.ts
