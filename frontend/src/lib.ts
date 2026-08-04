@@ -20,16 +20,20 @@ export function countWords(text: string): number {
 
 // Chat-bubble class strings shared by a scored turn (ChatTurn) and the pending
 // placeholder (PendingTurn) so the two stay visually identical as styles evolve.
+// The bubbles are a deviation from the handoff, which uses bordered blocks:
+// reshaping them is structural, so they keep their tails (spec §4 item 2). The
+// directional tail corners are exempt from the radius rule.
 export const PRESENTER_BUBBLE =
-  "max-w-[85%] rounded-2xl rounded-br-sm bg-slate-800 px-4 py-2.5 text-sm text-white"
+  "max-w-[85%] rounded-card rounded-br-chip bg-navy-800 px-4 py-2.5 text-body-sm text-text-inverse"
 export const REPLY_BUBBLE =
-  "max-w-[85%] space-y-2 rounded-2xl rounded-bl-sm border border-slate-200 bg-white px-4 py-2.5 shadow-sm"
+  "max-w-[85%] space-y-2 rounded-card rounded-bl-chip border border-subtle bg-white px-4 py-2.5 shadow-sm"
 
 // A red-line cap is crossed once support is pinned at the ceiling; surface it as
 // a color threshold so a pinned meter reads as "in trouble" at a glance.
+// amber-600 as a *fill* is fine; the ban is on amber as text.
 export function meterTone(support: number, capped: boolean): string {
-  if (capped) return "bg-red-600"
-  if (support >= 60) return "bg-emerald-600"
-  if (support >= 35) return "bg-amber-500"
-  return "bg-orange-600"
+  if (capped) return "bg-crimson-700"
+  if (support >= 60) return "bg-moss-600"
+  if (support >= 35) return "bg-amber-600"
+  return "bg-sand-300"
 }

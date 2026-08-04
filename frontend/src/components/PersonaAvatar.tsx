@@ -30,7 +30,7 @@ export function PersonaAvatar({ personaId, size = 28 }: { personaId: string; siz
       height={size}
       data-testid="persona-avatar"
       data-persona={personaId}
-      className="shrink-0 rounded-full bg-slate-100"
+      className="shrink-0 rounded-pill bg-sand-200"
       style={{ width: size, height: size }}
     />
   )
