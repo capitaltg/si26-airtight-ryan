@@ -111,6 +111,7 @@ airtight/
 │  ├─ tests/
 │  │  ├─ a11y-contrast.spec.ts   # axe-core WCAG 2.1 AA color-contrast check
 │  │  ├─ cancel-recording.spec.ts
+│  │  ├─ design-tokens.spec.ts
 │  │  ├─ health.spec.ts
 │  │  ├─ mic-check.spec.ts       # device pickers, level meter, loopback (fake media project)
 │  │  ├─ persona-avatars.spec.ts # deterministic, accessible evaluator avatars
@@ -153,6 +154,7 @@ airtight/
 │  │  ├─ index.css
 │  │  ├─ lib.ts
 │  │  ├─ main.tsx
+│  │  ├─ tokens.css              # design tokens as CSS custom properties
 │  │  ├─ types.ts
 │  │  └─ vite-env.d.ts
 │  ├─ .dockerignore
@@ -314,7 +316,7 @@ airtight/
 
 Backend (`server/`): FastAPI, Pydantic v2, SQLAlchemy 2.0, Alembic, `anthropic[bedrock]`, Postgres 16. Tests: pytest. Lint/types: Ruff + mypy (strict).
 
-Frontend (`frontend/`): React 18, Vite, TypeScript, Tailwind, TanStack Query (shadcn/ui to be added). All UI styling is Tailwind utility classes, no hand-written CSS.
+Frontend (`frontend/`): React 18, Vite, TypeScript, Tailwind, TanStack Query (shadcn/ui to be added). All _component_ styling is Tailwind utility classes. Two files are hand-written CSS by design: `src/tokens.css`, which declares the design tokens as custom properties (a declaration, not styling), and `src/index.css`, which carries the `@fontsource` imports and the `body` ground. Nothing else.
 
 ```bash
 # everything

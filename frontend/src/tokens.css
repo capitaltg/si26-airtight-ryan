@@ -1,0 +1,93 @@
+/*
+ * Airtight design tokens.
+ *
+ * Names are carried over verbatim from the design handoff's prototype
+ * (`docs/design/Airtight.dc.html`) so that any inline `var(--x)` in those 885
+ * lines maps to the same token here without a lookup table. Do not rename.
+ *
+ * This is the only file in the repo that may contain a literal color value.
+ * Components author in Tailwind utilities that resolve to these variables.
+ *
+ * Provenance for every value: docs/specs/2026-08-03-design-system-foundation-design.md §3.1.
+ */
+
+:root {
+  /* ---- Raw palette ---------------------------------------------------- */
+  --crimson-700: #731D2C; /* primary action; at most one accent per view */
+  --crimson-600: #813441; /* crimson-700 mixed 10% white — hover */
+  --crimson-100: #E8DCD9; /* crimson-700 at 10% into sand-50 — speaking-row tint */
+  --navy-800: #122E40; /* structural chrome: nav rail, Layout B ground */
+  --navy-900: #0C1E2A; /* navy-800 mixed 35% black — gradient foot */
+  --teal-600: #1E4E59; /* calm accent: focus ring, member seals */
+  --taupe-600: #73675D; /* staff seals, secondary borders */
+  --sand-300: #D9CEC5; /* NOT A TEXT GROUND — text-faint (3.91), moss-600
+                             (4.07) and taupe-600 (3.55) all fail AA on it.
+                             Borders and progress-pill fills only. */
+  --sand-200: #E8E1DA; /* 45% from sand-50 toward sand-300 */
+  --sand-50: #F5F1EC; /* page ground and card/section fills */
+  --moss-600: #2F6B4F; /* evidence-backed / success */
+  --amber-600: #B4762A; /* NEVER A TEXT COLOR — 3.77:1 on white fails AA at
+                             body size. Fill, border, or icon behind dark text
+                             only. A partial-verdict *label* needs a darker
+                             amber, which is a question for the design bundle. */
+  --white: #FFFFFF; /* card and topbar fill only; never the page ground */
+
+  /* ---- Semantic aliases ------------------------------------------------ */
+  --bg-page: var(--sand-50);
+  --text-body: #2A3B47;
+  --text-strong: var(--navy-800);
+  --text-muted: #5B5956; /* taupe-600 mixed 25% navy-800 */
+  --text-faint: #69615A; /* taupe-600 mixed 10% navy-800 — only one step below
+                             text-muted on purpose; AA forbids genuinely faint
+                             small text, so recession comes from size/weight. */
+  --text-link: var(--teal-600);
+  --text-link-hover: #183E47; /* teal-600 mixed 20% black */
+  --text-inverse: var(--sand-50);
+  --text-inverse-muted: rgba(255, 255, 255, 0.72);
+  --border-subtle: #DFD5CD; /* 80% from sand-50 toward sand-300 */
+  --border-default: var(--sand-300);
+  --border-inverse: rgba(255, 255, 255, 0.14);
+  --status-live: var(--crimson-600);
+
+  /* ---- Type ------------------------------------------------------------ */
+  /* Scale: 10/11/12/13/15/17/20/24/30/38/48/62px. Body capped at 68ch.
+     CSS `font:` shorthand cannot carry letter-spacing, so tracking rides on
+     the Tailwind fontSize tuples instead. These composites exist for
+     traceability against the handoff; utilities are the authoring API. */
+  --font-display: "Source Serif 4 Variable", "Source Serif 4", Georgia, serif;
+  --font-ui: "Public Sans Variable", "Public Sans", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, monospace;
+  --type-body: 400 15px/1.65 var(--font-ui);
+  --type-body-sm: 400 13px/1.5 var(--font-ui);
+  --type-label: 600 13px/1.2 var(--font-ui);
+  --type-heading: 600 17px/1.3 var(--font-ui);
+  --type-subheading: 600 15px/1.35 var(--font-ui);
+  --type-quote: italic 600 20px/1.4 var(--font-display);
+
+  /* ---- Radius ---------------------------------------------------------- */
+  --radius-chip: 3px; /* badges, chips, tracks */
+  --radius-control: 5px; /* buttons, inputs */
+  --radius-block: 8px; /* nested / small blocks */
+  --radius-card: 14px; /* cards, dialogs, drawers */
+  --radius-panel: 20px; /* rare large panels */
+  --radius-pill: 999px; /* tags, seals, mic, live badge */
+
+  /* ---- Shadow ---------------------------------------------------------- */
+  /* Warm-tinted: taupe-600 rgb(115,103,93) over navy-800 rgb(18,46,64).
+     Never neutral black. Step values are derived, not handoff-given. */
+  --shadow-xs: 0 1px 1px rgba(115, 103, 93, 0.10);
+  --shadow-sm: 0 1px 2px rgba(115, 103, 93, 0.12), 0 2px 6px rgba(18, 46, 64, 0.06);
+  --shadow-md: 0 2px 4px rgba(115, 103, 93, 0.12), 0 6px 14px rgba(18, 46, 64, 0.08);
+  --shadow-lg: 0 4px 8px rgba(115, 103, 93, 0.12), 0 14px 32px rgba(18, 46, 64, 0.10);
+  --shadow-overlay: 0 8px 16px rgba(115, 103, 93, 0.14), 0 28px 60px rgba(18, 46, 64, 0.18);
+  --shadow-focus: 0 0 0 3px rgba(30, 78, 89, 0.38); /* a ring, not a shadow step */
+
+  /* ---- Motion ---------------------------------------------------------- */
+  /* No bounce, overshoot, or spring anywhere in the system. */
+  --duration-press: 80ms;
+  --duration-hover: 130ms;
+  --duration-enter: 200ms;
+  --duration-panel: 320ms;
+  --ease-in: cubic-bezier(0.2, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
