@@ -7,6 +7,8 @@ import { useArchivedTranscript } from "../api/client"
 import type { ArchivedTurn, TranscriptTurn } from "../types"
 import { AfterActionReport } from "./AfterActionReport"
 import { ChatTurn } from "./ChatTurn"
+import { Button } from "./ui/Button"
+import { MicroCaps } from "./ui/MicroCaps"
 
 // `key` is client-only (React list order) and `audioUrl` has nothing to point at:
 // the recording is dropped when the session is archived. The original
@@ -42,20 +44,21 @@ export function ArchiveView({ sessionId, onBack }: { sessionId: string; onBack: 
   return (
     <div data-testid="archive-view" className="space-y-4">
       <div className="flex items-center justify-between print:hidden">
-        <button
-          onClick={onBack}
-          className="text-sm font-medium text-slate-500 hover:text-slate-800"
-        >
+        {/* The icon set has no left-pointing glyph, and the ← is the button's
+            existing accessible name, so the text carries the direction. */}
+        <Button variant="ghost" size="sm" onClick={onBack}>
           ← Back
-        </button>
-        <span className="text-sm text-slate-400">Past rehearsal, read-only</span>
+        </Button>
+        <MicroCaps tone="faint">Past rehearsal, read-only</MicroCaps>
       </div>
 
-      <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-        {isLoading && <p className="text-sm text-slate-500">Loading the transcript…</p>}
-        {isError && <p className="text-sm text-red-700">{(error as Error).message}</p>}
+      {/* On the page ground, so sand-200 rather than sand-50: sand-50 on sand-50
+          is invisible (spec §3.2). */}
+      <div className="space-y-4 rounded-card border border-subtle bg-sand-200 p-4">
+        {isLoading && <p className="text-body-sm text-text-muted">Loading the transcript…</p>}
+        {isError && <p className="text-body-sm text-crimson-700">{(error as Error).message}</p>}
         {data && turns.length === 0 && (
-          <p className="text-sm text-slate-400">
+          <p className="text-body-sm text-text-faint">
             This rehearsal ended before any question was answered.
           </p>
         )}

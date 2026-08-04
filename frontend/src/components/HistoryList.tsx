@@ -6,6 +6,8 @@
 import { useHistory } from "../api/client"
 import type { HistorySummary } from "../types"
 import { MeterBar } from "./MeterBar"
+import { Badge } from "./ui/Badge"
+import { MicroCaps } from "./ui/MicroCaps"
 
 function formatWhen(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -20,13 +22,7 @@ function formatWhen(iso: string): string {
 function StatusBadge({ status }: { status: string }) {
   const complete = status === "complete"
   return (
-    <span
-      className={`rounded px-1.5 py-0.5 text-xs font-semibold ${
-        complete ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"
-      }`}
-    >
-      {complete ? "Complete" : "Ended early"}
-    </span>
+    <Badge tone={complete ? "positive" : "neutral"}>{complete ? "Complete" : "Ended early"}</Badge>
   )
 }
 
@@ -37,22 +33,25 @@ function HistoryCard({
   session: HistorySummary
   onSelect: (id: string) => void
 }) {
+  // The row *is* the click target, so it takes the card classes directly rather
+  // than nesting inside a Card: wrapping a button in a padded div would move the
+  // click target.
   return (
     <button
       type="button"
       data-testid="history-card"
       onClick={() => onSelect(session.id)}
-      className="w-full space-y-3 rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-slate-400 hover:bg-slate-50"
+      className="w-full space-y-3 rounded-card border border-subtle bg-white p-4 text-left shadow transition-colors duration-hover ease-in hover:border-taupe-600 hover:bg-sand-50 focus-visible:shadow-focus focus-visible:outline-none"
     >
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="font-semibold text-slate-800">{formatWhen(session.archived_at)}</span>
+      <div className="flex flex-wrap items-center gap-2 text-body-sm">
+        <span className="font-semibold text-text-strong">{formatWhen(session.archived_at)}</span>
         <StatusBadge status={session.status} />
-        <span className="text-slate-400">·</span>
-        <span className="text-slate-500">
+        <span className="text-text-faint">·</span>
+        <span className="text-text-muted">
           {session.concerns_satisfied} of {session.concerns_total} concerns satisfied
         </span>
-        <span className="text-slate-400">·</span>
-        <span className="text-slate-500">
+        <span className="text-text-faint">·</span>
+        <span className="text-text-muted">
           {session.turn_count} {session.turn_count === 1 ? "turn" : "turns"}
         </span>
       </div>
@@ -70,13 +69,11 @@ export function HistoryList({ onSelect }: { onSelect: (id: string) => void }) {
 
   return (
     <section data-testid="history-list" className="w-full max-w-2xl space-y-3 text-left">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-        Past rehearsals
-      </h2>
-      {isLoading && <p className="text-sm text-slate-500">Loading past rehearsals…</p>}
-      {isError && <p className="text-sm text-red-700">{(error as Error).message}</p>}
+      <MicroCaps as="h2">Past rehearsals</MicroCaps>
+      {isLoading && <p className="text-body-sm text-text-muted">Loading past rehearsals…</p>}
+      {isError && <p className="text-body-sm text-crimson-700">{(error as Error).message}</p>}
       {data && data.length === 0 && (
-        <p className="text-sm text-slate-600">
+        <p className="text-body-sm text-text-muted">
           Finished rehearsals appear here. The five most recent are kept.
         </p>
       )}
