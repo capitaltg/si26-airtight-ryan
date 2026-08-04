@@ -7,9 +7,10 @@ const TONES = {
 } as const
 
 type MicroCapsProps = {
-  // `"label"` and `htmlFor` are in the API because MicCheck's device label and
-  // PersonaForm's field labels are <label> elements with exactly this typography.
-  as?: "div" | "span" | "p" | "h2" | "h3" | "label"
+  // `label`/`htmlFor` are in the API because MicCheck's device label is a
+  // <label> with exactly this typography; `legend` and `dt` because
+  // PersonaForm's fieldsets and locked-field list are too.
+  as?: "div" | "span" | "p" | "h2" | "h3" | "label" | "legend" | "dt"
   tone?: keyof typeof TONES
   className?: string
   children: ReactNode
