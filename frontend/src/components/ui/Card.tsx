@@ -10,6 +10,8 @@ type CardProps = {
   nested?: boolean
   className?: string
   children: ReactNode
+  /** Rehearsal's mic-check panel is the target of an `aria-controls`. */
+  id?: string
   "data-testid"?: string
 }
 

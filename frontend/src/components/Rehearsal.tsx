@@ -33,6 +33,11 @@ import { PendingTurn } from "./PendingTurn"
 import { PersonaAvatar } from "./PersonaAvatar"
 import { PromptIntro } from "./PromptIntro"
 import { RubricPanel } from "./RubricPanel"
+import { Badge } from "./ui/Badge"
+import { Button, type ButtonVariant } from "./ui/Button"
+import { Card } from "./ui/Card"
+import { Modal } from "./ui/Modal"
+import { Textarea } from "./ui/Textarea"
 import { VoiceReview } from "./VoiceReview"
 
 // A cancel the presenter has asked for and not confirmed yet. The recorder is
@@ -258,11 +263,11 @@ export function Rehearsal() {
 
   // Shared "start over" control. Used on the done panel and the after-action
   // report header so both share one definition of label / disabled / error.
-  function renderRetryButton(className: string) {
+  function renderRetryButton(variant: ButtonVariant) {
     return (
-      <button onClick={startSession} disabled={create.isPending} className={className}>
+      <Button variant={variant} size="sm" onClick={startSession} disabled={create.isPending}>
         {create.isPending ? "Starting…" : "Start a new rehearsal"}
-      </button>
+      </Button>
     )
   }
 
@@ -784,49 +789,44 @@ export function Rehearsal() {
   // Not started yet: a single call to action.
   if (!sessionId) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-slate-50 px-6 text-center">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-sand-50 px-6 text-center">
         <div className="space-y-2">
-          <h1 className="text-3xl font-semibold text-slate-900">Airtight</h1>
-          <p className="max-w-md text-slate-500">
+          {/* The one place the display face carries a headline. */}
+          <h1 className="font-display text-display font-semibold text-text-strong">Airtight</h1>
+          <p className="max-w-md text-body text-text-muted">
             Rehearse a federal-orals evaluation. Answer three evaluator personas; every turn earns a
             deterministic, code-owned score.
           </p>
         </div>
-        <button
-          onClick={startSession}
-          disabled={create.isPending}
-          className="rounded-lg bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:opacity-50"
-        >
+        <Button variant="primary" size="lg" onClick={startSession} disabled={create.isPending}>
           {create.isPending ? "Starting…" : "Start rehearsal"}
-        </button>
+        </Button>
         {create.isError && (
-          <p className="text-sm text-red-700">{(create.error as Error).message}</p>
+          <p className="text-body-sm text-crimson-700">{(create.error as Error).message}</p>
         )}
         <section className="w-full max-w-2xl text-left">
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             data-testid="mic-check-toggle"
             aria-expanded={micPanelOpen}
             aria-controls="mic-check-panel"
             onClick={() => setMicPanelOpen((open) => !open)}
-            className="text-sm font-semibold text-slate-700 underline decoration-slate-400 underline-offset-4 hover:text-slate-900"
+            className="underline decoration-text-faint underline-offset-4"
           >
             Test your mic and speakers
-          </button>
+          </Button>
           {/* Rendered only while expanded, so collapsing the section unmounts
               the panel and closes the metering stream with it. */}
           {micPanelOpen && (
-            <div
-              id="mic-check-panel"
-              className="mt-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
-            >
+            <Card id="mic-check-panel" className="mt-3">
               <MicCheck
                 inputId={inputId}
                 outputId={outputId}
                 onInputChange={setInputId}
                 onOutputChange={setOutputId}
               />
-            </div>
+            </Card>
           )}
         </section>
         <HistoryList onSelect={setViewingSessionId} />
@@ -840,18 +840,15 @@ export function Rehearsal() {
     return (
       <div className="mx-auto flex min-h-screen max-w-5xl flex-col gap-4 px-4 py-6">
         <div className="flex items-center justify-between print:hidden">
-          <button
-            onClick={() => setShowReport(false)}
-            className="text-sm font-medium text-slate-500 hover:text-slate-800"
-          >
+          <Button variant="ghost" size="sm" onClick={() => setShowReport(false)}>
             ← Back to transcript
-          </button>
-          {renderRetryButton(
-            "rounded-lg border border-slate-300 bg-white px-4 py-1.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50",
-          )}
+          </Button>
+          {renderRetryButton("secondary")}
         </div>
         {create.isError && (
-          <p className="text-sm text-red-700 print:hidden">{(create.error as Error).message}</p>
+          <p className="text-body-sm text-crimson-700 print:hidden">
+            {(create.error as Error).message}
+          </p>
         )}
         <AfterActionReport sessionId={sessionId} />
         <div className="print:hidden">
@@ -864,21 +861,20 @@ export function Rehearsal() {
   return (
     <div className="mx-auto flex min-h-screen max-w-5xl flex-col gap-4 px-4 py-6">
       <header className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-slate-900">Airtight rehearsal</h1>
-        <button
-          onClick={() => setRubricOpen(true)}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-        >
+        <h1 className="text-display-xs font-semibold text-text-strong">Airtight rehearsal</h1>
+        <Button variant="secondary" size="sm" onClick={() => setRubricOpen(true)}>
           How you&apos;re scored
-        </button>
+        </Button>
       </header>
 
       <div className="grid gap-4 md:grid-cols-[1fr_18rem]">
         {/* transcript + input */}
         <div className="flex flex-col gap-4">
-          <div className="flex-1 space-y-4 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-4">
+          {/* On the page ground, so sand-200: sand-50 on sand-50 is invisible
+              (spec §3.2). */}
+          <div className="flex-1 space-y-4 overflow-y-auto rounded-card border border-subtle bg-sand-200 p-4">
             {transcript.length === 0 && !pending && !done && (
-              <p className="text-sm text-slate-400">
+              <p className="text-body-sm text-text-faint">
                 Your answers and each evaluator&apos;s reply will appear here.
               </p>
             )}
@@ -898,24 +894,23 @@ export function Rehearsal() {
           </div>
 
           {done ? (
-            <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-center text-sm text-emerald-800">
+            // The border gains weight: no soft moss step exists (spec §4 item 8).
+            <div className="space-y-3 rounded-card border border-moss-600 bg-moss-100 p-4 text-center text-body-sm text-moss-600">
               <p>Rehearsal complete. Every concern has been covered.</p>
               <div className="flex items-center justify-center gap-3">
-                <button
+                <Button
+                  variant="primary"
                   onClick={() => {
                     create.reset() // drop any stale retry error before leaving this panel
                     setShowReport(true)
                   }}
-                  className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700"
                 >
                   View after-action report
-                </button>
-                {renderRetryButton(
-                  "rounded-lg border border-emerald-300 bg-white px-5 py-2 text-sm font-semibold text-emerald-800 shadow-sm transition hover:bg-emerald-100 disabled:opacity-50",
-                )}
+                </Button>
+                {renderRetryButton("secondary")}
               </div>
               {create.isError && (
-                <p className="text-sm text-red-700">{(create.error as Error).message}</p>
+                <p className="text-body-sm text-crimson-700">{(create.error as Error).message}</p>
               )}
             </div>
           ) : (
@@ -925,44 +920,40 @@ export function Rehearsal() {
             prompt &&
             !submit.isPending &&
             !clarify.isPending && (
-              <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex items-center justify-between gap-2 text-sm">
+              <Card className="space-y-2">
+                <div className="flex items-center justify-between gap-2 text-body-sm">
                   <div className="flex items-center gap-2">
                     <PersonaAvatar personaId={prompt.persona_id} size={28} />
-                    <span className="font-semibold text-slate-800">
+                    <span className="font-semibold text-text-strong">
                       {prompt.display_name}, {prettify(prompt.persona_id)}
                     </span>
-                    <span className="text-slate-400">·</span>
-                    <span className="text-slate-500">{prettify(prompt.concern_id)}</span>
-                    {prompt.is_follow_up && (
-                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700">
-                        Follow-up
-                      </span>
-                    )}
+                    <span className="text-text-faint">·</span>
+                    <span className="text-text-muted">{prettify(prompt.concern_id)}</span>
+                    {prompt.is_follow_up && <Badge tone="caution">Follow-up</Badge>}
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => setMicCheckOpen(true)}
                       disabled={voiceAnswerLocked}
-                      className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
                     >
                       Mic check
-                    </button>
+                    </Button>
                     {/* Text/voice segmented toggle. Text is the default and the
                         only path with server tests; switching to voice never
                         changes text-mode behavior. */}
-                    <div className="flex overflow-hidden rounded-md border border-slate-300 text-xs font-semibold">
+                    <div className="flex overflow-hidden rounded-control border text-micro font-semibold">
                       <button
                         type="button"
                         onClick={() => {
                           if (!voiceAnswerLocked) setMode("text")
                         }}
                         disabled={voiceAnswerLocked}
-                        className={`px-2.5 py-1 transition ${
+                        className={`px-2.5 py-1 transition-colors duration-hover ease-in ${
                           mode === "text"
-                            ? "bg-slate-900 text-white"
-                            : "bg-white text-slate-600 hover:bg-slate-50"
+                            ? "bg-navy-800 text-text-inverse"
+                            : "bg-white text-text-body hover:bg-sand-50"
                         } disabled:opacity-50`}
                       >
                         Text
@@ -971,10 +962,10 @@ export function Rehearsal() {
                         type="button"
                         onClick={enterVoiceMode}
                         disabled={voiceAnswerLocked}
-                        className={`px-2.5 py-1 transition ${
+                        className={`px-2.5 py-1 transition-colors duration-hover ease-in ${
                           mode === "voice"
-                            ? "bg-slate-900 text-white"
-                            : "bg-white text-slate-600 hover:bg-slate-50"
+                            ? "bg-navy-800 text-text-inverse"
+                            : "bg-white text-text-body hover:bg-sand-50"
                         } disabled:opacity-50`}
                       >
                         Voice
@@ -983,19 +974,19 @@ export function Rehearsal() {
                   </div>
                 </div>
                 <PromptIntro intro={prompt.intro} />
-                <p className="text-slate-800">{prompt.prompt}</p>
-                {voiceError && <p className="text-sm text-red-700">{voiceError}</p>}
+                <p className="text-body text-text-body">{prompt.prompt}</p>
+                {voiceError && <p className="text-body-sm text-crimson-700">{voiceError}</p>}
                 {mode === "text" ? (
                   <>
-                    <textarea
+                    <Textarea
                       value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
+                      onChange={setDraft}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) sendAnswer()
                       }}
                       rows={4}
+                      resize="vertical"
                       placeholder="Your answer… (⌘/Ctrl+Enter to submit)"
-                      className="w-full resize-y rounded-md border border-slate-300 p-3 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
                       disabled={submit.isPending || clarify.isPending || voiceAnswerLocked}
                     />
                     {tangentLimits.data &&
@@ -1005,8 +996,16 @@ export function Rehearsal() {
                         const over = words > policy.limit
                         const warning = words >= policy.warning
                         return (
+                          // Amber can never be a text color, so the near-limit
+                          // cue is dark text on the amber tint instead.
                           <p
-                            className={`text-xs ${over ? "text-red-700" : warning ? "text-amber-700" : "text-slate-500"}`}
+                            className={`text-body-sm ${
+                              over
+                                ? "text-crimson-700"
+                                : warning
+                                  ? "inline-block rounded-chip bg-amber-100 px-1.5 text-text-body"
+                                  : "text-text-muted"
+                            }`}
                           >
                             {words} / {policy.limit} words
                             {over
@@ -1018,19 +1017,24 @@ export function Rehearsal() {
                         )
                       })()}
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm">
+                      <span className="text-body-sm">
                         {submit.isError ? (
-                          <span className="text-red-700">{(submit.error as Error).message}</span>
+                          <span className="text-crimson-700">
+                            {(submit.error as Error).message}
+                          </span>
                         ) : clarify.isError ? (
-                          <span className="text-red-700">{(clarify.error as Error).message}</span>
+                          <span className="text-crimson-700">
+                            {(clarify.error as Error).message}
+                          </span>
                         ) : clarifyRemaining === 0 ? (
-                          <span className="text-slate-400">
+                          <span className="text-text-faint">
                             No clarifications left on this concern.
                           </span>
                         ) : null}
                       </span>
                       <div className="flex items-center gap-2">
-                        <button
+                        <Button
+                          variant="secondary"
                           onClick={sendClarification}
                           disabled={
                             submit.isPending ||
@@ -1040,11 +1044,11 @@ export function Rehearsal() {
                             !draft.trim()
                           }
                           title="Ask the evaluator what they mean, without being scored"
-                          className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
                         >
                           {clarify.isPending ? "Asking…" : "Ask a clarifying question"}
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="primary"
                           onClick={sendAnswer}
                           disabled={
                             submit.isPending ||
@@ -1052,10 +1056,9 @@ export function Rehearsal() {
                             voiceAnswerLocked ||
                             !draft.trim()
                           }
-                          className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:opacity-50"
                         >
                           {submit.isPending ? "Scoring…" : "Submit"}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   </>
@@ -1083,7 +1086,13 @@ export function Rehearsal() {
                         const warning = recordingElapsed >= policy.warning
                         return (
                           <p
-                            className={`text-xs ${over ? "text-red-700" : warning ? "text-amber-700" : "text-slate-500"}`}
+                            className={`text-body-sm ${
+                              over
+                                ? "text-crimson-700"
+                                : warning
+                                  ? "inline-block rounded-chip bg-amber-100 px-1.5 text-text-body"
+                                  : "text-text-muted"
+                            }`}
                           >
                             Recording {recordingElapsed.toFixed(1)} / {policy.limit.toFixed(0)}{" "}
                             seconds
@@ -1113,10 +1122,10 @@ export function Rehearsal() {
                       disabled={
                         transcribeAudio.isPending || submitAudio.isPending || discardPrompt !== null
                       }
-                      className={`w-full select-none touch-none rounded-lg px-5 py-6 text-sm font-semibold shadow-sm transition disabled:opacity-50 ${
+                      className={`w-full select-none touch-none rounded-control px-5 py-6 text-body-sm font-semibold shadow-sm transition-colors duration-hover ease-in disabled:opacity-50 ${
                         recorder.recording
-                          ? "bg-red-600 text-white"
-                          : "bg-slate-900 text-white hover:bg-slate-700"
+                          ? "bg-crimson-700 text-text-inverse"
+                          : "bg-navy-800 text-text-inverse hover:bg-navy-900"
                       }`}
                     >
                       {transcribeAudio.isPending
@@ -1137,27 +1146,27 @@ export function Rehearsal() {
                         clickable mid-hold would put the release races at
                         :419-444 back in play. */}
                     {(recorder.recording || transcribeAudio.isPending) && (
-                      <button
-                        type="button"
+                      <Button
+                        variant="secondary"
+                        block
                         data-testid="cancel-recording"
                         onClick={() =>
                           transcribeAudio.isPending ? cancelTranscription() : cancelRecording()
                         }
                         disabled={discardPrompt !== null}
                         aria-label="Cancel this recording and answer again"
-                        className="w-full rounded-lg border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
                       >
                         Cancel (or press Escape)
-                      </button>
+                      </Button>
                     )}
                     {transcribeAudio.isError && (
-                      <p className="text-sm text-red-700">
+                      <p className="text-body-sm text-crimson-700">
                         {(transcribeAudio.error as Error).message}
                       </p>
                     )}
                   </div>
                 )}
-              </div>
+              </Card>
             )
           )}
         </div>
@@ -1170,28 +1179,23 @@ export function Rehearsal() {
 
       <RubricPanel open={rubricOpen} onClose={() => setRubricOpen(false)} />
 
-      {micCheckOpen && (
-        // Native <dialog> (open, not showModal — same as RubricPanel above)
-        // rather than a plain div with role="dialog": it carries the dialog
-        // semantics for free and satisfies the linter's prefer-tag-over-role
-        // rule without a suppression comment.
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 p-4">
-          <dialog
-            open
-            aria-modal="true"
-            aria-label="Mic check"
-            className="relative m-0 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-4 shadow-lg"
-          >
-            <MicCheck
-              inputId={inputId}
-              outputId={outputId}
-              onInputChange={setInputId}
-              onOutputChange={setOutputId}
-              onClose={() => setMicCheckOpen(false)}
-            />
-          </dialog>
-        </div>
-      )}
+      {/* No `onClose`: the panel has its own Close button and no
+          Escape-to-dismiss today, and Escape mid-recording is already taken. */}
+      <Modal
+        open={micCheckOpen}
+        label="Mic check"
+        size="md"
+        aria-modal="true"
+        className="max-h-[90vh] overflow-y-auto"
+      >
+        <MicCheck
+          inputId={inputId}
+          outputId={outputId}
+          onInputChange={setInputId}
+          onOutputChange={setOutputId}
+          onClose={() => setMicCheckOpen(false)}
+        />
+      </Modal>
 
       {discardPrompt && (
         <DiscardRecordingDialog
