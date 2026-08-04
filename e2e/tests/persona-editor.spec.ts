@@ -72,7 +72,6 @@ test("the form pre-fills from the server and shows the locked fields read-only",
   expect(scoreBox!.width).toBeLessThan(detailsBox!.width)
   await expect(page.locator('input[data-testid="exemplar-delta-0"]')).toHaveCount(0)
   await expect(page.getByTestId("locked-id")).toHaveText("contracting_officer")
-  await expect(page.getByTestId("locked-rubric-version")).toHaveText("1")
   // Locked fields render as text, not inputs — there is nothing to type into.
   await expect(page.getByTestId("locked-priorities")).toHaveJSProperty("tagName", "DD")
   await expect(page.getByTestId("locked-id")).toHaveJSProperty("tagName", "DD")

@@ -2,8 +2,8 @@
 // query, both mutations, and the server's field errors, and re-supplies
 // `persona` after every successful save or reset.
 //
-// `id`, `priorities`, and `rubric_version` are shown for context and are not
-// editable — the backend refuses them and the turn order depends on them.
+// `id` and `priorities` are shown for context and are not editable — the
+// backend refuses them and the turn order depends on them.
 
 import { useEffect, useState } from "react"
 
@@ -281,7 +281,7 @@ export function PersonaForm({
         as="div"
         nested
         padding="sm"
-        className="grid gap-2 text-body-sm text-text-muted sm:grid-cols-3"
+        className="grid gap-2 text-body-sm text-text-muted sm:grid-cols-2"
       >
         <div>
           <MicroCaps as="dt">Id</MicroCaps>
@@ -290,10 +290,6 @@ export function PersonaForm({
         <div>
           <MicroCaps as="dt">Priorities</MicroCaps>
           <dd data-testid="locked-priorities">{persona.priorities.map(prettify).join(", ")}</dd>
-        </div>
-        <div>
-          <MicroCaps as="dt">Rubric version</MicroCaps>
-          <dd data-testid="locked-rubric-version">{persona.rubric_version}</dd>
         </div>
       </Card>
 

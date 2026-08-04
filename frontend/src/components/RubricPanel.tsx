@@ -20,11 +20,6 @@ export function RubricPanel({ open, onClose }: { open: boolean; onClose: () => v
       <header className="sticky top-0 flex items-center justify-between border-b border-subtle bg-white px-5 py-4">
         <div>
           <h2 className="text-heading font-semibold text-text-strong">How you&apos;re scored</h2>
-          {data && (
-            <p className="text-body-sm text-text-muted">
-              Rubric v{data.version} · code-owned, deterministic scoring
-            </p>
-          )}
         </div>
         <IconButton name="x" aria-label="Close" onClick={onClose} />
       </header>

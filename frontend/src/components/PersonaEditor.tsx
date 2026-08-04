@@ -2,9 +2,9 @@
 // back the way it came. Owns the query and both mutations; PersonaForm owns the
 // draft for whichever persona is expanded.
 //
-// The three personas are fixed — there is no add or remove. Their ids,
-// priorities, and rubric version are what give each of the eight concerns
-// exactly one owner, so those fields are read-only here and refused by the API.
+// The three personas are fixed — there is no add or remove. Their ids and
+// priorities are what give each of the eight concerns exactly one owner, so
+// those fields are read-only here and refused by the API.
 
 import { useState } from "react"
 
