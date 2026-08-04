@@ -41,14 +41,17 @@ test("the raw palette anchors resolve to their handoff values", async ({ page })
     }
   })
 
+  // tokens.css sources these uppercase, verbatim from the handoff, but the
+  // PostCSS/esbuild pipeline canonicalizes hex casing when serving CSS custom
+  // properties — the browser sees lowercase regardless of source casing.
   expect(tokens).toEqual({
-    crimson: "#731D2C",
-    navy: "#122E40",
-    teal: "#1E4E59",
-    taupe: "#73675D",
-    sand50: "#F5F1EC",
-    moss: "#2F6B4F",
-    amber: "#B4762A",
+    crimson: "#731d2c",
+    navy: "#122e40",
+    teal: "#1e4e59",
+    taupe: "#73675d",
+    sand50: "#f5f1ec",
+    moss: "#2f6b4f",
+    amber: "#b4762a",
   })
 })
 
