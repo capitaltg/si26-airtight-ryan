@@ -1,3 +1,4 @@
+import { useState } from "react"
 import type { ReactNode } from "react"
 
 import { Badge } from "./ui/Badge"
@@ -6,6 +7,8 @@ import { Icon, ICON_NAMES } from "./ui/Icon"
 import { IconButton } from "./ui/IconButton"
 import { MicroCaps } from "./ui/MicroCaps"
 import { Tag } from "./ui/Tag"
+import { Textarea } from "./ui/Textarea"
+import { VerdictChip, VERDICTS } from "./ui/VerdictChip"
 
 // Development-only surface. The repo has no Storybook and SP1 changes no
 // screen, so this is where a token or primitive is checked before a screen
@@ -29,6 +32,51 @@ export function Row({ label, children }: { label: string; children: ReactNode })
       <div className="font-data text-body-sm text-text-faint">{label}</div>
       <div className="flex flex-wrap items-center gap-3">{children}</div>
     </div>
+  )
+}
+
+function TextareaSpecimen() {
+  const [draft, setDraft] = useState("")
+  const words = draft.trim() === "" ? 0 : draft.trim().split(/\s+/).length
+
+  return (
+    <Section title="Input and verdicts">
+      <div className="grid gap-6 md:grid-cols-2">
+        <Textarea
+          value={draft}
+          onChange={setDraft}
+          placeholder="Your answer…"
+          aria-label="Answer, default mode"
+          data-testid="gallery-textarea-default"
+          hint={<span data-testid="gallery-textarea-wordcount">{words} / 220 words</span>}
+        />
+        <div className="rounded-card bg-navy-800 p-4">
+          <Textarea
+            inverse
+            value={draft}
+            onChange={setDraft}
+            placeholder="Your answer…"
+            aria-label="Answer, inverse mode"
+            data-testid="gallery-textarea-inverse"
+          />
+        </div>
+      </div>
+      <Row label="VerdictChip · lg">
+        {VERDICTS.map((verdict) => (
+          <VerdictChip
+            key={verdict}
+            verdict={verdict}
+            size="lg"
+            data-testid={`gallery-verdict-${verdict}`}
+          />
+        ))}
+      </Row>
+      <Row label="VerdictChip · md">
+        {VERDICTS.map((verdict) => (
+          <VerdictChip key={verdict} verdict={verdict} />
+        ))}
+      </Row>
+    </Section>
   )
 }
 
@@ -118,6 +166,8 @@ export default function Gallery() {
           </Tag>
         </Row>
       </Section>
+
+      <TextareaSpecimen />
 
       <Section title="Micro-caps label">
         <Row label="MicroCaps">

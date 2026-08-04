@@ -140,3 +140,35 @@ test("Tag renders every state at 24px and stays clickable when given onClick", a
   await expect(page.getByTestId("gallery-tag-selected")).toHaveRole("button")
   await expect(page.getByTestId("gallery-tag-default")).toHaveRole("generic")
 })
+
+const VERDICTS = ["evidenceBacked", "approachCited", "unsubstantiated", "dodge", "redLine"] as const
+
+test("Textarea renders at 148px for five rows in both modes", async ({ page }) => {
+  await page.goto("/?gallery")
+
+  for (const mode of ["default", "inverse"]) {
+    const field = page.getByTestId(`gallery-textarea-${mode}`)
+    await expect(field).toBeVisible()
+    const height = (await field.boundingBox())?.height ?? 0
+    // rows=5 at 15px/1.65 plus 12px padding resolves to ~148px; font metrics
+    // vary by a fraction of a pixel between platforms.
+    expect(Math.abs(height - 148), `${mode} height was ${height}`).toBeLessThanOrEqual(2)
+  }
+})
+
+test("Textarea is controlled and reports its value upward", async ({ page }) => {
+  await page.goto("/?gallery")
+  const field = page.getByTestId("gallery-textarea-default")
+  await field.fill("Twelve million records, three waves.")
+  await expect(page.getByTestId("gallery-textarea-wordcount")).toHaveText("5 / 220 words")
+})
+
+test("every VerdictChip renders at 26px at size lg", async ({ page }) => {
+  await page.goto("/?gallery")
+
+  for (const verdict of VERDICTS) {
+    const chip = page.getByTestId(`gallery-verdict-${verdict}`)
+    await expect(chip).toBeVisible()
+    expect((await chip.boundingBox())?.height, verdict).toBe(26)
+  }
+})

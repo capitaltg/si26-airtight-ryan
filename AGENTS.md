@@ -138,7 +138,9 @@ airtight/
 │  │  │  │  ├─ Icon.tsx          # 26 bundled Lucide glyphs, keyed by handoff name
 │  │  │  │  ├─ IconButton.tsx
 │  │  │  │  ├─ MicroCaps.tsx
-│  │  │  │  └─ Tag.tsx
+│  │  │  │  ├─ Tag.tsx
+│  │  │  │  ├─ Textarea.tsx
+│  │  │  │  └─ VerdictChip.tsx
 │  │  │  ├─ AfterActionReport.tsx
 │  │  │  ├─ ArchiveView.tsx
 │  │  │  ├─ ChatTurn.tsx
