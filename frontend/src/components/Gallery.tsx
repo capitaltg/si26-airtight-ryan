@@ -6,8 +6,10 @@ import { Button, type ButtonSize, type ButtonVariant } from "./ui/Button"
 import { Card } from "./ui/Card"
 import { Icon, ICON_NAMES } from "./ui/Icon"
 import { IconButton } from "./ui/IconButton"
+import { Input } from "./ui/Input"
 import { MicroCaps } from "./ui/MicroCaps"
 import { Modal } from "./ui/Modal"
+import { Select } from "./ui/Select"
 import { Sheet } from "./ui/Sheet"
 import { Tag } from "./ui/Tag"
 import { Textarea } from "./ui/Textarea"
@@ -96,6 +98,21 @@ function TextareaSpecimen() {
           />
         </div>
       </div>
+      <Row label="Input and Select">
+        <div className="grid w-full gap-3 md:grid-cols-3">
+          <Input placeholder="Persona name" aria-label="Persona name" data-testid="gallery-input" />
+          <Input
+            invalid
+            defaultValue="Too long"
+            aria-label="Persona name, invalid"
+            data-testid="gallery-input-invalid"
+          />
+          <Select aria-label="Microphone" data-testid="gallery-select" defaultValue="default">
+            <option value="default">Default microphone</option>
+            <option value="other">Other microphone</option>
+          </Select>
+        </div>
+      </Row>
       <Row label="Textarea · resizable, capped">
         <Textarea
           value={draft}

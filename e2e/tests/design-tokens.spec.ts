@@ -227,6 +227,22 @@ test("Textarea is controlled and reports its value upward", async ({ page }) => 
 // The fill assertion is the direct regression test for spec §1.3 —
 // `unsubstantiated` rendered transparent because `bg-amber-600/10` compiled to
 // nothing at all.
+test("input and select share the control radius and token border", async ({ page }) => {
+  await page.goto("/?gallery")
+  for (const testid of ["gallery-input", "gallery-select"]) {
+    const style = await page.getByTestId(testid).evaluate((el) => {
+      const s = getComputedStyle(el)
+      return { radius: s.borderTopLeftRadius, border: s.borderTopColor }
+    })
+    expect(style.radius).toBe("5px")
+    expect(style.border).toBe("rgb(223, 213, 205)") // --border-subtle
+  }
+  const invalid = await page
+    .getByTestId("gallery-input-invalid")
+    .evaluate((el) => getComputedStyle(el).borderTopColor)
+  expect(invalid).toBe("rgb(115, 29, 44)") // --crimson-700
+})
+
 test("sheet slides in from the right and closes on backdrop click", async ({ page }) => {
   await page.goto("/?gallery")
   await page.getByTestId("gallery-open-sheet").click()

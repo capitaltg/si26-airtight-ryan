@@ -138,8 +138,10 @@ airtight/
 │  │  │  │  ├─ Card.tsx
 │  │  │  │  ├─ Icon.tsx          # 26 bundled Lucide glyphs, keyed by handoff name
 │  │  │  │  ├─ IconButton.tsx
+│  │  │  │  ├─ Input.tsx
 │  │  │  │  ├─ MicroCaps.tsx
 │  │  │  │  ├─ Modal.tsx
+│  │  │  │  ├─ Select.tsx
 │  │  │  │  ├─ Sheet.tsx
 │  │  │  │  ├─ Tag.tsx
 │  │  │  │  ├─ Textarea.tsx
