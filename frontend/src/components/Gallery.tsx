@@ -8,7 +8,7 @@ import { IconButton } from "./ui/IconButton"
 import { MicroCaps } from "./ui/MicroCaps"
 import { Tag } from "./ui/Tag"
 import { Textarea } from "./ui/Textarea"
-import { VerdictChip, VERDICTS } from "./ui/VerdictChip"
+import { RUBRIC_ROWS, VerdictChip } from "./ui/VerdictChip"
 
 // Development-only surface. The repo has no Storybook and SP1 changes no
 // screen, so this is where a token or primitive is checked before a screen
@@ -94,18 +94,13 @@ function TextareaSpecimen() {
         </div>
       </div>
       <Row label="VerdictChip · lg">
-        {VERDICTS.map((verdict) => (
-          <VerdictChip
-            key={verdict}
-            verdict={verdict}
-            size="lg"
-            data-testid={`gallery-verdict-${verdict}`}
-          />
+        {RUBRIC_ROWS.map((row) => (
+          <VerdictChip key={row} row={row} size="lg" data-testid={`gallery-verdict-${row}`} />
         ))}
       </Row>
       <Row label="VerdictChip · md">
-        {VERDICTS.map((verdict) => (
-          <VerdictChip key={verdict} verdict={verdict} />
+        {RUBRIC_ROWS.map((row) => (
+          <VerdictChip key={row} row={row} />
         ))}
       </Row>
     </Section>

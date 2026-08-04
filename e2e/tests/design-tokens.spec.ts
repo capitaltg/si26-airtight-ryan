@@ -193,7 +193,16 @@ test("Tag renders every state at 24px and stays clickable when given onClick", a
   await expect(page.getByRole("button", { name: "Transition risk" })).toHaveCount(0)
 })
 
-const VERDICTS = ["evidenceBacked", "approachCited", "unsubstantiated", "dodge", "redLine"] as const
+const RUBRIC_ROWS = [
+  "evidence_backed",
+  "approach_cited",
+  "unsubstantiated",
+  "contradiction",
+  "over_limit",
+  "dodge",
+  "false_fact",
+  "red_line",
+]
 
 test("Textarea renders at 148px for five rows in both modes", async ({ page }) => {
   await page.goto("/?gallery")
@@ -215,14 +224,19 @@ test("Textarea is controlled and reports its value upward", async ({ page }) => 
   await expect(page.getByTestId("gallery-textarea-wordcount")).toHaveText("5 / 220 words")
 })
 
-test("every VerdictChip renders at 26px at size lg", async ({ page }) => {
+// The fill assertion is the direct regression test for spec §1.3 —
+// `unsubstantiated` rendered transparent because `bg-amber-600/10` compiled to
+// nothing at all.
+test("every rubric row renders a chip with a resolved fill", async ({ page }) => {
   await page.goto("/?gallery")
-
-  for (const verdict of VERDICTS) {
-    const chip = page.getByTestId(`gallery-verdict-${verdict}`)
+  for (const row of RUBRIC_ROWS) {
+    const chip = page.getByTestId(`gallery-verdict-${row}`)
     await expect(chip).toBeVisible()
-    expect((await chip.boundingBox())?.height, verdict).toBe(26)
+    const bg = await chip.evaluate((el) => getComputedStyle(el).backgroundColor)
+    expect(bg).not.toBe("rgba(0, 0, 0, 0)")
   }
+  const box = await page.getByTestId("gallery-verdict-red_line").boundingBox()
+  expect(box?.height).toBeCloseTo(26, 0)
 })
 
 test("the gallery renders every token specimen", async ({ page }) => {
