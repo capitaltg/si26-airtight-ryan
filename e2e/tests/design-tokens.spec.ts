@@ -111,3 +111,35 @@ test("IconButton is square and carries an accessible name", async ({ page }) => 
   expect(box?.width).toBe(32)
   expect(box?.height).toBe(32)
 })
+
+test("Badge renders both tones at 20px and only the live tone animates", async ({ page }) => {
+  await page.goto("/?gallery")
+
+  for (const tone of ["live", "neutral"]) {
+    const badge = page.getByTestId(`gallery-badge-${tone}`)
+    await expect(badge).toBeVisible()
+    expect((await badge.boundingBox())?.height, tone).toBe(20)
+  }
+
+  const liveDot = page.getByTestId("gallery-badge-live").locator("span").first()
+  await expect(liveDot).toHaveCSS("animation-name", "livePulse")
+  await expect(liveDot).toHaveCSS("animation-duration", "1.4s")
+  await expect(liveDot).toHaveCSS("animation-iteration-count", "infinite")
+
+  const neutral = page.getByTestId("gallery-badge-neutral")
+  await expect(neutral).toHaveCSS("animation-name", "none")
+})
+
+test("Tag renders every state at 24px and stays clickable when given onClick", async ({ page }) => {
+  await page.goto("/?gallery")
+
+  for (const state of ["default", "muted", "selected", "icon"]) {
+    const tag = page.getByTestId(`gallery-tag-${state}`)
+    await expect(tag).toBeVisible()
+    expect((await tag.boundingBox())?.height, state).toBe(24)
+  }
+
+  // A Tag with onClick is a real button; one without is not focusable.
+  await expect(page.getByTestId("gallery-tag-selected")).toHaveRole("button")
+  await expect(page.getByTestId("gallery-tag-default")).toHaveRole("generic")
+})

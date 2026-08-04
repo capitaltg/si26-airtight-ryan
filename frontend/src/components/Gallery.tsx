@@ -1,9 +1,11 @@
 import type { ReactNode } from "react"
 
+import { Badge } from "./ui/Badge"
 import { Button, type ButtonSize, type ButtonVariant } from "./ui/Button"
 import { Icon, ICON_NAMES } from "./ui/Icon"
 import { IconButton } from "./ui/IconButton"
 import { MicroCaps } from "./ui/MicroCaps"
+import { Tag } from "./ui/Tag"
 
 // Development-only surface. The repo has no Storybook and SP1 changes no
 // screen, so this is where a token or primitive is checked before a screen
@@ -91,6 +93,29 @@ export default function Gallery() {
         ))}
         <Row label="IconButton">
           <IconButton name="x" aria-label="Close" data-testid="gallery-iconbutton" />
+        </Row>
+      </Section>
+
+      <Section title="Badges and tags">
+        <Row label="Badge">
+          <Badge tone="live" data-testid="gallery-badge-live">
+            Live
+          </Badge>
+          <Badge tone="neutral" data-testid="gallery-badge-neutral">
+            Not scored
+          </Badge>
+        </Row>
+        <Row label="Tag">
+          <Tag data-testid="gallery-tag-default">Transition risk</Tag>
+          <Tag muted data-testid="gallery-tag-muted">
+            Cost realism
+          </Tag>
+          <Tag selected onClick={() => {}} data-testid="gallery-tag-selected">
+            All sessions
+          </Tag>
+          <Tag icon="corner-down-right" data-testid="gallery-tag-icon">
+            Follow-up
+          </Tag>
         </Row>
       </Section>
 
