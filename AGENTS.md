@@ -328,7 +328,7 @@ airtight/
 
 Backend (`server/`): FastAPI, Pydantic v2, SQLAlchemy 2.0, Alembic, `anthropic[bedrock]`, Postgres 16. Tests: pytest. Lint/types: Ruff + mypy (strict).
 
-Frontend (`frontend/`): React 18, Vite, TypeScript, Tailwind, TanStack Query (shadcn/ui to be added). All _component_ styling is Tailwind utility classes. Two files are hand-written CSS by design: `src/tokens.css`, which declares the design tokens as custom properties (a declaration, not styling), and `src/index.css`, which carries the `@fontsource` imports and the `body` ground. Nothing else.
+Frontend (`frontend/`): React 18, Vite, TypeScript, Tailwind, TanStack Query (shadcn/ui to be added). All _component_ styling is Tailwind utility classes. Two files are hand-written CSS by design: `src/tokens.css`, which declares the design tokens as custom properties (a declaration, not styling), and `src/index.css`, which carries the `@fontsource` imports and the `body` ground. Nothing else. The stock Tailwind palette is not available: `slate-*`, `emerald-*`, `red-*`, and the rest are banned in favor of the token utilities, as are off-scale radii and shadows, arbitrary `text-[Npx]` sizes, and opacity modifiers on token colors (Tailwind silently emits nothing for `bg-moss-600/10` — use a tint token). `scripts/check-palette.mjs` enforces this and runs as part of `npm run lint`.
 
 ```bash
 # everything
