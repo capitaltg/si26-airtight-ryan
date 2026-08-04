@@ -347,6 +347,15 @@ export default function Gallery() {
           <Badge tone="neutral" data-testid="gallery-badge-neutral">
             Not scored
           </Badge>
+          <Badge tone="positive" data-testid="gallery-badge-positive">
+            Evidence backed
+          </Badge>
+          <Badge tone="caution" data-testid="gallery-badge-caution">
+            Clarification
+          </Badge>
+          <Badge tone="negative" data-testid="gallery-badge-negative">
+            Red line crossed
+          </Badge>
         </Row>
         <Row label="Tag">
           <Tag data-testid="gallery-tag-default">Transition risk</Tag>

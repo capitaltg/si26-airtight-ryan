@@ -165,6 +165,19 @@ test("Badge renders both tones at 20px and only the live tone animates", async (
   await expect(neutral).toHaveCSS("animation-name", "none")
 })
 
+// The fill assertion matters as much as the height: a tone written as
+// `bg-moss-600/10` renders invisibly and still passes a height check (spec §1.3).
+test("every badge tone renders a resolved fill at 20px", async ({ page }) => {
+  await page.goto("/?gallery")
+  for (const tone of ["neutral", "live", "positive", "caution", "negative"]) {
+    const badge = page.getByTestId(`gallery-badge-${tone}`)
+    const box = await badge.boundingBox()
+    expect(box?.height).toBeCloseTo(20, 0)
+    const bg = await badge.evaluate((el) => getComputedStyle(el).backgroundColor)
+    expect(bg).not.toBe("rgba(0, 0, 0, 0)")
+  }
+})
+
 test("Tag renders every state at 24px and stays clickable when given onClick", async ({ page }) => {
   await page.goto("/?gallery")
 
