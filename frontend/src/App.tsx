@@ -2,7 +2,6 @@ import { lazy, Suspense, useState } from "react"
 
 import { PersonaEditor } from "./components/PersonaEditor"
 import { Rehearsal } from "./components/Rehearsal"
-import { Button } from "./components/ui/Button"
 
 // Vite statically replaces `import.meta.env.DEV` with `false` in a production
 // build, so the ternary folds to `null` and Rollup drops the dynamic import
@@ -25,17 +24,9 @@ export default function App() {
   return (
     <>
       <div hidden={view !== "rehearsal"}>
-        <div className="mx-auto flex max-w-3xl justify-end px-4 pt-3">
-          <Button
-            variant="secondary"
-            size="sm"
-            data-testid="open-persona-editor"
-            onClick={() => setView("personas")}
-          >
-            Edit personas
-          </Button>
-        </div>
-        <Rehearsal />
+        {/* The persona-editor control lives on the landing screen itself, inside
+            its column, rather than in a bar of its own above it. */}
+        <Rehearsal onEditPersonas={() => setView("personas")} />
       </div>
       {view === "personas" ? <PersonaEditor onClose={() => setView("rehearsal")} /> : null}
     </>

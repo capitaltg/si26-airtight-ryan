@@ -67,8 +67,10 @@ function HistoryCard({
 export function HistoryList({ onSelect }: { onSelect: (id: string) => void }) {
   const { data, isLoading, isError, error } = useHistory()
 
+  // No width of its own: both callers already constrain the column they put this
+  // in (the landing screen at max-w-2xl, the report at max-w-5xl).
   return (
-    <section data-testid="history-list" className="w-full max-w-2xl space-y-3 text-left">
+    <section data-testid="history-list" className="space-y-3 text-left">
       <MicroCaps as="h2">Past rehearsals</MicroCaps>
       {isLoading && <p className="text-body-sm text-text-muted">Loading past rehearsals…</p>}
       {isError && <p className="text-body-sm text-crimson-700">{(error as Error).message}</p>}

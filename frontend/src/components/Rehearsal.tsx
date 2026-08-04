@@ -36,6 +36,7 @@ import { RubricPanel } from "./RubricPanel"
 import { Badge } from "./ui/Badge"
 import { Button, type ButtonVariant } from "./ui/Button"
 import { Card } from "./ui/Card"
+import { MicroCaps } from "./ui/MicroCaps"
 import { Modal } from "./ui/Modal"
 import { Textarea } from "./ui/Textarea"
 import { VoiceReview } from "./VoiceReview"
@@ -46,7 +47,10 @@ import { VoiceReview } from "./VoiceReview"
 // transcription, and a discard just drops it.
 type DiscardPrompt = { kind: "recording"; blob: Blob; asked: Prompt } | { kind: "transcribing" }
 
-export function Rehearsal() {
+// `onEditPersonas` is required, not optional: the landing screen is the only
+// route to the persona editor, and an optional prop would let a caller drop it
+// silently.
+export function Rehearsal({ onEditPersonas }: { onEditPersonas: () => void }) {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [meters, setMeters] = useState<Meter[]>([])
   const [prompt, setPrompt] = useState<Prompt | null>(null)
@@ -787,54 +791,99 @@ export function Rehearsal() {
   }
 
   // Not started yet: a single call to action.
+  //
+  // Top-aligned, not vertically centered: the column's height is data-dependent
+  // (up to five history cards of three meter rows each, plus a mic-check panel
+  // that expands in place), and centering a variable-height column moves the
+  // wordmark off-screen exactly when there is the most to read. `py-16` buys the
+  // air that `justify-center` was there for without tying the hero's position to
+  // how many rehearsals are on file.
   if (!sessionId) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-sand-50 px-6 text-center">
-        <div className="space-y-2">
-          {/* The one place the display face carries a headline. The logo is
-              `alt=""` in both lockups: the wordmark beside it already carries
-              the name, so a described image would read it out twice. */}
-          <div className="flex items-center justify-center gap-3">
-            <img src="/airtight-logo.svg" alt="" className="h-11 w-auto" />
-            <h1 className="font-display text-display font-semibold text-text-strong">Airtight</h1>
+      <div className="flex min-h-screen flex-col items-center bg-sand-50 px-6 py-16">
+        <div className="w-full max-w-2xl space-y-8">
+          <div className="space-y-6 text-center">
+            <div className="space-y-2">
+              {/* The one place the display face carries a headline. The logo is
+                  `alt=""` in both lockups: the wordmark beside it already carries
+                  the name, so a described image would read it out twice. */}
+              <div className="flex items-center justify-center gap-3">
+                <img src="/airtight-logo.svg" alt="" className="h-11 w-auto" />
+                <h1 className="font-display text-display font-semibold text-text-strong">
+                  Airtight
+                </h1>
+              </div>
+              <p className="mx-auto max-w-prose text-body text-text-muted">
+                Rehearse a federal-orals evaluation. Answer three evaluator personas; every turn
+                earns a deterministic, code-owned score.
+              </p>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={startSession}
+                  disabled={create.isPending}
+                >
+                  {create.isPending ? "Starting…" : "Start rehearsal"}
+                </Button>
+              </div>
+              {create.isError && (
+                <p className="text-body-sm text-crimson-700">{(create.error as Error).message}</p>
+              )}
+              {/* The secondary path off this screen. Lives under the primary
+                  action rather than in a bar of its own so it shares the
+                  column's edges — see spec §1. */}
+              <div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  data-testid="open-persona-editor"
+                  onClick={onEditPersonas}
+                >
+                  Edit personas
+                </Button>
+              </div>
+            </div>
           </div>
-          <p className="max-w-md text-body text-text-muted">
-            Rehearse a federal-orals evaluation. Answer three evaluator personas; every turn earns a
-            deterministic, code-owned score.
-          </p>
+
+          <section className="border-t border-subtle pt-8">
+            <MicroCaps as="h2">Before you start</MicroCaps>
+            <Button
+              variant="ghost"
+              size="sm"
+              data-testid="mic-check-toggle"
+              aria-expanded={micPanelOpen}
+              aria-controls="mic-check-panel"
+              onClick={() => setMicPanelOpen((open) => !open)}
+              // `-ml-3` cancels the ghost button's own `px-3` so the label sits
+              // flush with the eyebrow above it, without shrinking the hit area.
+              className="-ml-3 mt-1 underline decoration-text-faint underline-offset-4"
+            >
+              Test your mic and speakers
+            </Button>
+            {/* Rendered only while expanded, so collapsing the section unmounts
+                the panel and closes the metering stream with it. */}
+            {micPanelOpen && (
+              <Card id="mic-check-panel" className="mt-3">
+                <MicCheck
+                  inputId={inputId}
+                  outputId={outputId}
+                  onInputChange={setInputId}
+                  onOutputChange={setOutputId}
+                />
+              </Card>
+            )}
+          </section>
+
+          {/* The rule lives here, not inside HistoryList: that component also
+              renders on the after-action report, where it is one card in a
+              stack and a top rule would be wrong. */}
+          <div className="border-t border-subtle pt-8">
+            <HistoryList onSelect={setViewingSessionId} />
+          </div>
         </div>
-        <Button variant="primary" size="lg" onClick={startSession} disabled={create.isPending}>
-          {create.isPending ? "Starting…" : "Start rehearsal"}
-        </Button>
-        {create.isError && (
-          <p className="text-body-sm text-crimson-700">{(create.error as Error).message}</p>
-        )}
-        <section className="w-full max-w-2xl text-left">
-          <Button
-            variant="ghost"
-            size="sm"
-            data-testid="mic-check-toggle"
-            aria-expanded={micPanelOpen}
-            aria-controls="mic-check-panel"
-            onClick={() => setMicPanelOpen((open) => !open)}
-            className="underline decoration-text-faint underline-offset-4"
-          >
-            Test your mic and speakers
-          </Button>
-          {/* Rendered only while expanded, so collapsing the section unmounts
-              the panel and closes the metering stream with it. */}
-          {micPanelOpen && (
-            <Card id="mic-check-panel" className="mt-3">
-              <MicCheck
-                inputId={inputId}
-                outputId={outputId}
-                onInputChange={setInputId}
-                onOutputChange={setOutputId}
-              />
-            </Card>
-          )}
-        </section>
-        <HistoryList onSelect={setViewingSessionId} />
       </div>
     )
   }
@@ -870,6 +919,10 @@ export function Rehearsal() {
           <img src="/airtight-logo.svg" alt="" className="h-7 w-auto" />
           <h1 className="text-display-xs font-semibold text-text-strong">Airtight rehearsal</h1>
         </div>
+        {/* No persona-editor control here. A running session has already fixed
+            its agenda and its evaluators; editing them mid-rehearsal would leave
+            the transcript half-scored against personas that no longer exist.
+            The editor is reachable from the landing screen only. */}
         <Button variant="secondary" size="sm" onClick={() => setRubricOpen(true)}>
           How you&apos;re scored
         </Button>
