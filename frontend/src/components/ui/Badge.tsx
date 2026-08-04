@@ -16,6 +16,7 @@ type BadgeProps = {
   tone?: BadgeTone
   className?: string
   children: ReactNode
+  "aria-label"?: string
   "data-testid"?: string
 }
 

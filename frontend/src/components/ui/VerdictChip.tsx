@@ -52,6 +52,11 @@ const TONES: Record<RubricRow, string> = {
 type VerdictChipProps = {
   row: RubricRow
   size?: "md" | "lg"
+  /**
+   * Overrides the row's label. ChatTurn passes `rowLabel(row, count)` so a row
+   * that fired twice still reads "False Fact x2"; the tone still comes from `row`.
+   */
+  label?: string
   className?: string
   "data-testid"?: string
 }
@@ -59,7 +64,7 @@ type VerdictChipProps = {
 // 26px at lg, per the prototype's `hint-size`. Both sizes sit on the type ramp's
 // `micro` step; the shorter chip gets there by height and padding, not by an
 // off-ramp 11px size.
-export function VerdictChip({ row, size = "md", className, ...rest }: VerdictChipProps) {
+export function VerdictChip({ row, size = "md", label, className, ...rest }: VerdictChipProps) {
   return (
     <span
       {...rest}
@@ -72,7 +77,7 @@ export function VerdictChip({ row, size = "md", className, ...rest }: VerdictChi
         .filter(Boolean)
         .join(" ")}
     >
-      {LABELS[row]}
+      {label ?? LABELS[row]}
     </span>
   )
 }

@@ -7,6 +7,9 @@ import type { TranscriptTurn } from "../types"
 import { PRESENTER_BUBBLE, REPLY_BUBBLE, prettify, rowLabel } from "../lib"
 import { PersonaAvatar } from "./PersonaAvatar"
 import { PromptIntro } from "./PromptIntro"
+import { Badge, type BadgeTone } from "./ui/Badge"
+import { MicroCaps } from "./ui/MicroCaps"
+import { type RubricRow, VerdictChip } from "./ui/VerdictChip"
 
 function DeltaBadge({
   delta,
@@ -18,13 +21,14 @@ function DeltaBadge({
   capped: boolean
 }) {
   const sign = delta > 0 ? `+${delta}` : `${delta}`
-  const tone = capped
-    ? "bg-red-100 text-red-700"
+  // Same branch conditions as before; only the rendering moves to Badge tones.
+  const tone: BadgeTone = capped
+    ? "negative"
     : delta > 0
-      ? "bg-emerald-100 text-emerald-700"
+      ? "positive"
       : delta < 0
-        ? "bg-orange-100 text-orange-700"
-        : "bg-slate-100 text-slate-600"
+        ? "negative"
+        : "neutral"
   const rawSign = rawDelta > 0 ? `+${rawDelta}` : `${rawDelta}`
   const clamped = Math.abs(rawDelta) > 2
   const atBound = Math.abs(rawDelta) === 2
@@ -36,13 +40,10 @@ function DeltaBadge({
       ? `${sign}, maximum ${word}`
       : undefined
   return (
-    <span
-      aria-label={label}
-      className={`rounded px-1.5 py-0.5 text-xs font-semibold tabular-nums ${tone}`}
-    >
+    <Badge tone={tone} aria-label={label} className="font-data tabular-nums">
       {sign}
-      {marker && <span className="ml-1 text-[10px] font-medium">{marker}</span>}
-    </span>
+      {marker && <span className="ml-1 font-medium normal-case">{marker}</span>}
+    </Badge>
   )
 }
 
@@ -54,21 +55,17 @@ export function ChatTurn({ turn }: { turn: TranscriptTurn }) {
     <div className="space-y-3">
       {/* question */}
       <div className="space-y-1">
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-body-sm">
           <PersonaAvatar personaId={turn.personaId} size={28} />
-          <span className="font-semibold text-slate-800">
+          <span className="font-semibold text-text-strong">
             {turn.displayName}, {prettify(turn.personaId)}
           </span>
-          <span className="text-slate-400">·</span>
-          <span className="text-slate-500">{prettify(turn.concernId)}</span>
-          {turn.isFollowUp && (
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700">
-              Follow-up
-            </span>
-          )}
+          <span className="text-text-faint">·</span>
+          <span className="text-text-muted">{prettify(turn.concernId)}</span>
+          {turn.isFollowUp && <Badge tone="caution">Follow-up</Badge>}
         </div>
         <PromptIntro intro={turn.intro} />
-        <p className="text-sm text-slate-800">{turn.prompt}</p>
+        <p className="text-body text-text-body">{turn.prompt}</p>
       </div>
 
       {/* presenter */}
@@ -76,9 +73,9 @@ export function ChatTurn({ turn }: { turn: TranscriptTurn }) {
         <div className={PRESENTER_BUBBLE}>
           {voice ? (
             <div className="space-y-1.5">
-              <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <MicroCaps as="span" tone="inverse" className="block">
                 What the scorer heard
-              </span>
+              </MicroCaps>
               <p>{turn.answer}</p>
               {edited && (
                 <details data-testid="original-transcription">
@@ -106,15 +103,13 @@ export function ChatTurn({ turn }: { turn: TranscriptTurn }) {
         <div className={REPLY_BUBBLE}>
           <div className="flex items-center gap-2">
             <PersonaAvatar personaId={turn.personaId} size={28} />
-            <span className="text-xs font-semibold text-slate-500">
+            <span className="text-body-sm font-semibold text-text-muted">
               {turn.displayName}, {prettify(turn.personaId)}
             </span>
             {notScored ? (
               // Clarification: no number moved. Match the report's "Not scored"
-              // slate badge so the visual language is consistent.
-              <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
-                Not scored
-              </span>
+              // badge so the visual language is consistent.
+              <Badge tone="neutral">Not scored</Badge>
             ) : (
               <>
                 <DeltaBadge
@@ -122,19 +117,20 @@ export function ChatTurn({ turn }: { turn: TranscriptTurn }) {
                   rawDelta={turn.rawSupportDelta ?? turn.supportDelta}
                   capped={turn.capped}
                 />
+                {/* The values come straight off the score payload, which is why
+                    VerdictChip is keyed on the server's snake_case rubric ids. */}
                 {turn.matchedRows.map((r) => (
-                  <span
+                  <VerdictChip
                     key={r}
-                    className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600"
-                  >
-                    {rowLabel(r, turn.rowCounts?.[r] ?? 1)}
-                  </span>
+                    row={r as RubricRow}
+                    label={rowLabel(r, turn.rowCounts?.[r] ?? 1)}
+                  />
                 ))}
               </>
             )}
           </div>
           {turn.limit && (
-            <p className="text-xs text-slate-500">
+            <p className="text-body-sm text-text-muted">
               {turn.limit.kind === "text_words"
                 ? `${turn.limit.measured} words`
                 : `${turn.limit.measured.toFixed(1)} seconds`}
@@ -142,9 +138,9 @@ export function ChatTurn({ turn }: { turn: TranscriptTurn }) {
               {turn.limit.penalty_applied && ` · ${turn.limit.penalty_value} over-limit penalty`}
             </p>
           )}
-          <p className="text-sm text-slate-800">{turn.reply}</p>
+          <p className="text-body text-text-body">{turn.reply}</p>
           {turn.rationale && (
-            <p className="border-t border-slate-100 pt-2 text-xs italic text-slate-500">
+            <p className="border-t border-subtle pt-2 text-body-sm italic text-text-muted">
               {turn.rationale}
             </p>
           )}

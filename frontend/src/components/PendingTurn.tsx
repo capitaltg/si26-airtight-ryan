@@ -9,11 +9,12 @@ import { PRESENTER_BUBBLE, REPLY_BUBBLE, prettify } from "../lib"
 import { PersonaAvatar } from "./PersonaAvatar"
 import { PromptIntro } from "./PromptIntro"
 import { StageStepper } from "./StageStepper"
+import { Badge } from "./ui/Badge"
 
 function Spinner() {
   return (
     <span
-      className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700"
+      className="inline-block h-3 w-3 animate-spin rounded-pill border-2 border-sand-300 border-t-navy-800"
       aria-hidden
     />
   )
@@ -36,19 +37,15 @@ export function PendingTurn({
     <div className="space-y-3">
       {/* question */}
       <div className="space-y-1">
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-body-sm">
           <PersonaAvatar personaId={prompt.persona_id} size={28} />
-          <span className="font-semibold text-slate-800">{prettify(prompt.persona_id)}</span>
-          <span className="text-slate-400">·</span>
-          <span className="text-slate-500">{prettify(prompt.concern_id)}</span>
-          {prompt.is_follow_up && (
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700">
-              Follow-up
-            </span>
-          )}
+          <span className="font-semibold text-text-strong">{prettify(prompt.persona_id)}</span>
+          <span className="text-text-faint">·</span>
+          <span className="text-text-muted">{prettify(prompt.concern_id)}</span>
+          {prompt.is_follow_up && <Badge tone="caution">Follow-up</Badge>}
         </div>
         <PromptIntro intro={prompt.intro} />
-        <p className="text-sm text-slate-800">{prompt.prompt}</p>
+        <p className="text-body text-text-body">{prompt.prompt}</p>
       </div>
 
       {/* presenter */}
@@ -62,13 +59,11 @@ export function PendingTurn({
       <div className="flex justify-start">
         <div className={REPLY_BUBBLE}>
           {kind === "clarify" ? (
-            <div className="flex items-center gap-2 text-xs">
+            <div className="flex items-center gap-2 text-body-sm">
               <Spinner />
-              <span className="font-semibold text-slate-700">Asking…</span>
-              <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
-                Not scored
-              </span>
-              <span className="ml-1 tabular-nums text-slate-400">{elapsed}s</span>
+              <span className="font-semibold text-text-body">Asking…</span>
+              <Badge tone="neutral">Not scored</Badge>
+              <span className="ml-1 font-data tabular-nums text-text-faint">{elapsed}s</span>
             </div>
           ) : (
             <StageStepper stage={stage} elapsed={elapsed} />
