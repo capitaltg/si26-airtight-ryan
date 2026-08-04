@@ -187,6 +187,8 @@ airtight/
 │  │  ├─ scenario-custom-priya.json
 │  │  ├─ scenario-false-fact.json
 │  │  └─ scenario-mixed.json
+│  ├─ check-palette.mjs
+│  ├─ check-palette.test.mjs
 │  ├─ consistency_check.py
 │  ├─ replay_session.py
 │  ├─ smoke_bedrock.py

@@ -8,7 +8,9 @@
     "prepare": "lefthook install",
     "dev": "npm run dev -w frontend",
     "build": "npm run build -w frontend",
-    "lint": "oxlint",
+    "lint": "oxlint && npm run lint:palette",
+    "lint:palette": "node scripts/check-palette.mjs --warn",
+    "test:scripts": "node --test \"scripts/**/*.test.mjs\"",
     "lint:fix": "oxlint --fix",
     "format": "oxfmt --write",
     "format:check": "oxfmt --check"
