@@ -11,22 +11,32 @@ import { MicroCaps } from "./ui/MicroCaps"
 
 export function MeterBar({ meter }: { meter: Meter }) {
   const width = Math.max(0, Math.min(100, meter.support))
+  // The score always ends the row it sits in, pushed right by `ml-auto` and held
+  // in a fixed column so the digits line up between meters.
+  const score = (
+    <span className="ml-auto min-w-[3ch] text-right font-data tabular-nums text-text-muted">
+      {meter.support}
+    </span>
+  )
   return (
     <div className="space-y-1">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 text-body-sm">
-        <span className="flex items-center gap-2 font-medium text-text-body">
+      <div className="flex items-center gap-2 text-body-sm">
+        <span className="flex min-w-0 items-center gap-2 font-medium text-text-body">
           <PersonaAvatar personaId={meter.persona_id} size={20} />
-          {prettify(meter.persona_id)}
+          <span className="truncate">{prettify(meter.persona_id)}</span>
         </span>
-        <span className="flex items-center gap-2 font-data tabular-nums text-text-muted">
-          {meter.capped && (
-            <Badge tone="negative" className="whitespace-nowrap">
-              Red line crossed
-            </Badge>
-          )}
-          {meter.support}
-        </span>
+        {/* Uncapped, the score rides the name row; capped, it drops to the badge
+            row below so the badge gets the full width it needs. */}
+        {!meter.capped && score}
       </div>
+      {meter.capped && (
+        <div className="flex items-center gap-2 text-body-sm">
+          <Badge tone="negative" className="whitespace-nowrap">
+            Red line crossed
+          </Badge>
+          {score}
+        </div>
+      )}
       {/* Purely visual — the persona name and numeric support are already text
           above, so screen readers get the value without an ARIA widget role. */}
       <div className="h-2 w-full overflow-hidden rounded-pill bg-sand-300" aria-hidden="true">
