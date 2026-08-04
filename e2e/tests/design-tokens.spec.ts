@@ -82,3 +82,29 @@ test("the gallery is reachable and renders icons and micro-caps labels", async (
     transform: "uppercase",
   })
 })
+
+const BUTTON_HEIGHTS = { sm: 30, md: 38, lg: 48 } as const
+const BUTTON_VARIANTS = ["primary", "secondary", "ghost", "inverse", "danger"] as const
+
+test("every Button variant and size renders at its handoff height", async ({ page }) => {
+  await page.goto("/?gallery")
+  await expect(page.getByRole("heading", { name: "Airtight design system" })).toBeVisible()
+
+  for (const variant of BUTTON_VARIANTS) {
+    for (const [size, height] of Object.entries(BUTTON_HEIGHTS)) {
+      const button = page.getByTestId(`gallery-button-${variant}-${size}`)
+      await expect(button).toBeVisible()
+      const box = await button.boundingBox()
+      expect(box?.height, `${variant}/${size}`).toBe(height)
+    }
+  }
+})
+
+test("IconButton is square and carries an accessible name", async ({ page }) => {
+  await page.goto("/?gallery")
+  const close = page.getByRole("button", { name: "Close" })
+  await expect(close).toBeVisible()
+  const box = await close.boundingBox()
+  expect(box?.width).toBe(32)
+  expect(box?.height).toBe(32)
+})

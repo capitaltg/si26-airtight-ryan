@@ -132,8 +132,10 @@ airtight/
 │  │  ├─ api/
 │  │  │  └─ client.ts
 │  │  ├─ components/
-│  │  │  ├─ ui/                  # design-system primitives (Icon, MicroCaps, …)
-│  │  │  │  ├─ Icon.tsx
+│  │  │  ├─ ui/                  # design-system primitives
+│  │  │  │  ├─ Button.tsx
+│  │  │  │  ├─ Icon.tsx          # 26 bundled Lucide glyphs, keyed by handoff name
+│  │  │  │  ├─ IconButton.tsx
 │  │  │  │  └─ MicroCaps.tsx
 │  │  │  ├─ AfterActionReport.tsx
 │  │  │  ├─ ArchiveView.tsx

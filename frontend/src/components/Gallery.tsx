@@ -1,11 +1,16 @@
 import type { ReactNode } from "react"
 
+import { Button, type ButtonSize, type ButtonVariant } from "./ui/Button"
 import { Icon, ICON_NAMES } from "./ui/Icon"
+import { IconButton } from "./ui/IconButton"
 import { MicroCaps } from "./ui/MicroCaps"
 
 // Development-only surface. The repo has no Storybook and SP1 changes no
 // screen, so this is where a token or primitive is checked before a screen
 // consumes it in SP3–SP7. Mounted from App.tsx behind `import.meta.env.DEV`.
+
+const BUTTON_VARIANTS: ButtonVariant[] = ["primary", "secondary", "ghost", "inverse", "danger"]
+const BUTTON_SIZES: ButtonSize[] = ["sm", "md", "lg"]
 
 export function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -51,6 +56,42 @@ export default function Gallery() {
             </div>
           ))}
         </div>
+      </Section>
+
+      <Section title="Buttons">
+        {BUTTON_VARIANTS.map((variant) => (
+          <div
+            key={variant}
+            className={
+              variant === "inverse"
+                ? "flex flex-wrap items-center gap-3 rounded-card bg-navy-800 p-4"
+                : "flex flex-wrap items-center gap-3"
+            }
+          >
+            <span
+              className={[
+                "w-24 font-data text-body-sm",
+                variant === "inverse" ? "text-text-inverse-muted" : "text-text-faint",
+              ].join(" ")}
+            >
+              {variant}
+            </span>
+            {BUTTON_SIZES.map((size) => (
+              <Button
+                key={size}
+                variant={variant}
+                size={size}
+                iconLeft="play"
+                data-testid={`gallery-button-${variant}-${size}`}
+              >
+                Start rehearsal
+              </Button>
+            ))}
+          </div>
+        ))}
+        <Row label="IconButton">
+          <IconButton name="x" aria-label="Close" data-testid="gallery-iconbutton" />
+        </Row>
       </Section>
 
       <Section title="Micro-caps label">
