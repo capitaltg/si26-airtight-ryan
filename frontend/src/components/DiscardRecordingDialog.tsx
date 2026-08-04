@@ -6,6 +6,9 @@
 // stopped recording can still be used, while an in-flight transcription can
 // only be waited on.
 
+import { Button } from "./ui/Button"
+import { Modal } from "./ui/Modal"
+
 export function DiscardRecordingDialog({
   kind,
   onKeep,
@@ -16,39 +19,26 @@ export function DiscardRecordingDialog({
   onDiscard: () => void
 }) {
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 p-4">
-      {/* Native <dialog> (open, not showModal, same as the mic check modal in
-          Rehearsal) rather than a plain div with role="dialog": it carries the
-          dialog semantics for free and satisfies the linter's
-          prefer-tag-over-role rule without a suppression comment. */}
-      <dialog
-        open
-        aria-modal="true"
-        aria-label="Discard this recording?"
-        data-testid="discard-recording"
-        className="relative m-0 w-full max-w-sm space-y-3 rounded-lg bg-white p-4 shadow-lg"
-      >
-        <h2 className="text-sm font-semibold text-slate-800">Discard this recording?</h2>
-        <p className="text-xs text-slate-500">You&apos;ll answer this question again.</p>
-        <div className="flex items-center justify-end gap-2">
-          <button
-            type="button"
-            data-testid="discard-recording-keep"
-            onClick={onKeep}
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-          >
-            {kind === "recording" ? "Use recording" : "Keep waiting"}
-          </button>
-          <button
-            type="button"
-            data-testid="discard-recording-discard"
-            onClick={onDiscard}
-            className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700"
-          >
-            Discard take
-          </button>
-        </div>
-      </dialog>
-    </div>
+    // No `onClose`: this dialog has no dismiss affordance today and must be
+    // answered, so passing one would add Escape-to-dismiss that
+    // cancel-recording.spec.ts does not expect.
+    <Modal
+      open
+      label="Discard this recording?"
+      size="sm"
+      aria-modal="true"
+      data-testid="discard-recording"
+    >
+      <h2 className="text-heading font-semibold text-text-strong">Discard this recording?</h2>
+      <p className="text-body-sm text-text-muted">You&apos;ll answer this question again.</p>
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="secondary" data-testid="discard-recording-keep" onClick={onKeep}>
+          {kind === "recording" ? "Use recording" : "Keep waiting"}
+        </Button>
+        <Button variant="primary" data-testid="discard-recording-discard" onClick={onDiscard}>
+          Discard take
+        </Button>
+      </div>
+    </Modal>
   )
 }

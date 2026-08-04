@@ -11,6 +11,8 @@ type ModalProps = {
   size?: keyof typeof SIZES
   className?: string
   children: ReactNode
+  /** Kept in the API because DiscardRecordingDialog already sets it. */
+  "aria-modal"?: "true"
   "data-testid"?: string
 }
 
