@@ -140,6 +140,7 @@ airtight/
 │  │  │  │  ├─ IconButton.tsx
 │  │  │  │  ├─ MicroCaps.tsx
 │  │  │  │  ├─ Modal.tsx
+│  │  │  │  ├─ Sheet.tsx
 │  │  │  │  ├─ Tag.tsx
 │  │  │  │  ├─ Textarea.tsx
 │  │  │  │  └─ VerdictChip.tsx

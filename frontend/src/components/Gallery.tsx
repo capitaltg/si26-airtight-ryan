@@ -8,6 +8,7 @@ import { Icon, ICON_NAMES } from "./ui/Icon"
 import { IconButton } from "./ui/IconButton"
 import { MicroCaps } from "./ui/MicroCaps"
 import { Modal } from "./ui/Modal"
+import { Sheet } from "./ui/Sheet"
 import { Tag } from "./ui/Tag"
 import { Textarea } from "./ui/Textarea"
 import { RUBRIC_ROWS, VerdictChip } from "./ui/VerdictChip"
@@ -121,6 +122,7 @@ function TextareaSpecimen() {
 
 function OverlaySpecimen() {
   const [modalOpen, setModalOpen] = useState(false)
+  const [sheetOpen, setSheetOpen] = useState(false)
 
   return (
     <Section title="Overlays">
@@ -147,6 +149,28 @@ function OverlaySpecimen() {
             </Button>
           </div>
         </Modal>
+      </Row>
+      <Row label="Sheet">
+        <Button data-testid="gallery-open-sheet" onClick={() => setSheetOpen(true)}>
+          Open sheet
+        </Button>
+        <Sheet
+          open={sheetOpen}
+          label="Gallery sheet"
+          onClose={() => setSheetOpen(false)}
+          data-testid="gallery-sheet"
+        >
+          <header className="sticky top-0 flex items-center justify-between border-b border-subtle bg-white p-4">
+            <h2 className="text-heading font-semibold text-text-strong">How you're scored</h2>
+            <IconButton name="x" aria-label="Close sheet" onClick={() => setSheetOpen(false)} />
+          </header>
+          <div className="space-y-3 p-4">
+            <p className="text-body-sm text-text-muted">
+              The drawer is the densest text surface in the app, so it is the one where text-faint's
+              reduced recession shows.
+            </p>
+          </div>
+        </Sheet>
       </Row>
     </Section>
   )
