@@ -69,7 +69,7 @@ export function VerdictChip({ row, size = "md", label, className, ...rest }: Ver
     <span
       {...rest}
       className={[
-        "inline-flex items-center rounded-chip border font-ui text-micro font-semibold uppercase",
+        "inline-flex items-center whitespace-nowrap rounded-chip border font-ui text-micro font-semibold uppercase",
         size === "lg" ? "h-[26px] px-2.5" : "h-[22px] px-2",
         TONES[row],
         className,

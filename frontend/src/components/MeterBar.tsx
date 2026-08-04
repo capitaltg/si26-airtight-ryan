@@ -13,7 +13,7 @@ export function MeterBar({ meter }: { meter: Meter }) {
   const width = Math.max(0, Math.min(100, meter.support))
   return (
     <div className="space-y-1">
-      <div className="flex items-baseline justify-between text-body-sm">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 text-body-sm">
         <span className="flex items-center gap-2 font-medium text-text-body">
           <PersonaAvatar personaId={meter.persona_id} size={20} />
           {prettify(meter.persona_id)}

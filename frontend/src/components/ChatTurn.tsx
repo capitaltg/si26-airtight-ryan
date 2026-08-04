@@ -101,7 +101,7 @@ export function ChatTurn({ turn }: { turn: TranscriptTurn }) {
       {/* persona reply + score */}
       <div className="flex justify-start">
         <div className={REPLY_BUBBLE}>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <PersonaAvatar personaId={turn.personaId} size={28} />
             <span className="text-body-sm font-semibold text-text-muted">
               {turn.displayName}, {prettify(turn.personaId)}

@@ -28,7 +28,7 @@ export function Badge({ tone = "neutral", className, children, ...rest }: BadgeP
     <span
       {...rest}
       className={[
-        "inline-flex h-5 items-center gap-1.5 rounded-chip px-2",
+        "inline-flex h-5 items-center gap-1.5 whitespace-nowrap rounded-chip px-2",
         "font-ui text-micro font-semibold uppercase",
         TONES[tone],
         className,
