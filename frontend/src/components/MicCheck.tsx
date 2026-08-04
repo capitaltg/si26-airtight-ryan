@@ -15,6 +15,9 @@ import {
 } from "../audio"
 import { LEVEL_THRESHOLD, resolveDeviceId, useAudioDevices, useInputLevel } from "../devices"
 import type { AudioDevice } from "../devices"
+import { Button } from "./ui/Button"
+import { MicroCaps } from "./ui/MicroCaps"
+import { Select } from "./ui/Select"
 
 // Auto-stop for the loopback recording. Long enough to say a sentence, short
 // enough that a presenter who walks away does not leave the mic open.
@@ -38,18 +41,14 @@ function DevicePicker({
 }) {
   return (
     <div className="space-y-1">
-      <label
-        htmlFor={id}
-        className="block text-xs font-semibold uppercase tracking-wide text-slate-600"
-      >
+      <MicroCaps as="label" htmlFor={id} className="block">
         {label}
-      </label>
-      <select
+      </MicroCaps>
+      <Select
         id={id}
         data-testid={testId}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
-        className="w-full rounded-md border border-slate-300 bg-white p-2 text-sm text-slate-800 focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
       >
         <option value="">System default</option>
         {devices.map((d, i) => (
@@ -57,14 +56,14 @@ function DevicePicker({
             {d.label || `Device ${i + 1}`}
           </option>
         ))}
-      </select>
+      </Select>
     </div>
   )
 }
 
 function ErrorLine({ message }: { message: string }) {
   return (
-    <p data-testid="mic-error" className="text-sm text-red-700">
+    <p data-testid="mic-error" className="text-body-sm text-crimson-700">
       {message}
     </p>
   )
@@ -201,19 +200,15 @@ export function MicCheck({
     <div data-testid="mic-check" className="space-y-4 text-left">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold text-slate-800">Mic check</h2>
-          <p className="text-xs text-slate-600">
+          <h2 className="text-heading font-semibold text-text-strong">Mic check</h2>
+          <p className="text-body-sm text-text-muted">
             The devices you pick here are the ones this rehearsal records and plays with.
           </p>
         </div>
         {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-          >
+          <Button variant="secondary" size="sm" onClick={onClose}>
             Close
-          </button>
+          </Button>
         )}
       </div>
 
@@ -222,15 +217,10 @@ export function MicCheck({
       {/* 1. Microphone */}
       {!labelsVisible ? (
         <div className="space-y-2">
-          <button
-            type="button"
-            onClick={askPermission}
-            disabled={asking}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:opacity-50"
-          >
+          <Button variant="primary" onClick={askPermission} disabled={asking}>
             {asking ? "Asking…" : "Allow microphone access"}
-          </button>
-          <p className="text-xs text-slate-600">
+          </Button>
+          <p className="text-body-sm text-text-muted">
             The browser needs permission before it will name your microphones.
           </p>
         </div>
@@ -244,9 +234,11 @@ export function MicCheck({
             value={resolvedInput}
             onChange={onInputChange}
           />
-          {inputs.length === 0 && <p className="text-sm text-slate-600">No microphone found.</p>}
+          {inputs.length === 0 && (
+            <p className="text-body-sm text-text-muted">No microphone found.</p>
+          )}
           {inputMissing && (
-            <p className="text-sm text-slate-600">
+            <p className="text-body-sm text-text-muted">
               The microphone you picked before is not connected. Using the system default.
             </p>
           )}
@@ -256,13 +248,17 @@ export function MicCheck({
             {Array.from({ length: LEVEL_SEGMENTS }, (_, i) => (
               <div
                 key={i}
-                className={`h-2 flex-1 rounded-full transition-colors ${
-                  i < filled ? "bg-emerald-500" : "bg-slate-200"
+                className={`h-2 flex-1 rounded-pill transition-colors ${
+                  i < filled ? "bg-moss-600" : "bg-sand-300"
                 }`}
               />
             ))}
           </div>
-          <p data-testid="mic-level-status" aria-live="polite" className="text-sm text-slate-700">
+          <p
+            data-testid="mic-level-status"
+            aria-live="polite"
+            className="text-body-sm text-text-body"
+          >
             {heard ? "Microphone is picking up sound" : "No sound detected yet"}
           </p>
         </div>
@@ -271,15 +267,15 @@ export function MicCheck({
       {levelError && <ErrorLine message={levelError} />}
 
       {/* 2. Test recording */}
-      <div className="space-y-2 border-t border-slate-200 pt-3">
-        <button
-          type="button"
+      <div className="space-y-2 border-t border-subtle pt-3">
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => void (recorder.recording ? stopTest() : startTest())}
-          className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
         >
           {recorder.recording ? "Stop" : "Record a test clip"}
-        </button>
-        <p className="text-xs text-slate-600">
+        </Button>
+        <p className="text-body-sm text-text-muted">
           Up to {MAX_TEST_SECONDS} seconds, played straight back. Nothing is sent anywhere.
         </p>
         {clipUrl && (
@@ -298,7 +294,7 @@ export function MicCheck({
       </div>
 
       {/* 3. Speakers */}
-      <div className="space-y-2 border-t border-slate-200 pt-3">
+      <div className="space-y-2 border-t border-subtle pt-3">
         {outputSelectionSupported() && (
           <>
             <DevicePicker
@@ -310,21 +306,17 @@ export function MicCheck({
               onChange={onOutputChange}
             />
             {outputMissing && (
-              <p className="text-sm text-slate-600">
+              <p className="text-body-sm text-text-muted">
                 The speakers you picked before are not connected. Using the system default.
               </p>
             )}
           </>
         )}
-        <button
-          type="button"
-          onClick={() => void playTestTone()}
-          className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-        >
+        <Button variant="secondary" size="sm" onClick={() => void playTestTone()}>
           Play test sound
-        </button>
+        </Button>
         {!outputSelectionSupported() && (
-          <p className="text-xs text-slate-600">
+          <p className="text-body-sm text-text-muted">
             This browser cannot choose an output device. The sound plays wherever your system sends
             it.
           </p>
