@@ -3,6 +3,7 @@ import type { ReactNode } from "react"
 
 import { Badge } from "./ui/Badge"
 import { Button, type ButtonSize, type ButtonVariant } from "./ui/Button"
+import { Card } from "./ui/Card"
 import { Icon, ICON_NAMES } from "./ui/Icon"
 import { IconButton } from "./ui/IconButton"
 import { MicroCaps } from "./ui/MicroCaps"
@@ -341,6 +342,22 @@ export default function Gallery() {
           <Button disabled title="Passthrough" data-testid="gallery-button-titled">
             Disabled with a title
           </Button>
+        </Row>
+      </Section>
+
+      <Section title="Card">
+        <Row label="Card · nesting">
+          {/* The nested block is rendered inside the card so the rule is
+              visible rather than described: sand-50 reads as a step down on
+              white and vanishes on the sand page ground. */}
+          <Card data-testid="gallery-card" className="w-full space-y-3">
+            <MicroCaps as="h3">Concern</MicroCaps>
+            <Card nested padding="sm" data-testid="gallery-card-nested">
+              <p className="text-body-sm text-text-muted">
+                A nested block: one radius step down, sand ground, no shadow.
+              </p>
+            </Card>
+          </Card>
         </Row>
       </Section>
 

@@ -135,6 +135,7 @@ airtight/
 │  │  │  ├─ ui/                  # design-system primitives
 │  │  │  │  ├─ Badge.tsx
 │  │  │  │  ├─ Button.tsx
+│  │  │  │  ├─ Card.tsx
 │  │  │  │  ├─ Icon.tsx          # 26 bundled Lucide glyphs, keyed by handoff name
 │  │  │  │  ├─ IconButton.tsx
 │  │  │  │  ├─ MicroCaps.tsx

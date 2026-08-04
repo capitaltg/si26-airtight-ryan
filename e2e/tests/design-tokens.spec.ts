@@ -227,6 +227,27 @@ test("Textarea is controlled and reports its value upward", async ({ page }) => 
 // The fill assertion is the direct regression test for spec §1.3 —
 // `unsubstantiated` rendered transparent because `bg-amber-600/10` compiled to
 // nothing at all.
+test("card renders the card radius, subtle border, and warm shadow", async ({ page }) => {
+  await page.goto("/?gallery")
+  const card = page.getByTestId("gallery-card")
+  const style = await card.evaluate((el) => {
+    const s = getComputedStyle(el)
+    return { radius: s.borderTopLeftRadius, bg: s.backgroundColor, shadow: s.boxShadow }
+  })
+  expect(style.radius).toBe("14px")
+  expect(style.bg).toBe("rgb(255, 255, 255)")
+  expect(style.shadow).not.toBe("none")
+
+  const nested = page.getByTestId("gallery-card-nested")
+  const nestedStyle = await nested.evaluate((el) => {
+    const s = getComputedStyle(el)
+    return { radius: s.borderTopLeftRadius, bg: s.backgroundColor, shadow: s.boxShadow }
+  })
+  expect(nestedStyle.radius).toBe("8px")
+  expect(nestedStyle.bg).toBe("rgb(245, 241, 236)")
+  expect(nestedStyle.shadow).toBe("none")
+})
+
 test("textarea forwards attributes and honors resize", async ({ page }) => {
   await page.goto("/?gallery")
   const box = page.getByTestId("gallery-textarea-resizable")
