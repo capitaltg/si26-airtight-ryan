@@ -227,6 +227,20 @@ test("Textarea is controlled and reports its value upward", async ({ page }) => 
 // The fill assertion is the direct regression test for spec §1.3 —
 // `unsubstantiated` rendered transparent because `bg-amber-600/10` compiled to
 // nothing at all.
+test("textarea forwards attributes and honors resize", async ({ page }) => {
+  await page.goto("/?gallery")
+  const box = page.getByTestId("gallery-textarea-resizable")
+  await expect(box).toHaveAttribute("maxlength", "500")
+  expect(await box.evaluate((el) => getComputedStyle(el).resize)).toBe("vertical")
+})
+
+test("micro caps tones resolve to distinct colors", async ({ page }) => {
+  await page.goto("/?gallery")
+  const read = (tone: string) =>
+    page.getByTestId(`gallery-microcaps-${tone}`).evaluate((el) => getComputedStyle(el).color)
+  expect(await read("muted")).not.toBe(await read("faint"))
+})
+
 test("every rubric row renders a chip with a resolved fill", async ({ page }) => {
   await page.goto("/?gallery")
   for (const row of RUBRIC_ROWS) {

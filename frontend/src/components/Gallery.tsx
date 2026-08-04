@@ -93,6 +93,16 @@ function TextareaSpecimen() {
           />
         </div>
       </div>
+      <Row label="Textarea · resizable, capped">
+        <Textarea
+          value={draft}
+          onChange={setDraft}
+          resize="vertical"
+          maxLength={500}
+          aria-label="Answer, resizable"
+          data-testid="gallery-textarea-resizable"
+        />
+      </Row>
       <Row label="VerdictChip · lg">
         {RUBRIC_ROWS.map((row) => (
           <VerdictChip key={row} row={row} size="lg" data-testid={`gallery-verdict-${row}`} />
@@ -371,6 +381,19 @@ export default function Gallery() {
       <Section title="Micro-caps label">
         <Row label="MicroCaps">
           <MicroCaps data-testid="gallery-microcaps">Briefing topic</MicroCaps>
+          <MicroCaps tone="muted" data-testid="gallery-microcaps-muted">
+            Muted
+          </MicroCaps>
+          <MicroCaps tone="faint" data-testid="gallery-microcaps-faint">
+            Faint
+          </MicroCaps>
+        </Row>
+        <Row label="MicroCaps · inverse">
+          <span className="rounded-card bg-navy-800 px-3 py-2">
+            <MicroCaps tone="inverse" as="span" data-testid="gallery-microcaps-inverse">
+              Inverse
+            </MicroCaps>
+          </span>
         </Row>
       </Section>
     </div>
