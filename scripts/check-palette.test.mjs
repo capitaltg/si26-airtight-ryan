@@ -22,7 +22,10 @@ test("flags amber and teal at a step the token layer does not define", () => {
 })
 
 test("allows the token steps of amber and teal", () => {
-  assert.deepEqual(scan('<p className="bg-amber-600 bg-amber-100 text-teal-600" />'), [])
+  assert.deepEqual(
+    scan('<p className="bg-amber-600 bg-amber-100 text-teal-600 bg-teal-100" />'),
+    [],
+  )
 })
 
 test("flags an opacity modifier on a token color", () => {

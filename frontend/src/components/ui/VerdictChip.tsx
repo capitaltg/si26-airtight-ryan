@@ -44,16 +44,26 @@ const LABELS: Record<RubricRow, string> = {
   red_line: "Red line",
 }
 
+// Every chip is filled with its own tone's tint, so the fill is a second reading
+// of the verdict rather than a shape that happens to be white. It also stops the
+// chip from dissolving into its ground: all three call sites render on white
+// (`REPLY_BUBBLE`, the report's `Card`, the rubric drawer), where a `bg-white`
+// chip had only its border to separate it from the surface behind it.
+//
+// Contrast on the tint, measured, all AA at 12px: moss 4.89, teal 6.98,
+// crimson 8.07, text-body on amber 9.87.
 const TONES: Record<RubricRow, string> = {
-  evidence_backed: "border-moss-600 bg-white text-moss-600",
-  approach_cited: "border-teal-600 bg-white text-teal-600",
-  // The three cautionary rows share amber. amber-600 cannot be text (3.77:1),
-  // so the tone is a tint plus a full-weight border behind text-body.
+  evidence_backed: "border-moss-600 bg-moss-100 text-moss-600",
+  approach_cited: "border-teal-600 bg-teal-100 text-teal-600",
+  // The three cautionary rows share amber. amber-600 cannot be text (3.77:1), so
+  // amber is the one tone whose label is text-body rather than the accent itself.
   unsubstantiated: "border-amber-600 bg-amber-100 text-text-body",
   contradiction: "border-amber-600 bg-amber-100 text-text-body",
   over_limit: "border-amber-600 bg-amber-100 text-text-body",
-  dodge: "border-crimson-700 bg-white text-crimson-700",
-  false_fact: "border-crimson-700 bg-white text-crimson-700",
+  dodge: "border-crimson-700 bg-crimson-100 text-crimson-700",
+  false_fact: "border-crimson-700 bg-crimson-100 text-crimson-700",
+  // Solid, not tinted: red_line is the top of the escalation, and the whole
+  // point of the ladder is that this one does not look like the rest.
   red_line: "border-crimson-700 bg-crimson-700 text-text-inverse",
 }
 

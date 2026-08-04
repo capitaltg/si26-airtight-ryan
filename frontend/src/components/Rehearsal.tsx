@@ -814,8 +814,7 @@ export function Rehearsal({ onEditPersonas }: { onEditPersonas: () => void }) {
                 </h1>
               </div>
               <p className="mx-auto max-w-prose text-body text-text-muted">
-                Rehearse a federal-orals evaluation. Answer three evaluator personas; every turn
-                earns a deterministic, code-owned score.
+                Rehearse possible questions from federal panelists and get scored on your answers.
               </p>
             </div>
             <div className="space-y-3">
@@ -917,7 +916,7 @@ export function Rehearsal({ onEditPersonas }: { onEditPersonas: () => void }) {
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <img src="/airtight-logo.svg" alt="" className="h-7 w-auto" />
-          <h1 className="text-display-xs font-semibold text-text-strong">Airtight rehearsal</h1>
+          <h1 className="text-display-xs font-semibold text-text-strong">Airtight</h1>
         </div>
         {/* No persona-editor control here. A running session has already fixed
             its agenda and its evaluators; editing them mid-rehearsal would leave

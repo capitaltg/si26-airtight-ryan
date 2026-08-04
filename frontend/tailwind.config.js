@@ -17,7 +17,7 @@ export default {
           100: "var(--crimson-100)",
         },
         navy: { 900: "var(--navy-900)", 800: "var(--navy-800)" },
-        teal: { 600: "var(--teal-600)" },
+        teal: { 600: "var(--teal-600)", 100: "var(--teal-100)" },
         taupe: { 600: "var(--taupe-600)" },
         sand: { 300: "var(--sand-300)", 200: "var(--sand-200)", 50: "var(--sand-50)" },
         moss: { 600: "var(--moss-600)", 100: "var(--moss-100)" },

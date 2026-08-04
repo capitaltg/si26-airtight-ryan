@@ -14,12 +14,11 @@ import { Card } from "./ui/Card"
 import { Input } from "./ui/Input"
 import { MicroCaps } from "./ui/MicroCaps"
 import { Modal } from "./ui/Modal"
+import { Select } from "./ui/Select"
 import { Textarea } from "./ui/Textarea"
 
-const LINE_FIELDS = [
-  { key: "display_name", label: "Display name" },
-  { key: "polly_voice_id", label: "Polly voice id" },
-] as const
+const LINE_FIELDS = [{ key: "display_name", label: "Display name" }] as const
+const POLLY_VOICE_IDS = ["Matthew", "Ruth", "Danielle"]
 
 const BLOCK_FIELDS = [
   { key: "intro", label: "Intro" },
@@ -136,6 +135,23 @@ export function PersonaForm({
             <FieldMessage message={errorFor(errors, field.key)} />
           </label>
         ))}
+        <label className="block">
+          <MicroCaps as="span" className="block">
+            Polly voice id
+          </MicroCaps>
+          <Select
+            data-testid="field-polly_voice_id"
+            value={draft.polly_voice_id}
+            onChange={(event) => setField("polly_voice_id", event.target.value)}
+          >
+            {POLLY_VOICE_IDS.map((voiceId) => (
+              <option key={voiceId} value={voiceId}>
+                {voiceId}
+              </option>
+            ))}
+          </Select>
+          <FieldMessage message={errorFor(errors, "polly_voice_id")} />
+        </label>
       </div>
 
       {BLOCK_FIELDS.map((field) => (
@@ -215,11 +231,11 @@ export function PersonaForm({
               </label>
               <div className="grid gap-2 sm:grid-cols-[8rem_1fr]">
                 <p
-                  className="block rounded-control border border-subtle bg-sand-200 px-3 py-2 text-body-sm text-text-body"
+                  className="block rounded-control border border-subtle bg-sand-200 px-3 py-2 text-body font-semibold text-text-body"
                   data-testid={`exemplar-delta-${i}`}
                 >
-                  Score calibration: {exemplar.support_delta >= 0 ? "+" : ""}
-                  {exemplar.support_delta} (locked)
+                  {exemplar.support_delta >= 0 ? "+" : ""}
+                  {exemplar.support_delta}
                 </p>
                 <label className="block" htmlFor={`exemplar-${i}-note`}>
                   <MicroCaps as="span" className="block">

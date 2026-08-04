@@ -51,13 +51,25 @@ test("the form pre-fills from the server and shows the locked fields read-only",
   await page.getByTestId("toggle-contracting_officer").click()
 
   await expect(page.getByTestId("field-display_name")).toHaveValue("Marcus")
-  await expect(page.getByTestId("field-polly_voice_id")).toHaveValue("Matthew")
+  const pollyVoice = page.getByTestId("field-polly_voice_id")
+  await expect(pollyVoice).toHaveValue("Matthew")
+  await expect(pollyVoice).toHaveJSProperty("tagName", "SELECT")
+  await expect(pollyVoice.locator("option")).toHaveCount(3)
+  await expect(pollyVoice.locator('option[value="Matthew"]')).toHaveCount(1)
+  await expect(pollyVoice.locator('option[value="Ruth"]')).toHaveCount(1)
+  await expect(pollyVoice.locator('option[value="Danielle"]')).toHaveCount(1)
   await expect(page.getByTestId("field-intro")).toHaveValue(
     "Marcus Reyes, contracting officer on this acquisition.",
   )
   const supportDelta = page.getByTestId("exemplar-delta-0")
-  await expect(supportDelta).toHaveText("Score calibration: +2 (locked)")
+  await expect(supportDelta).toHaveText("+2")
   await expect(supportDelta).toHaveJSProperty("tagName", "P")
+  await expect(supportDelta).toHaveCSS("font-size", "14px")
+  const [scoreBox, detailsBox] = await Promise.all([
+    supportDelta.boundingBox(),
+    supportDelta.locator("..").boundingBox(),
+  ])
+  expect(scoreBox!.width).toBeLessThan(detailsBox!.width)
   await expect(page.locator('input[data-testid="exemplar-delta-0"]')).toHaveCount(0)
   await expect(page.getByTestId("locked-id")).toHaveText("contracting_officer")
   await expect(page.getByTestId("locked-rubric-version")).toHaveText("1")
@@ -81,6 +93,7 @@ test("saving PUTs only the editable fields", async ({ page }) => {
   await openEditor(page)
   await page.getByTestId("toggle-contracting_officer").click()
   await page.getByTestId("field-display_name").fill("Mira")
+  await page.getByTestId("field-polly_voice_id").selectOption("Ruth")
   await page.getByRole("button", { name: "Save persona" }).click()
 
   await expect(page.getByRole("status")).toHaveText("Saved")
@@ -89,6 +102,7 @@ test("saving PUTs only the editable fields", async ({ page }) => {
   expect(sent).not.toHaveProperty("id")
   expect(sent).not.toHaveProperty("priorities")
   expect(sent).not.toHaveProperty("rubric_version")
+  expect(sent!.polly_voice_id).toBe("Ruth")
   // Exemplars go up without a persona — the server stamps it.
   expect(sent!.exemplars).toEqual([
     { user: "Firm-fixed price, 28 FTE.", support_delta: 2, note: "Backed." },

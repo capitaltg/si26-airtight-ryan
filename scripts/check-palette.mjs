@@ -25,9 +25,9 @@ const RULES = [
     // The stock scales, plus amber and teal at any step the token layer does
     // not define — those two keys are the only ones theme.extend partly
     // overrides, so `bg-amber-50` renders a stock value while `bg-amber-600`
-    // and `bg-amber-100` render tokens.
+    // and `bg-amber-100` render tokens. Both now define 600 and 100.
     pattern: new RegExp(
-      `\\b(?:${PROPS})-(?:(?:${STOCK_SCALES})-\\d{2,3}|amber-(?!(?:600|100)\\b)\\d{2,3}|teal-(?!600\\b)\\d{2,3})\\b`,
+      `\\b(?:${PROPS})-(?:(?:${STOCK_SCALES})-\\d{2,3}|(?:amber|teal)-(?!(?:600|100)\\b)\\d{2,3})\\b`,
       "g",
     ),
     message: "stock Tailwind color — use a token utility (spec §3.2)",
