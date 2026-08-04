@@ -1,10 +1,24 @@
-import { useState } from "react"
+import { lazy, Suspense, useState } from "react"
 
 import { PersonaEditor } from "./components/PersonaEditor"
 import { Rehearsal } from "./components/Rehearsal"
 
+// Vite statically replaces `import.meta.env.DEV` with `false` in a production
+// build, so the ternary folds to `null` and Rollup drops the dynamic import
+// entirely — the gallery chunk is not merely unloaded, it is not emitted.
+// SP2 converts this to a real route once react-router lands.
+const Gallery = import.meta.env.DEV ? lazy(() => import("./components/Gallery")) : null
+
 export default function App() {
   const [view, setView] = useState<"rehearsal" | "personas">("rehearsal")
+
+  if (Gallery && new URLSearchParams(window.location.search).has("gallery")) {
+    return (
+      <Suspense fallback={null}>
+        <Gallery />
+      </Suspense>
+    )
+  }
 
   return (
     <>

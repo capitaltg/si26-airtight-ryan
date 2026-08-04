@@ -132,10 +132,14 @@ airtight/
 │  │  ├─ api/
 │  │  │  └─ client.ts
 │  │  ├─ components/
+│  │  │  ├─ ui/                  # design-system primitives (Icon, MicroCaps, …)
+│  │  │  │  ├─ Icon.tsx
+│  │  │  │  └─ MicroCaps.tsx
 │  │  │  ├─ AfterActionReport.tsx
 │  │  │  ├─ ArchiveView.tsx
 │  │  │  ├─ ChatTurn.tsx
 │  │  │  ├─ DiscardRecordingDialog.tsx
+│  │  │  ├─ Gallery.tsx          # dev-only token + primitive gallery (/?gallery)
 │  │  │  ├─ HistoryList.tsx
 │  │  │  ├─ MeterBar.tsx
 │  │  │  ├─ MicCheck.tsx

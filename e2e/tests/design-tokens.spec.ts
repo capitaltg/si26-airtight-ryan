@@ -51,3 +51,34 @@ test("the raw palette anchors resolve to their handoff values", async ({ page })
     amber: "#B4762A",
   })
 })
+
+test("the gallery is reachable and renders icons and micro-caps labels", async ({ page }) => {
+  await page.goto("/?gallery")
+  await expect(page.getByRole("heading", { name: "Airtight design system" })).toBeVisible()
+
+  // Icon renders a real inline SVG at the requested size.
+  const icon = page.getByTestId("gallery-icon-gavel").locator("svg")
+  await expect(icon).toBeVisible()
+  const box = await icon.boundingBox()
+  expect(box?.width).toBe(17)
+  expect(box?.height).toBe(17)
+
+  // MicroCaps carries the 0.09em tracking that marks it in the handoff.
+  const caps = page.getByTestId("gallery-microcaps")
+  await expect(caps).toHaveText("Briefing topic")
+  const capsStyle = await caps.evaluate((el) => {
+    const cs = getComputedStyle(el)
+    return {
+      size: cs.fontSize,
+      weight: cs.fontWeight,
+      tracking: cs.letterSpacing,
+      transform: cs.textTransform,
+    }
+  })
+  expect(capsStyle).toEqual({
+    size: "12px",
+    weight: "600",
+    tracking: "1.08px", // 0.09em at 12px
+    transform: "uppercase",
+  })
+})
