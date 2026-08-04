@@ -7,6 +7,7 @@ import { Card } from "./ui/Card"
 import { Icon, ICON_NAMES } from "./ui/Icon"
 import { IconButton } from "./ui/IconButton"
 import { MicroCaps } from "./ui/MicroCaps"
+import { Modal } from "./ui/Modal"
 import { Tag } from "./ui/Tag"
 import { Textarea } from "./ui/Textarea"
 import { RUBRIC_ROWS, VerdictChip } from "./ui/VerdictChip"
@@ -113,6 +114,39 @@ function TextareaSpecimen() {
         {RUBRIC_ROWS.map((row) => (
           <VerdictChip key={row} row={row} />
         ))}
+      </Row>
+    </Section>
+  )
+}
+
+function OverlaySpecimen() {
+  const [modalOpen, setModalOpen] = useState(false)
+
+  return (
+    <Section title="Overlays">
+      <Row label="Modal">
+        <Button data-testid="gallery-open-modal" onClick={() => setModalOpen(true)}>
+          Open modal
+        </Button>
+        <Modal
+          open={modalOpen}
+          label="Gallery modal"
+          onClose={() => setModalOpen(false)}
+          data-testid="gallery-modal"
+        >
+          <h2 className="text-heading font-semibold text-text-strong">End this session?</h2>
+          <p className="text-body-sm text-text-muted">
+            The scrim is a token, not a Tailwind opacity modifier: a var() color takes no `/NN`.
+          </p>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setModalOpen(false)}>
+              Keep going
+            </Button>
+            <Button variant="primary" onClick={() => setModalOpen(false)}>
+              End session
+            </Button>
+          </div>
+        </Modal>
       </Row>
     </Section>
   )
@@ -394,6 +428,8 @@ export default function Gallery() {
       </Section>
 
       <TextareaSpecimen />
+
+      <OverlaySpecimen />
 
       <Section title="Micro-caps label">
         <Row label="MicroCaps">

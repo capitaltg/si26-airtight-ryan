@@ -227,6 +227,19 @@ test("Textarea is controlled and reports its value upward", async ({ page }) => 
 // The fill assertion is the direct regression test for spec §1.3 —
 // `unsubstantiated` rendered transparent because `bg-amber-600/10` compiled to
 // nothing at all.
+test("modal renders a scrim over a card and closes on Escape", async ({ page }) => {
+  await page.goto("/?gallery")
+  await page.getByTestId("gallery-open-modal").click()
+  const scrim = page.getByTestId("gallery-modal-scrim")
+  await expect(scrim).toBeVisible()
+  expect(await scrim.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(
+    "rgba(12, 30, 42, 0.4)",
+  )
+  await expect(page.getByRole("dialog", { name: "Gallery modal" })).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(scrim).toBeHidden()
+})
+
 test("card renders the card radius, subtle border, and warm shadow", async ({ page }) => {
   await page.goto("/?gallery")
   const card = page.getByTestId("gallery-card")
