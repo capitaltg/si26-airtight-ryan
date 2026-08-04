@@ -15,9 +15,9 @@ import { Tag } from "./ui/Tag"
 import { Textarea } from "./ui/Textarea"
 import { RUBRIC_ROWS, VerdictChip } from "./ui/VerdictChip"
 
-// Development-only surface. The repo has no Storybook and SP1 changes no
-// screen, so this is where a token or primitive is checked before a screen
-// consumes it in SP3–SP7. Mounted from App.tsx behind `import.meta.env.DEV`.
+// Development-only surface, and the permanent one: the repo has no Storybook, so
+// this is where a token or primitive is checked in isolation before or after a
+// screen consumes it. Mounted from App.tsx behind `import.meta.env.DEV`.
 
 const BUTTON_VARIANTS: ButtonVariant[] = ["primary", "secondary", "ghost", "inverse", "danger"]
 const BUTTON_SIZES: ButtonSize[] = ["sm", "md", "lg"]
@@ -257,7 +257,7 @@ export default function Gallery() {
               />
               {/* Label in text-body, never in the swatch color: amber-600 and
                   taupe-600 both fail AA as text. */}
-              <span className="font-data text-[12px] text-text-body">{token}</span>
+              <span className="font-data text-micro text-text-body">{token}</span>
             </div>
           ))}
         </div>
@@ -326,7 +326,7 @@ export default function Gallery() {
             <div
               key={radius}
               data-testid={`gallery-radius-${radius}`}
-              className={`flex h-16 w-24 items-center justify-center border border-subtle bg-white font-data text-[12px] text-text-body rounded-${radius}`}
+              className={`flex h-16 w-24 items-center justify-center border border-subtle bg-white font-data text-micro text-text-body rounded-${radius}`}
             >
               {radius}
             </div>
@@ -337,7 +337,7 @@ export default function Gallery() {
             <div
               key={shadow}
               data-testid={`gallery-shadow-${shadow}`}
-              className={`flex h-16 w-24 items-center justify-center rounded-card bg-white font-data text-[12px] text-text-body shadow-${shadow}`}
+              className={`flex h-16 w-24 items-center justify-center rounded-card bg-white font-data text-micro text-text-body shadow-${shadow}`}
             >
               {shadow}
             </div>
@@ -359,7 +359,7 @@ export default function Gallery() {
               className="flex w-24 flex-col items-center gap-2 rounded-block border border-subtle bg-white p-3 text-text-body"
             >
               <Icon name={name} />
-              <span className="text-center text-[10px] leading-tight text-text-muted">{name}</span>
+              <span className="text-center text-micro leading-tight text-text-muted">{name}</span>
             </div>
           ))}
         </div>
@@ -412,7 +412,7 @@ export default function Gallery() {
           />
         </Row>
         <Row label="Attribute passthrough">
-          {/* `title` and `disabled` are native attributes the SP1 prop type
+          {/* `title` and `disabled` are native attributes the original prop type
               could not express; 39 call sites need that. */}
           <Button disabled title="Passthrough" data-testid="gallery-button-titled">
             Disabled with a title

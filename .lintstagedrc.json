@@ -1,4 +1,4 @@
 {
   "*.{ts,tsx,js,jsx,mjs,cjs}": ["oxlint --fix", "oxfmt --write"],
-  "frontend/src/**/*.{ts,tsx,css}": ["node scripts/check-palette.mjs --warn"]
+  "frontend/src/**/*.{ts,tsx,css}": ["node scripts/check-palette.mjs"]
 }

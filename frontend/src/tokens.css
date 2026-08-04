@@ -29,7 +29,8 @@
   --amber-600: #B4762A; /* NEVER A TEXT COLOR — 3.77:1 on white fails AA at
                              body size. Fill, border, or icon behind dark text
                              only. A partial-verdict *label* needs a darker
-                             amber, which is a question for the design bundle. */
+                             amber; until one exists, every "partial" signal is
+                             dark text on the --amber-100 tint. */
   --moss-100: #E1E4DC; /* moss-600 at 10% into sand-50 — success tint behind dark text */
   --amber-100: #EFE5D9; /* amber-600 at 10% into sand-50. amber-600 itself may
                            never be text (3.77:1); this is how "partial" is

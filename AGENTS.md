@@ -118,6 +118,7 @@ airtight/
 │  │  ├─ persona-editor.spec.ts  # mocked editor coverage; never writes shared persona store
 │  │  ├─ persona-intro.spec.ts
 │  │  ├─ scoring-legibility.spec.ts # row applications, clamp marker, rubric combination rules
+│  │  ├─ screen-palette.spec.ts
 │  │  ├─ session-history.spec.ts # past-rehearsals list and archive view
 │  │  ├─ tangent-limits.spec.ts  # live answer-limit disclosure and warnings
 │  │  ├─ voice-prompt-audio.spec.ts

@@ -21,7 +21,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
   inverse: "bg-white/10 text-text-inverse border border-inverse hover:bg-white/20",
   // Not specified by the handoff. Crimson-on-crimson would be indistinguishable
   // from `primary`, and the design allows at most one accent per view, so
-  // danger is the outlined form. See the plan's Deviations §3.
+  // danger is the outlined form. See docs/specs/2026-08-04-theming-sitewide-design.md §4.
   danger: "bg-transparent text-crimson-700 border border-crimson-700 hover:bg-crimson-100",
 }
 
