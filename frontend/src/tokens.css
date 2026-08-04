@@ -19,12 +19,12 @@
   --navy-800: #122E40; /* structural chrome: nav rail, Layout B ground */
   --navy-900: #0C1E2A; /* navy-800 mixed 35% black — gradient foot */
   --teal-600: #1E4E59; /* calm accent: focus ring, member seals */
-  --teal-100: #E0E1DD; /* teal-600 at 10% into sand-50 — verdict-chip tint.
-                            Near-identical to --moss-100 (#E1E4DC) by
-                            construction: two mid-tone accents reduced to a 10%
-                            wash land in the same place. The chip's border and
-                            label color carry moss-vs-teal; the tint only lifts
-                            it off white. */
+  --teal-100: #E0E1DD; /* teal-600 at 10% into sand-50. No consumer today: it was
+                            the approach-cited chip tint until that row moved onto
+                            moss, and it is near-identical to --moss-100 (#E1E4DC)
+                            anyway, because two mid-tone accents reduced to a 10%
+                            wash land in the same place. Kept as the declared
+                            partner to --teal-600, not as a second green. */
   --taupe-600: #73675D; /* staff seals, secondary borders */
   --sand-300: #D9CEC5; /* NOT A TEXT GROUND — text-faint (3.91), moss-600
                              (4.07) and taupe-600 (3.55) all fail AA on it.
