@@ -54,10 +54,11 @@ export default {
       // Tuples so one utility carries size, leading, and tracking together.
       fontSize: {
         micro: ["12px", { lineHeight: "1.2", letterSpacing: "0.09em" }],
-        "body-sm": ["13px", { lineHeight: "1.5" }],
-        body: ["15px", { lineHeight: "1.65" }],
+        // body/body-sm are main's text-sm/text-xs, leading included. See tokens.css.
+        "body-sm": ["12px", { lineHeight: "1.33" }],
+        body: ["14px", { lineHeight: "1.43" }],
         heading: ["17px", { lineHeight: "1.3", letterSpacing: "-0.01em" }],
-        subheading: ["15px", { lineHeight: "1.35" }],
+        subheading: ["14px", { lineHeight: "1.35" }],
         quote: ["20px", { lineHeight: "1.4", letterSpacing: "-0.01em" }],
         "display-xs": ["24px", { lineHeight: "1.2", letterSpacing: "-0.02em" }],
         "display-sm": ["30px", { lineHeight: "1.15", letterSpacing: "-0.02em" }],

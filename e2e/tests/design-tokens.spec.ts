@@ -21,7 +21,7 @@ test("the page ground and body type come from the token layer", async ({ page })
 
   expect(body.background).toBe("rgb(245, 241, 236)") // --sand-50, never pure white
   expect(body.family).toContain("Public Sans")
-  expect(body.size).toBe("15px")
+  expect(body.size).toBe("14px")
   expect(body.color).toBe("rgb(42, 59, 71)") // --text-body
 })
 
@@ -204,16 +204,16 @@ const RUBRIC_ROWS = [
   "red_line",
 ]
 
-test("Textarea renders at 148px for five rows in both modes", async ({ page }) => {
+test("Textarea renders at 126px for five rows in both modes", async ({ page }) => {
   await page.goto("/?gallery")
 
   for (const mode of ["default", "inverse"]) {
     const field = page.getByTestId(`gallery-textarea-${mode}`)
     await expect(field).toBeVisible()
     const height = (await field.boundingBox())?.height ?? 0
-    // rows=5 at 15px/1.65 plus 12px padding resolves to ~148px; font metrics
-    // vary by a fraction of a pixel between platforms.
-    expect(Math.abs(height - 148), `${mode} height was ${height}`).toBeLessThanOrEqual(2)
+    // rows=5 at 14px/1.43 plus `p-3` and the border resolves to ~126px; font
+    // metrics vary by a fraction of a pixel between platforms.
+    expect(Math.abs(height - 126), `${mode} height was ${height}`).toBeLessThanOrEqual(2)
   }
 })
 
@@ -234,7 +234,7 @@ test("input and select share the control radius and token border", async ({ page
       const s = getComputedStyle(el)
       return { radius: s.borderTopLeftRadius, border: s.borderTopColor }
     })
-    expect(style.radius).toBe("5px")
+    expect(style.radius).toBe("6px")
     expect(style.border).toBe("rgb(223, 213, 205)") // --border-subtle
   }
   const invalid = await page
@@ -267,14 +267,14 @@ test("modal renders a scrim over a card and closes on Escape", async ({ page }) 
   await expect(scrim).toBeHidden()
 })
 
-test("card renders the card radius, subtle border, and warm shadow", async ({ page }) => {
+test("card renders the card radius, subtle border, and a shadow", async ({ page }) => {
   await page.goto("/?gallery")
   const card = page.getByTestId("gallery-card")
   const style = await card.evaluate((el) => {
     const s = getComputedStyle(el)
     return { radius: s.borderTopLeftRadius, bg: s.backgroundColor, shadow: s.boxShadow }
   })
-  expect(style.radius).toBe("14px")
+  expect(style.radius).toBe("8px")
   expect(style.bg).toBe("rgb(255, 255, 255)")
   expect(style.shadow).not.toBe("none")
 
@@ -326,7 +326,7 @@ test("the gallery renders every token specimen", async ({ page }) => {
   await expect(page.getByTestId("gallery-type-quote")).toHaveCSS("font-style", "italic")
   await expect(page.getByTestId("gallery-type-data")).toHaveCSS("font-family", /IBM Plex Mono/)
 
-  await expect(page.getByTestId("gallery-radius-card")).toHaveCSS("border-radius", "14px")
+  await expect(page.getByTestId("gallery-radius-card")).toHaveCSS("border-radius", "8px")
   await expect(page.getByTestId("gallery-shadow-overlay")).not.toHaveCSS("box-shadow", "none")
 })
 

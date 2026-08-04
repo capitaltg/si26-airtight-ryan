@@ -12,9 +12,10 @@ type TextareaProps = Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "onChange
   resize?: "none" | "vertical"
 }
 
-// 148px at rows=5 — the prototype's `hint-size` — which falls out of five
-// 15px/1.65 lines plus 12px of vertical padding. Keep `p-3` and `text-body`
-// together; changing either changes the specified height.
+// 126px at rows=5: five 14px/1.43 lines plus `p-3`'s vertical padding and the
+// border. The handoff specified 148px off a 15px/1.65 body; body type is now
+// main's 14px/1.43, so the box follows it down. Keep `p-3` and `text-body`
+// together; changing either changes the height.
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea(
   { rows = 5, value, onChange, hint, inverse = false, resize = "none", ...rest },
   ref,

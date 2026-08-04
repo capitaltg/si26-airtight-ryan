@@ -22,6 +22,14 @@ export const RUBRIC_ROWS: RubricRow[] = [
   "red_line",
 ]
 
+// `RubricDisclosure.rows[].id` is a bare `string` on the wire, so a caller that
+// renders straight from the rubric endpoint needs this before it can pick a tone.
+// A row the server grows and the chip has no tone for falls back to plain text
+// rather than an untoned chip.
+export function isRubricRow(id: string): id is RubricRow {
+  return (RUBRIC_ROWS as string[]).includes(id)
+}
+
 // Sentence case, not `prettify()`: that helper title-cases every word, so
 // `red_line` would read "Red Line". `prettify` is used in 20 other places and is
 // not changed here.

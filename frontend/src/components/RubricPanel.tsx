@@ -10,6 +10,7 @@ import { Card } from "./ui/Card"
 import { IconButton } from "./ui/IconButton"
 import { MicroCaps } from "./ui/MicroCaps"
 import { Sheet } from "./ui/Sheet"
+import { VerdictChip, isRubricRow } from "./ui/VerdictChip"
 
 export function RubricPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { data, isLoading, isError } = useRubric()
@@ -57,8 +58,20 @@ export function RubricPanel({ open, onClose }: { open: boolean; onClose: () => v
                         </span>
                       </td>
                       <td className="py-1.5 align-top">
-                        <div className="font-medium text-text-strong">{prettify(row.id)}</div>
-                        <div className="text-body-sm text-text-muted">{row.description}</div>
+                        {/* The chip carries the row name, so the name is not
+                            also printed as text: the drawer is where the tones
+                            are learned, and a chip beside a duplicate label
+                            teaches the pairing twice. */}
+                        {isRubricRow(row.id) ? (
+                          <VerdictChip
+                            row={row.id}
+                            size="lg"
+                            data-testid={`rubric-row-${row.id}`}
+                          />
+                        ) : (
+                          <div className="font-medium text-text-strong">{prettify(row.id)}</div>
+                        )}
+                        <div className="mt-1 text-body-sm text-text-muted">{row.description}</div>
                         {row.note && (
                           <div className="mt-0.5 text-body-sm italic text-text-muted">
                             {row.note}
