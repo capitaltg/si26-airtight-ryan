@@ -1,149 +1,129 @@
 // "How you're scored" drawer — the disclosed rubric (spec: the rubric is shown,
-// not hidden). A shadcn `Sheet`-style slide-in built with Tailwind: an overlay
-// plus a right-anchored panel, closed on backdrop click or Escape.
-
-import { useEffect } from "react"
+// not hidden). The slide-in itself is the `Sheet` primitive, which owns the
+// scrim, the backdrop click, and the Escape listener; this component owns the
+// content.
 
 import { useRubric } from "../api/client"
 import { prettify } from "../lib"
+import { Badge } from "./ui/Badge"
+import { Card } from "./ui/Card"
+import { IconButton } from "./ui/IconButton"
+import { MicroCaps } from "./ui/MicroCaps"
+import { Sheet } from "./ui/Sheet"
 
 export function RubricPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { data, isLoading, isError } = useRubric()
 
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [open, onClose])
-
-  if (!open) return null
-
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <div className="absolute inset-0 bg-slate-900/40" onClick={onClose} aria-hidden="true" />
-      <dialog
-        open
-        aria-label="How you're scored"
-        className="relative m-0 flex h-full w-full max-w-md flex-col overflow-y-auto bg-white p-0 text-slate-900 shadow-xl"
-      >
-        <header className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">How you&apos;re scored</h2>
-            {data && (
-              <p className="text-xs text-slate-500">
-                Rubric v{data.version} · code-owned, deterministic scoring
-              </p>
-            )}
-          </div>
-          <button
-            onClick={onClose}
-            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-            aria-label="Close"
-          >
-            ✕
-          </button>
-        </header>
-
-        <div className="flex-1 space-y-6 px-5 py-4">
-          {isLoading && <p className="text-sm text-slate-500">Loading rubric…</p>}
-          {isError && <p className="text-sm text-red-700">Could not load the rubric.</p>}
-
+    <Sheet open={open} onClose={onClose} label="How you're scored">
+      <header className="sticky top-0 flex items-center justify-between border-b border-subtle bg-white px-5 py-4">
+        <div>
+          <h2 className="text-heading font-semibold text-text-strong">How you&apos;re scored</h2>
           {data && (
-            <>
-              <section className="space-y-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Scoring rows
-                </h3>
-                <table className="w-full text-sm">
-                  <tbody>
-                    {data.rows.map((row) => (
-                      <tr key={row.id} className="border-b border-slate-100 last:border-0">
-                        <td className="py-1.5 pr-3 align-top">
-                          <span
-                            className={`tabular-nums font-semibold ${
-                              row.support_value > 0
-                                ? "text-emerald-700"
-                                : row.support_value < 0
-                                  ? "text-orange-700"
-                                  : "text-slate-500"
-                            }`}
-                          >
-                            {row.support_value > 0 ? `+${row.support_value}` : row.support_value}
-                          </span>
-                        </td>
-                        <td className="py-1.5 align-top">
-                          <div className="font-medium text-slate-800">{prettify(row.id)}</div>
-                          <div className="text-xs text-slate-500">{row.description}</div>
-                          {row.note && (
-                            <div className="mt-0.5 text-xs italic text-slate-500">{row.note}</div>
-                          )}
-                          {row.cap !== null && (
-                            <div className="mt-1 inline-block rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-700">
-                              {row.support_value} per turn · {row.cap} permanent cap
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </section>
-
-              {data.combination.length > 0 && (
-                <section className="space-y-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    How rows combine
-                  </h3>
-                  <ol className="ml-4 list-decimal space-y-1 text-xs text-slate-600">
-                    {data.combination.map((rule) => (
-                      <li key={rule}>{rule}</li>
-                    ))}
-                  </ol>
-                </section>
-              )}
-
-              <section className="space-y-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  What each concern needs
-                </h3>
-                {data.concerns.map((c) => (
-                  <details
-                    key={c.concern_id}
-                    className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
-                  >
-                    <summary className="cursor-pointer text-sm font-medium text-slate-800">
-                      {prettify(c.concern_id)}
-                    </summary>
-                    <div className="mt-2 space-y-2 text-xs text-slate-600">
-                      <p>
-                        <span className="font-semibold text-slate-500">Core ask: </span>
-                        {c.core_ask}
-                      </p>
-                      <p>
-                        <span className="font-semibold text-slate-500">Satisfies: </span>
-                        {c.what_would_satisfy}
-                      </p>
-                      {c.red_lines.length > 0 && (
-                        <div>
-                          <span className="font-semibold text-red-600">Red lines:</span>
-                          <ul className="ml-4 list-disc">
-                            {c.red_lines.map((rl) => (
-                              <li key={rl}>{rl}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  </details>
-                ))}
-              </section>
-            </>
+            <p className="text-body-sm text-text-muted">
+              Rubric v{data.version} · code-owned, deterministic scoring
+            </p>
           )}
         </div>
-      </dialog>
-    </div>
+        <IconButton name="x" aria-label="Close" onClick={onClose} />
+      </header>
+
+      <div className="flex-1 space-y-6 px-5 py-4">
+        {isLoading && <p className="text-body-sm text-text-muted">Loading rubric…</p>}
+        {isError && <p className="text-body-sm text-crimson-700">Could not load the rubric.</p>}
+
+        {data && (
+          <>
+            <section className="space-y-2">
+              <MicroCaps as="h3">Scoring rows</MicroCaps>
+              <table className="w-full text-body-sm">
+                <tbody>
+                  {data.rows.map((row) => (
+                    <tr key={row.id} className="border-b border-subtle last:border-0">
+                      <td className="py-1.5 pr-3 align-top">
+                        {/* A negative support value is a penalty, not a caution,
+                            so it reads crimson: amber cannot be text at all
+                            (3.77:1), and the negative reading is available. */}
+                        <span
+                          className={`font-data font-semibold tabular-nums ${
+                            row.support_value > 0
+                              ? "text-moss-600"
+                              : row.support_value < 0
+                                ? "text-crimson-700"
+                                : "text-text-muted"
+                          }`}
+                        >
+                          {row.support_value > 0 ? `+${row.support_value}` : row.support_value}
+                        </span>
+                      </td>
+                      <td className="py-1.5 align-top">
+                        <div className="font-medium text-text-strong">{prettify(row.id)}</div>
+                        <div className="text-body-sm text-text-muted">{row.description}</div>
+                        {row.note && (
+                          <div className="mt-0.5 text-body-sm italic text-text-muted">
+                            {row.note}
+                          </div>
+                        )}
+                        {row.cap !== null && (
+                          <div className="mt-1">
+                            <Badge tone="negative">
+                              {row.support_value} per turn · {row.cap} permanent cap
+                            </Badge>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+
+            {data.combination.length > 0 && (
+              <section className="space-y-2">
+                <MicroCaps as="h3">How rows combine</MicroCaps>
+                <ol className="ml-4 list-decimal space-y-1 text-body-sm text-text-muted">
+                  {data.combination.map((rule) => (
+                    <li key={rule}>{rule}</li>
+                  ))}
+                </ol>
+              </section>
+            )}
+
+            <section className="space-y-3">
+              <MicroCaps as="h3">What each concern needs</MicroCaps>
+              {/* Inside the white drawer, so `nested` (sand-50) is the fill that
+                  reads as a step down. */}
+              {data.concerns.map((c) => (
+                <Card key={c.concern_id} as="details" nested padding="sm">
+                  <summary className="cursor-pointer text-body-sm font-medium text-text-strong">
+                    {prettify(c.concern_id)}
+                  </summary>
+                  <div className="mt-2 space-y-2 text-body-sm text-text-muted">
+                    <p>
+                      <span className="font-semibold text-text-muted">Core ask: </span>
+                      {c.core_ask}
+                    </p>
+                    <p>
+                      <span className="font-semibold text-text-muted">Satisfies: </span>
+                      {c.what_would_satisfy}
+                    </p>
+                    {c.red_lines.length > 0 && (
+                      <div>
+                        <span className="font-semibold text-crimson-700">Red lines:</span>
+                        <ul className="ml-4 list-disc">
+                          {c.red_lines.map((rl) => (
+                            <li key={rl}>{rl}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              ))}
+            </section>
+          </>
+        )}
+      </div>
+    </Sheet>
   )
 }
