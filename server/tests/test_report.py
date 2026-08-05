@@ -42,6 +42,7 @@ from app.schemas.extraction import (
     Verdict,
 )
 from app.schemas.report import ScoredFinding
+from app.schemas.scoring import ScoreOutput
 
 
 class FakeReactClient:
@@ -57,26 +58,32 @@ class FakeReactClient:
 
 
 def _turn(
-    index: int,
-    persona: str,
-    concern: str,
-    ext: Extraction,
-    rubric: Any,
+    index: int = 0,
+    persona: str = "technical_evaluator",
+    concern_id: str = "technical_approach",
+    ext: Extraction | None = None,
+    rubric: Any = None,
     answer: str | None = None,
 ) -> Turn:
     from app.pipeline.scoring import score_turn
 
+    ext = ext if ext is not None else Extraction()
+    rubric = rubric if rubric is not None else load_content().rubric
     score = score_turn(ext, rubric)
     return Turn(
         session_id=uuid.uuid4(),
         turn_index=index,
         persona_id=persona,
-        concern_id=concern,
+        concern_id=concern_id,
         user_answer=answer if answer is not None else f"answer {index}",
         extraction_json=ext.model_dump(mode="json"),
         score_json=score.model_dump(mode="json"),
         reaction_json=None,
     )
+
+
+def _values() -> dict[str, int]:
+    return {row.id: row.support_value for row in load_content().rubric.rows}
 
 
 def _fixture() -> tuple[uuid.UUID, list[Turn], list[PersonaMeter], dict[str, str], Any]:
@@ -212,9 +219,15 @@ def test_every_scored_finding_has_a_verbatim_span_and_a_rubric_row() -> None:
         content=content,
     )
 
-    # evidence_backed (t0), dodge (t1), red_line (t2). The contradiction on t1 has
-    # no verbatim span in the schema, so it is a count, not a scored finding.
-    assert [f.rubric_row for f in report.findings] == ["evidence_backed", "dodge", "red_line"]
+    # evidence_backed (t0), dodge + contradiction (t1), red_line (t2). Both t1
+    # rows now carry a verbatim span: the dodge's answer_span and the
+    # contradiction's current_answer_span (countered by its prior_answer_span).
+    assert [f.rubric_row for f in report.findings] == [
+        "evidence_backed",
+        "dodge",
+        "contradiction",
+        "red_line",
+    ]
     valid_rows = {row.id for row in content.rubric.rows}
     for f in report.findings:
         assert f.evidence, "every scored finding must carry at least one quote"
@@ -238,6 +251,7 @@ def test_one_finding_per_row_carries_every_span() -> None:
         ext,
         score_turn(ext, content.rubric),
         {row.id: row.support_value for row in content.rubric.rows},
+        content,
     )
     assert [f.rubric_row for f in findings] == ["approach_cited"]
     assert findings[0].count == 1
@@ -273,6 +287,7 @@ def test_false_fact_finding_count_matches_the_applications() -> None:
         ext,
         score_turn(ext, content.rubric),
         {row.id: row.support_value for row in content.rubric.rows},
+        content,
     )
     assert len(findings) == 1
     assert findings[0].count == 2
@@ -309,6 +324,7 @@ def test_tier_zero_refutation_never_becomes_a_false_fact_span() -> None:
         ext,
         score,
         {row.id: row.support_value for row in content.rubric.rows},
+        content,
     )
     assert score.row_counts == {"false_fact": 1}
     assert len(findings) == 1
@@ -393,4 +409,91 @@ def test_build_report_bundles_scored_and_narrative() -> None:
 
     assert report.narrative.scored is False
     assert report.rate_stats.total_turns == 3
-    assert len(report.findings) == 3
+    assert len(report.findings) == 4
+
+
+def test_red_line_finding_carries_the_authored_rule_not_model_text() -> None:
+    content = load_content()
+    concern = content.concerns["technical_approach"]
+    red_line = concern.red_lines[0]
+    extraction = Extraction(
+        red_line_hits=[
+            RedLineHit(
+                source_id=red_line.id,
+                source_kind=RedLineSourceKind.concern_red_line,
+                span="we will host it on premises",
+                why="the PWS forbids on-premises hosting",
+            )
+        ]
+    )
+    score = ScoreOutput(
+        support_delta=-2,
+        raw_support_delta=-2,
+        matched_rows=["red_line"],
+        row_counts={"red_line": 1},
+        capped=True,
+    )
+    findings = _turn_findings(
+        _turn(concern_id="technical_approach"), extraction, score, _values(), content
+    )
+    evidence = findings[0].evidence[0]
+    assert evidence.span == "we will host it on premises"
+    assert evidence.counter_span == red_line.text
+    assert evidence.counter_label == f"concern_red_line: {red_line.id}"
+
+
+def test_contradiction_is_a_finding_with_both_sides() -> None:
+    content = load_content()
+    extraction = Extraction(
+        consistency_flags=[
+            ConsistencyFlag(
+                conflicts_with_turn=1,
+                current_answer_span="three named leads at contract start",
+                prior_answer_span="we have not identified the leads yet",
+                acknowledged_revision=False,
+                explanation="named leads now, none earlier",
+            )
+        ]
+    )
+    score = ScoreOutput(
+        support_delta=-1,
+        raw_support_delta=-1,
+        matched_rows=["contradiction"],
+        row_counts={"contradiction": 1},
+        capped=False,
+    )
+    findings = _turn_findings(_turn(), extraction, score, _values(), content)
+    assert [f.rubric_row for f in findings] == ["contradiction"]
+    evidence = findings[0].evidence[0]
+    assert evidence.span == "three named leads at contract start"
+    assert evidence.counter_span == "we have not identified the leads yet"
+    assert evidence.counter_label == "turn 2"
+
+
+def test_false_fact_finding_quotes_the_answer_and_the_source() -> None:
+    content = load_content()
+    extraction = Extraction(
+        fact_checks=[
+            FactCheck(
+                claim="claims roughly 25 million records",
+                answer_span="roughly 25 million case records",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="approximately 42 million case records",
+                tier=1,
+                verdict=Verdict.refuted,
+            )
+        ]
+    )
+    score = ScoreOutput(
+        support_delta=-1,
+        raw_support_delta=-1,
+        matched_rows=["false_fact"],
+        row_counts={"false_fact": 1},
+        capped=False,
+    )
+    findings = _turn_findings(_turn(), extraction, score, _values(), content)
+    evidence = findings[0].evidence[0]
+    assert evidence.span == "roughly 25 million case records"
+    assert evidence.detail == "claims roughly 25 million records"
+    assert evidence.counter_span == "approximately 42 million case records"
+    assert evidence.counter_label == "rfp_pws"

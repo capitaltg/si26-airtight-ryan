@@ -47,10 +47,18 @@ class RateStats(BaseModel):
 
 
 class FindingEvidence(BaseModel):
-    """One verbatim quote that fed a row application, with its per-quote detail."""
+    """One verbatim quote that fed a row application, with its per-quote detail.
+
+    ``counter_span`` is the other side of the relationship the row charges: the
+    prior answer for a contradiction, the document quote for a false fact, the
+    authored rule for a red line. ``None`` for rows that assert nothing about a
+    second text.
+    """
 
     span: str = Field(min_length=1)
     detail: str
+    counter_span: str | None = None
+    counter_label: str | None = None
 
 
 class ScoredFinding(BaseModel):

@@ -9,11 +9,14 @@ lives in ``render_narrative``, which produces a coaching recap tagged
 Findings vs counts
 ------------------
 A ``ScoredFinding`` must carry a verbatim span, so it is emitted only for the
-signals that carry one: ``red_line`` (hit span), ``dodge`` (``answer_span``),
-``evidence_backed`` (the backed claim's span), ``approach_cited`` (coverage
-span), and ``false_fact`` (``answer_span``). ``contradiction`` and
-``unsubstantiated`` have no verbatim span in the extraction schema, so they are
-surfaced as counts instead — never as a spanless "scored line".
+signals that carry one: ``red_line`` (hit span, countered by the authored rule
+text behind its validated ``source_id``), ``dodge`` (``answer_span``),
+``contradiction`` (``current_answer_span``, countered by the prior turn's
+``prior_answer_span``), ``evidence_backed`` (the backed claim's span),
+``approach_cited`` (coverage span), and ``false_fact`` (``answer_span``,
+countered by the document's ``source_quote``). ``unsubstantiated`` has no
+verbatim span in the extraction schema, so it alone is surfaced as a count
+instead — never as a spanless "scored line".
 """
 
 from __future__ import annotations
@@ -24,12 +27,14 @@ from typing import Protocol
 
 from app.content.loader import Content
 from app.db.models import Clarification, PersonaMeter, Turn
-from app.schemas.content import Rubric
+from app.schemas.content import NonNegotiable, RedLine, Rubric
 from app.schemas.extraction import (
     Addressed,
     Backing,
     ClaimType,
     Extraction,
+    RedLineHit,
+    RedLineSourceKind,
     Verdict,
 )
 from app.schemas.report import (
@@ -60,29 +65,80 @@ def _row_values(rubric: Rubric) -> dict[str, int]:
     return {row.id: row.support_value for row in rubric.rows}
 
 
+def _authored_rule(hit: RedLineHit, content: Content, concern_id: str) -> str | None:
+    """The authored text behind a validated ``source_id``.
+
+    Resolved in code rather than quoted by the model: grounding has already
+    proven the id is authored, so the text is a lookup and a fabricated rule
+    reference is structurally impossible.
+    """
+    rules: list[RedLine] | list[NonNegotiable]
+    if hit.source_kind is RedLineSourceKind.concern_red_line:
+        concern = content.concerns.get(concern_id)
+        rules = concern.red_lines if concern is not None else []
+    else:
+        rules = [
+            nn
+            for persona in content.personas.values()
+            for nn in persona.non_negotiables
+        ]
+    return next((rule.text for rule in rules if rule.id == hit.source_id), None)
+
+
 def _turn_findings(
     turn: Turn,
     extraction: Extraction,
     score: ScoreOutput,
     values: dict[str, int],
+    content: Content,
 ) -> list[ScoredFinding]:
-    """Emit one grouped finding per charged row with its evidence spans.
+    """Emit one grouped finding per charged row, with both sides of its evidence.
 
     Driven by ``matched_rows`` so a finding always maps to a row that moved the
-    number (e.g. a backed claim on a red-lined turn is not shown, because the red
-    line fired first and suppressed it).
+    number. Every span here was verified by ``drop_ungrounded`` against a real
+    source, so no row can print an unverifiable quote.
     """
     matched = set(score.matched_rows)
     evidence: dict[str, list[FindingEvidence]] = {}
 
-    def add(row: str, span: str, detail: str) -> None:
+    def add(
+        row: str,
+        span: str,
+        detail: str,
+        counter_span: str | None = None,
+        counter_label: str | None = None,
+    ) -> None:
         if row in matched and span.strip():
-            evidence.setdefault(row, []).append(FindingEvidence(span=span, detail=detail))
+            evidence.setdefault(row, []).append(
+                FindingEvidence(
+                    span=span,
+                    detail=detail,
+                    counter_span=counter_span,
+                    counter_label=counter_label,
+                )
+            )
 
     for hit in extraction.red_line_hits:
-        add("red_line", hit.span, hit.why)
+        add(
+            "red_line",
+            hit.span,
+            hit.why,
+            _authored_rule(hit, content, turn.concern_id),
+            f"{hit.source_kind.value}: {hit.source_id}",
+        )
     for dodge in extraction.dodges:
-        add("dodge", dodge.answer_span, dodge.type.value)
+        add("dodge", dodge.answer_span, dodge.explanation or dodge.type.value)
+    for flag in extraction.consistency_flags:
+        detail = flag.explanation or "conflicts with an earlier answer"
+        if flag.acknowledged_revision:
+            detail = f"{detail} (presenter acknowledged the revision)"
+        add(
+            "contradiction",
+            flag.current_answer_span,
+            detail,
+            flag.prior_answer_span,
+            f"turn {flag.conflicts_with_turn + 1}",
+        )
     for claim in extraction.claims:
         if claim.type is ClaimType.commitment and claim.backing is Backing.backed:
             add("evidence_backed", claim.span, claim.text)
@@ -91,7 +147,13 @@ def _turn_findings(
             add("approach_cited", cov.span, cov.addressed.value)
     for fc in extraction.fact_checks:
         if fc.verdict is Verdict.refuted and fc.tier >= 1:
-            add("false_fact", fc.answer_span, fc.claim)
+            add(
+                "false_fact",
+                fc.answer_span,
+                fc.claim,
+                fc.source_quote,
+                fc.source_document_id.value,
+            )
 
     return [
         ScoredFinding(
@@ -147,7 +209,7 @@ def build_scored_report(
             dodge_types[dodge.type.value] += 1
             dodge_count += 1
         contradiction_count += len(extraction.consistency_flags)
-        findings.extend(_turn_findings(turn, extraction, score, values))
+        findings.extend(_turn_findings(turn, extraction, score, values, content))
         if score.limit is not None and score.limit.penalty_applied:
             limit_findings.append(
                 LimitFinding(
