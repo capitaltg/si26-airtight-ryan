@@ -13,9 +13,12 @@ from app.schemas.extraction import (
     Dodge,
     DodgeType,
     Extraction,
+    FactCheck,
     RedLineHit,
     RedLineSourceKind,
+    SourceDocument,
     SubQuestionCoverage,
+    Verdict,
 )
 
 ANSWER = "We staff three named leads at contract start and the PM has twelve years of federal work."
@@ -33,7 +36,12 @@ def _fixture() -> tuple[Content, PersonaDefinition, Concern]:
 def _ground(extraction: Extraction) -> Extraction:
     _, persona, concern = _fixture()
     return drop_ungrounded(
-        extraction, answer=ANSWER, concern=concern, persona=persona, prior_answers={}
+        extraction,
+        answer=ANSWER,
+        concern=concern,
+        persona=persona,
+        prior_answers={},
+        documents=_documents(),
     )
 
 
@@ -45,6 +53,7 @@ def _ground_with_history(extraction: Extraction) -> Extraction:
         concern=concern,
         persona=persona,
         prior_answers=PRIOR_ANSWERS,
+        documents=_documents(),
     )
 
 
@@ -56,6 +65,40 @@ def _flag(**overrides: object) -> ConsistencyFlag:
         "acknowledged_revision": False,
     }
     return ConsistencyFlag.model_validate({**fields, **overrides})
+
+
+def _documents() -> dict[SourceDocument, str]:
+    content = load_content()
+    return {
+        SourceDocument.rfp_pws: content.rfp_text,
+        SourceDocument.written_proposal: content.proposal_text,
+    }
+
+
+def _ground_with_docs(extraction: Extraction) -> Extraction:
+    _, persona, concern = _fixture()
+    return drop_ungrounded(
+        extraction,
+        answer=ANSWER,
+        concern=concern,
+        persona=persona,
+        prior_answers={},
+        documents=_documents(),
+    )
+
+
+def _check(**overrides: object) -> FactCheck:
+    content = load_content()
+    real_quote = content.rfp_text.split("\n")[0].strip()
+    fields: dict[str, object] = {
+        "claim": "claims twelve years of federal work",
+        "answer_span": "the PM has twelve years of federal work",
+        "source_document_id": SourceDocument.rfp_pws,
+        "source_quote": real_quote,
+        "tier": 1,
+        "verdict": Verdict.refuted,
+    }
+    return FactCheck.model_validate({**fields, **overrides})
 
 
 def test_fabricated_red_line_span_is_dropped_and_does_not_cap() -> None:
@@ -118,7 +161,12 @@ def test_non_negotiable_hit_dropped_when_persona_lists_none() -> None:
         ]
     )
     grounded = drop_ungrounded(
-        extraction, answer=ANSWER, concern=concern, persona=persona, prior_answers={}
+        extraction,
+        answer=ANSWER,
+        concern=concern,
+        persona=persona,
+        prior_answers={},
+        documents=_documents(),
     )
     assert grounded.red_line_hits == []
 
@@ -333,3 +381,38 @@ def test_acknowledged_revision_still_scores_a_contradiction() -> None:
     )
     assert len(grounded.consistency_flags) == 1
     assert score_turn(grounded, content.rubric).support_delta == -1
+
+
+def test_fact_check_quoting_the_named_document_is_kept_and_scores() -> None:
+    content, _, _ = _fixture()
+    grounded = _ground_with_docs(Extraction(fact_checks=[_check()]))
+    assert len(grounded.fact_checks) == 1
+    assert score_turn(grounded, content.rubric).support_delta == -1
+
+
+def test_fact_check_with_an_invented_source_quote_is_dropped() -> None:
+    content, _, _ = _fixture()
+    grounded = _ground_with_docs(
+        Extraction(fact_checks=[_check(source_quote="the PWS requires unicorns")])
+    )
+    assert grounded.fact_checks == []
+    assert score_turn(grounded, content.rubric).support_delta == 0
+
+
+def test_fact_check_quoting_the_other_document_is_dropped() -> None:
+    grounded = _ground_with_docs(
+        Extraction(fact_checks=[_check(source_document_id=SourceDocument.written_proposal)])
+    )
+    assert grounded.fact_checks == []
+
+
+def test_fact_check_with_an_ungrounded_answer_span_is_dropped() -> None:
+    grounded = _ground_with_docs(
+        Extraction(fact_checks=[_check(answer_span="we promised a fourth lead")])
+    )
+    assert grounded.fact_checks == []
+
+
+def test_tier_two_fact_check_is_always_dropped() -> None:
+    grounded = _ground_with_docs(Extraction(fact_checks=[_check(tier=2)]))
+    assert grounded.fact_checks == []

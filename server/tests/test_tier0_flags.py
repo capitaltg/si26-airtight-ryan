@@ -17,7 +17,7 @@ from typing import Any
 from app.db.models import ClaimLedger
 from app.pipeline.extraction import build_extraction_dynamic_suffix, run_extraction
 from app.pipeline.grounding import drop_ungrounded
-from app.schemas.extraction import ConsistencyFlag, Extraction
+from app.schemas.extraction import ConsistencyFlag, Extraction, SourceDocument
 
 from .test_extraction import FakeBedrockClient, _fixture, _prior_claims
 
@@ -45,13 +45,17 @@ def _prior_answers(*turns: int) -> dict[int, str]:
 
 
 def _drop(extraction: Extraction, prior_answers: dict[int, str]) -> Extraction:
-    _, persona, concern = _fixture()
+    content, persona, concern = _fixture()
     return drop_ungrounded(
         extraction,
         answer=ANSWER,
         concern=concern,
         persona=persona,
         prior_answers=prior_answers,
+        documents={
+            SourceDocument.rfp_pws: content.rfp_text,
+            SourceDocument.written_proposal: content.proposal_text,
+        },
     )
 
 
@@ -114,7 +118,7 @@ def test_dropping_flags_leaves_every_other_field_alone() -> None:
         fact_checks=[
             {  # type: ignore[list-item]
                 "claim": "42 million records",
-                "answer_span": "42 million records",
+                "answer_span": "three named leads on day one",
                 "source_document_id": "rfp_pws",
                 "source_quote": "approximately 42 million records",
                 "tier": 1,

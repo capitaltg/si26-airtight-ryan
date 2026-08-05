@@ -30,7 +30,7 @@ from app.pipeline.extraction_pin import ExtractionPin, NullExtractionPin, extrac
 from app.pipeline.grounding import drop_ungrounded
 from app.pipeline.span_anchor import reanchor_spans
 from app.schemas.content import Concern, PersonaDefinition
-from app.schemas.extraction import Conciseness, Extraction
+from app.schemas.extraction import Conciseness, Extraction, SourceDocument
 
 logger = logging.getLogger(__name__)
 
@@ -312,6 +312,10 @@ def run_extraction(
         concern=concern,
         persona=persona,
         prior_answers=prior_answers,
+        documents={
+            SourceDocument.rfp_pws: content.rfp_text,
+            SourceDocument.written_proposal: content.proposal_text,
+        },
     )
     conciseness = compute_conciseness(answer, grounded)
     return ExtractionResult(extraction=grounded, conciseness=conciseness)
