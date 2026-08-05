@@ -7,9 +7,11 @@ requests, but it keys on the entire rendered prompt — RFP, proposal, persona
 block, instruction strings — so any edit anywhere unpins everything. That is a
 cache, not a guarantee.
 
-This keys on the turn's *inputs* instead: the normalized answer, who asked, which
-concern, the prior ledger, and a fingerprint of the authored content. Rewording a
-hardcoded instruction no longer unpins; editing a persona or concern does.
+This keys on the turn's *inputs* plus the machinery that produced the output: the
+normalized answer, who asked, which concern, the prior ledger, a fingerprint of
+the authored content, the model id, and the extractor contract version. Rewording
+a hardcoded instruction no longer unpins; editing a persona or concern does, and
+so does changing the model or bumping the contract version.
 
 What is stored is the model's raw validated tool input, not a score and not a
 post-processed ``Extraction``. Anchoring, grounding, and scoring all re-run on
@@ -44,6 +46,8 @@ def extraction_key(
     prior_claims: Sequence[ClaimLedger],
     prior_answers: Mapping[int, str],
     extraction_fingerprint: str,
+    extractor_contract_version: int,
+    model_id: str,
 ) -> str:
     """Stable sha256 over everything that legitimately changes an extraction.
 
@@ -59,6 +63,25 @@ def extraction_key(
     miss caused purely by a change here lands on ``model_response_cache`` rather
     than on the model — the cache key is unaffected and the byte-identical
     prompt still replays.
+
+    ``model_id`` and ``extractor_contract_version`` describe *how* the output was
+    produced, not what went in. A model change self-invalidates every pin, which
+    is what a model upgrade is for; a contract-version bump is how a
+    prompt-semantics fix reaches inputs that are already pinned. Both are
+    parameters rather than reads of ``settings`` or of ``app.pipeline.extraction``
+    so this function stays pure, stays importable without a settings load, and so
+    this module never imports the module that imports it.
+
+    Deliberately excluded:
+
+    - The rubric. ``score_turn`` recomputes the number from the stored findings,
+      so a rubric fix must land without re-extracting.
+    - Post-processing rules (``reanchor_spans``, ``drop_ungrounded``,
+      ``compute_conciseness``). They re-run on the replay path, so a fix there
+      already reaches pinned rows with no model call.
+    - Prompt wording that does not change what is asked. The contract version
+      covers prompt *semantics*, deliberately not prompt bytes — hashing the
+      bytes would unpin the world on a comment edit.
     """
     payload = {
         "answer": normalize_answer(answer),
@@ -80,6 +103,8 @@ def extraction_key(
         ],
         "content": extraction_fingerprint,
         "schema": Extraction.model_json_schema(),
+        "extractor_contract_version": extractor_contract_version,
+        "model_id": model_id,
     }
     blob = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
@@ -91,7 +116,14 @@ class ExtractionPin(Protocol):
 
     def get(self, key: str) -> dict[str, Any] | None: ...
 
-    def put(self, key: str, *, tool_input: dict[str, Any], model_id: str) -> None: ...
+    def put(
+        self,
+        key: str,
+        *,
+        tool_input: dict[str, Any],
+        model_id: str,
+        contract_version: int,
+    ) -> None: ...
 
 
 class NullExtractionPin:
@@ -100,7 +132,14 @@ class NullExtractionPin:
     def get(self, key: str) -> dict[str, Any] | None:
         return None
 
-    def put(self, key: str, *, tool_input: dict[str, Any], model_id: str) -> None:
+    def put(
+        self,
+        key: str,
+        *,
+        tool_input: dict[str, Any],
+        model_id: str,
+        contract_version: int,
+    ) -> None:
         return None
 
 
@@ -114,7 +153,14 @@ class InMemoryExtractionPin:
         row = self._rows.get(key)
         return dict(row) if row is not None else None
 
-    def put(self, key: str, *, tool_input: dict[str, Any], model_id: str) -> None:
+    def put(
+        self,
+        key: str,
+        *,
+        tool_input: dict[str, Any],
+        model_id: str,
+        contract_version: int,
+    ) -> None:
         self._rows.setdefault(key, dict(tool_input))
 
 
@@ -143,14 +189,24 @@ class DbExtractionPin:
             logger.warning("extraction pin read failed for %s; treating as a miss", key)
             return None
 
-    def put(self, key: str, *, tool_input: dict[str, Any], model_id: str) -> None:
+    def put(
+        self,
+        key: str,
+        *,
+        tool_input: dict[str, Any],
+        model_id: str,
+        contract_version: int,
+    ) -> None:
         try:
             with self._session_factory() as db:
                 if db.get(ExtractionPinRow, key) is not None:
                     return
                 db.add(
                     ExtractionPinRow(
-                        input_hash=key, tool_input=tool_input, model_id=model_id
+                        input_hash=key,
+                        tool_input=tool_input,
+                        model_id=model_id,
+                        extractor_contract_version=contract_version,
                     )
                 )
                 try:

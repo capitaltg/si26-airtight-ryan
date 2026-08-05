@@ -36,6 +36,19 @@ logger = logging.getLogger(__name__)
 
 TOOL_NAME = "record_extraction"
 
+# Identity of the extraction contract: the prompt's semantics plus the tool it
+# forces. Hashed into `extraction_key`, so bumping it is how a prompt fix reaches
+# inputs that are already pinned.
+#
+# Bump when the prompt changes what the model is asked to report: new or removed
+# instructions that change classification behavior, content newly rendered into
+# the prompt (persona exemplars, for one), a different tool name, a change in
+# extraction policy.
+#
+# Do not bump for comments, formatting, or a reword that leaves the ask
+# identical — the pin exists so that churn does not cost a model call.
+EXTRACTOR_CONTRACT_VERSION = 1
+
 
 @dataclass(frozen=True)
 class ExtractionResult:
@@ -249,11 +262,13 @@ def run_extraction(
     The prompt goes out as two content blocks: a cached static prefix (persona +
     RFP + proposal) and an uncached dynamic suffix (concern + ledger + answer).
 
-    ``pin`` makes the score a function of the input. The first extraction for a
-    given (normalized answer, persona, concern, ledger, content fingerprint) is
-    stored and replayed forever after, so the model cannot disagree with itself
-    across runs. It defaults to :class:`NullExtractionPin`, which keeps direct
-    callers — the golden suite above all — fully live.
+    ``pin`` makes the score a function of the input *and* of the contract that
+    produced it. The first extraction for a given (normalized answer, persona,
+    concern, ledger, prior answers, content fingerprint, contract version, model
+    id) is stored and replayed forever after, so the model cannot disagree with
+    itself across runs — while a model upgrade or an ``EXTRACTOR_CONTRACT_VERSION``
+    bump misses on purpose. It defaults to :class:`NullExtractionPin`, which keeps
+    direct callers — the golden suite above all — fully live.
 
     Post-processing runs on the replay path too, and the order matters. A pinned
     span was quoted out of an earlier phrasing, so ``reanchor_spans`` maps it onto
@@ -272,6 +287,8 @@ def run_extraction(
         prior_claims=prior_claims,
         prior_answers=prior_answers,
         extraction_fingerprint=content.extraction_fingerprint,
+        extractor_contract_version=EXTRACTOR_CONTRACT_VERSION,
+        model_id=settings.bedrock_model_id,
     )
 
     pinned = resolved_pin.get(key)
@@ -305,6 +322,7 @@ def run_extraction(
             key,
             tool_input=extraction.model_dump(mode="json"),
             model_id=settings.bedrock_model_id,
+            contract_version=EXTRACTOR_CONTRACT_VERSION,
         )
         canonical = resolved_pin.get(key)
         if canonical is not None:

@@ -239,18 +239,24 @@ class ExtractionPinRow(Base):
 
     Stores the model's raw tool input, not a score. Anchoring, grounding, and
     scoring re-run on every replay, so a fix to any of those reaches pinned rows
-    without a model call. ``model_id`` is recorded so a model migration can be
-    handled with a targeted delete.
+    without a model call.
+
+    ``model_id`` and ``extractor_contract_version`` are both hashed into
+    ``input_hash`` (see :func:`app.pipeline.extraction_pin.extraction_key`), so a
+    model change or a contract bump self-invalidates: the new key simply misses.
+    They are stored here as provenance and as the handle for a targeted
+    ``DELETE`` when someone wants to reclaim rows a rollback stranded.
     """
 
     __tablename__ = "extraction_pin"
 
     # sha256 hex of the canonical input payload (answer, persona, concern,
-    # ledger, content fingerprint, extraction schema).
+    # ledger, content fingerprint, extraction schema, contract version, model id).
     input_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     # The validated `record_extraction` tool input, exactly as the model emitted it.
     tool_input: Mapped[dict[str, Any]] = mapped_column(JSON_)
     model_id: Mapped[str] = mapped_column(String(128))
+    extractor_contract_version: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

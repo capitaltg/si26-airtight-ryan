@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.content.loader import load_content
+from app.content.loader import compute_extraction_fingerprint, load_content
 from app.db.models import Base, ClaimLedger, ExtractionPinRow
 from app.pipeline.extraction_pin import (
     DbExtractionPin,
@@ -25,6 +25,8 @@ def _key(**overrides: object) -> str:
         "prior_claims": [],
         "prior_answers": {},
         "extraction_fingerprint": content.extraction_fingerprint,
+        "extractor_contract_version": 1,
+        "model_id": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
     }
     kwargs.update(overrides)
     return extraction_key(**kwargs)  # type: ignore[arg-type]
@@ -72,23 +74,63 @@ def test_different_prior_answers_change_the_key() -> None:
     assert _key(prior_answers={0: "We have not identified the leads yet."}) != _key()
 
 
+def test_a_contract_version_bump_changes_the_key() -> None:
+    """The whole point: a prompt-semantics fix reaches already-pinned inputs by
+    bumping the constant, with no authored-content or schema change."""
+    assert _key(extractor_contract_version=2) != _key()
+
+
+def test_a_different_model_changes_the_key() -> None:
+    """A model upgrade self-invalidates. No targeted delete, nothing to forget."""
+    assert _key(model_id="us.anthropic.claude-sonnet-4-6-20260101-v1:0") != _key()
+
+
+def test_persona_exemplars_move_the_key_but_reach_no_prompt() -> None:
+    """The trap this change exists to disarm.
+
+    `_render_persona` never emits `persona.exemplars`, but
+    `compute_extraction_fingerprint` hashes the whole persona dump, so exemplars
+    already move the key today. Wiring them into the prompt therefore changes no
+    key on its own — only the contract version reaches pinned inputs. Whoever
+    wires exemplars in: bump `EXTRACTOR_CONTRACT_VERSION` in the same diff.
+    """
+    content = load_content()
+    assert content.personas["technical_evaluator"].exemplars, "fixture lost its exemplars"
+    stripped = {
+        pid: (
+            persona.model_copy(update={"exemplars": []})
+            if pid == "technical_evaluator"
+            else persona
+        )
+        for pid, persona in content.personas.items()
+    }
+    without_exemplars = compute_extraction_fingerprint(
+        rfp_text=content.rfp_text,
+        proposal_text=content.proposal_text,
+        personas=stripped,
+        concerns=content.concerns,
+    )
+    assert without_exemplars != content.extraction_fingerprint
+    assert _key(extraction_fingerprint=without_exemplars) != _key()
+
+
 def test_in_memory_pin_round_trips() -> None:
     pin = InMemoryExtractionPin()
     assert pin.get("k") is None
-    pin.put("k", tool_input={"claims": []}, model_id="m")
+    pin.put("k", tool_input={"claims": []}, model_id="m", contract_version=1)
     assert pin.get("k") == {"claims": []}
 
 
 def test_in_memory_pin_is_first_write_wins() -> None:
     pin = InMemoryExtractionPin()
-    pin.put("k", tool_input={"claims": ["first"]}, model_id="m")
-    pin.put("k", tool_input={"claims": ["second"]}, model_id="m")
+    pin.put("k", tool_input={"claims": ["first"]}, model_id="m", contract_version=1)
+    pin.put("k", tool_input={"claims": ["second"]}, model_id="m", contract_version=1)
     assert pin.get("k") == {"claims": ["first"]}
 
 
 def test_null_pin_never_stores() -> None:
     pin = NullExtractionPin()
-    pin.put("k", tool_input={"claims": []}, model_id="m")
+    pin.put("k", tool_input={"claims": []}, model_id="m", contract_version=1)
     assert pin.get("k") is None
 
 
@@ -102,18 +144,42 @@ def _factory() -> sessionmaker[Session]:
 
 def test_db_pin_round_trips_across_instances() -> None:
     factory = _factory()
-    DbExtractionPin(factory).put("k", tool_input={"claims": []}, model_id="m")
+    DbExtractionPin(factory).put("k", tool_input={"claims": []}, model_id="m", contract_version=1)
     assert DbExtractionPin(factory).get("k") == {"claims": []}
 
 
 def test_db_pin_is_first_write_wins() -> None:
     factory = _factory()
     pin = DbExtractionPin(factory)
-    pin.put("k", tool_input={"claims": ["first"]}, model_id="m")
-    pin.put("k", tool_input={"claims": ["second"]}, model_id="m")
+    pin.put("k", tool_input={"claims": ["first"]}, model_id="m", contract_version=1)
+    pin.put("k", tool_input={"claims": ["second"]}, model_id="m", contract_version=1)
     assert pin.get("k") == {"claims": ["first"]}
     with factory() as db:
         assert db.query(ExtractionPinRow).count() == 1
+
+
+def test_db_pin_persists_the_contract_version() -> None:
+    factory = _factory()
+    DbExtractionPin(factory).put("k", tool_input={"claims": []}, model_id="m", contract_version=3)
+    with factory() as db:
+        row = db.get(ExtractionPinRow, "k")
+        assert row is not None
+        assert row.extractor_contract_version == 3
+        assert row.model_id == "m"
+
+
+def test_a_row_stored_under_another_contract_version_is_a_miss_not_a_stale_hit() -> None:
+    """Same inputs, different contract: the key differs, so the store cannot
+    hand back the pre-fix extraction."""
+    pin = InMemoryExtractionPin()
+    pin.put(
+        _key(extractor_contract_version=1),
+        tool_input={"claims": []},
+        model_id="m",
+        contract_version=1,
+    )
+    assert pin.get(_key(extractor_contract_version=2)) is None
+    assert pin.get(_key(extractor_contract_version=1)) == {"claims": []}
 
 
 def test_db_pin_read_failure_is_a_miss_not_an_error() -> None:
@@ -125,4 +191,4 @@ def test_db_pin_read_failure_is_a_miss_not_an_error() -> None:
 def test_db_pin_write_failure_is_swallowed() -> None:
     engine = create_engine("sqlite://", poolclass=StaticPool)  # no tables created
     pin = DbExtractionPin(sessionmaker(bind=engine))
-    pin.put("k", tool_input={"claims": []}, model_id="m")  # must not raise
+    pin.put("k", tool_input={"claims": []}, model_id="m", contract_version=1)  # must not raise
