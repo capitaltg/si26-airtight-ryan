@@ -241,3 +241,33 @@ def test_id_valid_for_the_other_kind_is_dropped() -> None:
 def test_nothing_to_drop_returns_the_same_object() -> None:
     extraction = Extraction()
     assert _ground(extraction) is extraction
+
+
+def test_dodge_with_an_ungrounded_answer_span_is_dropped() -> None:
+    content, _, concern = _fixture()
+    extraction = Extraction(
+        dodges=[
+            Dodge(
+                sub_question_id=concern.sub_questions[0].id,
+                type=DodgeType.non_commitment,
+                answer_span="we will circle back on that later",
+                explanation="invented prose that is not in the answer",
+            )
+        ]
+    )
+    grounded = _ground(extraction)
+    assert grounded.dodges == []
+    assert score_turn(grounded, content.rubric).support_delta == 0
+
+
+def test_dodge_with_a_real_answer_span_is_kept_and_scores() -> None:
+    content, _, concern = _fixture()
+    dodge = Dodge(
+        sub_question_id=concern.sub_questions[0].id,
+        type=DodgeType.non_commitment,
+        answer_span="three named leads at contract start",
+        explanation="named staffing, never described the architecture",
+    )
+    grounded = _ground(Extraction(dodges=[dodge]))
+    assert grounded.dodges == [dodge]
+    assert score_turn(grounded, content.rubric).support_delta == -2

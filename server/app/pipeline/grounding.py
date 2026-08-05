@@ -46,9 +46,8 @@ def drop_ungrounded(
 ) -> Extraction:
     """Remove findings whose quote is not in ``answer`` or whose id is not real.
 
-    A dodge is about what is *absent*; ``Dodge.answer_span`` gets no span check
-    here — only its ``sub_question_id`` is validated. (Grounding the span itself
-    is added in a later task.)
+    A dodge is about what is *absent*, but the text standing in for the missing
+    answer is present and must be quoted, because the report prints it.
     """
     folded_answer, _ = fold(answer)
     sub_question_ids = {sq.id for sq in concern.sub_questions}
@@ -104,6 +103,11 @@ def drop_ungrounded(
         if dodge.sub_question_id not in sub_question_ids:
             logger.warning(
                 "dropped dodge naming unknown sub-question %r", dodge.sub_question_id
+            )
+            continue
+        if not _is_quoted(dodge.answer_span, folded_answer):
+            logger.warning(
+                "dropped dodge with ungrounded answer_span: %r", dodge.answer_span
             )
             continue
         dodges.append(dodge)
