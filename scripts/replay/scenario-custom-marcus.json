@@ -12,7 +12,10 @@
       "voice": "Formal and clause-focused. Treats a precise boundary as stronger than an expansive promise.",
       "values": ["solicitation discipline", "auditable price realism", "bounded commitments"],
       "wants": ["specific PWS alignment", "clear pricing assumptions"],
-      "non_negotiables": ["do not enlarge scope to sound helpful", "do not invent contractual terms"],
+      "non_negotiables": [
+        {"text": "do not enlarge scope to sound helpful"},
+        {"text": "do not invent contractual terms"}
+      ],
       "polly_voice_id": "Matthew",
       "exemplars": [
         {"user": "We will include the Payments Engine modernization at no charge.", "support_delta": -2, "note": "Promises work outside the PWS and enlarges scope."},

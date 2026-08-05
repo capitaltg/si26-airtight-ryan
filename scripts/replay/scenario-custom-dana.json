@@ -12,7 +12,10 @@
       "voice": "Direct and architecture-first. Asks for testable controls before accepting an assertion.",
       "values": ["operationally testable architecture", "migration safety", "verifiable staffing"],
       "wants": ["named integration and migration controls", "evidence for key-person qualifications"],
-      "non_negotiables": ["do not trade migration safety for speed", "do not present unverified capability as fact"],
+      "non_negotiables": [
+        {"text": "do not trade migration safety for speed"},
+        {"text": "do not present unverified capability as fact"}
+      ],
       "polly_voice_id": "Ruth",
       "exemplars": [
         {"user": "We will move everything overnight and validate it after cutover.", "support_delta": -2, "note": "Trades migration safety for speed without a controlled validation path."},

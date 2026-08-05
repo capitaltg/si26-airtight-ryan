@@ -50,6 +50,15 @@ def test_custom_persona_scenarios_define_one_editable_persona(
     assert set(scenario["concerns"]) == EXPECTED_CONCERNS
     assert not LOCKED_PERSONA_FIELDS & set(override)
     assert REQUIRED_CUSTOM_FIELDS <= set(override)
+    # `non_negotiables` must be `NonNegotiableUpdate`-shaped objects, not bare
+    # strings: a bare string round-trips through `set(override)` above just
+    # fine and previously slipped past this test straight into a 422 at
+    # replay time (server/app/schemas/content.py's `PersonaUpdate`).
+    assert override["non_negotiables"], "fixture must carry at least one non-negotiable"
+    assert all(
+        isinstance(item, dict) and set(item) <= {"id", "text"} and item.get("text")
+        for item in override["non_negotiables"]
+    )
     assert override["display_name"] == display_name
     assert display_name in override["intro"]
     assert len(override["exemplars"]) == 3
