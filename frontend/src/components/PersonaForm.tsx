@@ -29,7 +29,6 @@ const BLOCK_FIELDS = [
 const LIST_FIELDS = [
   { key: "values", label: "Values" },
   { key: "wants", label: "Wants" },
-  { key: "non_negotiables", label: "Non-negotiables" },
 ] as const
 
 function toDraft(persona: Persona): PersonaUpdate {
@@ -40,7 +39,7 @@ function toDraft(persona: Persona): PersonaUpdate {
     demographics: persona.demographics,
     values: [...persona.values],
     wants: [...persona.wants],
-    non_negotiables: [...persona.non_negotiables],
+    non_negotiables: persona.non_negotiables.map((nn) => ({ id: nn.id, text: nn.text })),
     polly_voice_id: persona.polly_voice_id,
     exemplars: persona.exemplars.map((e) => ({
       user: e.user,
@@ -97,10 +96,20 @@ export function PersonaForm({
     setDraft((current) => ({ ...current, [key]: value }))
   }
 
-  function setListItem(key: "values" | "wants" | "non_negotiables", i: number, value: string) {
+  function setListItem(key: "values" | "wants", i: number, value: string) {
     setField(
       key,
       draft[key].map((item, index) => (index === i ? value : item)),
+    )
+  }
+
+  // The id is the server's join key for a scored red-line finding, so the form
+  // edits `text` and carries `id` through untouched. A new row sends no id and
+  // the server assigns a slug.
+  function setNonNegotiable(i: number, text: string) {
+    setField(
+      "non_negotiables",
+      draft.non_negotiables.map((nn, index) => (index === i ? { ...nn, text } : nn)),
     )
   }
 
@@ -209,6 +218,46 @@ export function PersonaForm({
           </div>
         </fieldset>
       ))}
+
+      <fieldset data-testid="list-non_negotiables">
+        <MicroCaps as="legend">Non-negotiables</MicroCaps>
+        <div className="mt-1 space-y-2">
+          {draft.non_negotiables.map((nn, i) => (
+            // Index keys are correct here: the rows are positional and a row's
+            // identity is its position in the authored list.
+            <div key={`non_negotiables-${i}`} className="flex items-start gap-2">
+              <Input
+                aria-label={`Non-negotiables ${i + 1}`}
+                data-testid={`field-non_negotiables-${i}`}
+                value={nn.text}
+                onChange={(e) => setNonNegotiable(i, e.target.value)}
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label={`Remove non-negotiables ${i + 1}`}
+                onClick={() =>
+                  setField(
+                    "non_negotiables",
+                    draft.non_negotiables.filter((_, index) => index !== i),
+                  )
+                }
+              >
+                Remove
+              </Button>
+            </div>
+          ))}
+          <Button
+            variant="secondary"
+            size="sm"
+            data-testid="add-non_negotiables"
+            onClick={() => setField("non_negotiables", [...draft.non_negotiables, { text: "" }])}
+          >
+            Add non-negotiable
+          </Button>
+          <FieldMessage message={errorFor(errors, "non_negotiables")} />
+        </div>
+      </fieldset>
 
       <fieldset data-testid="list-exemplars">
         <MicroCaps as="legend">Exemplars</MicroCaps>

@@ -107,11 +107,13 @@ export interface RubricRow {
   note: string | null
 }
 
+// `RedLine` is defined alongside the persona editor's `NonNegotiable` types
+// below — both are the server's `{id, text}` shape for an authored red line.
 export interface ConcernDisclosure {
   concern_id: string
   core_ask: string
   what_would_satisfy: string
-  red_lines: string[]
+  red_lines: RedLine[]
 }
 
 export interface RubricDisclosure {
@@ -281,6 +283,23 @@ export interface PersonaExemplar {
   note: string
 }
 
+// A red line's `id` is the server's join key for a scored red-line finding,
+// so both non-negotiables and concern red lines carry it through unedited.
+export interface RedLine {
+  id: string
+  text: string
+}
+
+export interface NonNegotiable {
+  id: string
+  text: string
+}
+
+export interface NonNegotiableDraft {
+  id?: string
+  text: string
+}
+
 // Read shape: includes the fields the editor renders read-only.
 export interface Persona {
   id: string
@@ -291,7 +310,7 @@ export interface Persona {
   values: string[]
   wants: string[]
   priorities: string[]
-  non_negotiables: string[]
+  non_negotiables: NonNegotiable[]
   rubric_version: number
   polly_voice_id: string
   exemplars: PersonaExemplar[]
@@ -306,7 +325,7 @@ export interface PersonaUpdate {
   demographics: string
   values: string[]
   wants: string[]
-  non_negotiables: string[]
+  non_negotiables: NonNegotiableDraft[]
   polly_voice_id: string
   exemplars: { user: string; support_delta: number; note: string }[]
 }
