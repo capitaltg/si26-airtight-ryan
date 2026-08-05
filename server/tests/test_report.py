@@ -13,6 +13,7 @@ network) and use a fake client for the narrative.
 
 from __future__ import annotations
 
+import dataclasses
 import uuid
 from typing import Any
 
@@ -25,6 +26,7 @@ from app.report.builder import (
     build_scored_report,
     render_narrative,
 )
+from app.schemas.content import NonNegotiable
 from app.schemas.extraction import (
     Addressed,
     Backing,
@@ -536,6 +538,69 @@ def test_red_line_finding_carries_the_authored_rule_not_model_text() -> None:
     assert evidence.span == "we will host it on premises"
     assert evidence.counter_span == red_line.text
     assert evidence.counter_label == f"concern_red_line: {red_line.id}"
+
+
+def test_non_negotiable_finding_scopes_lookup_to_the_turns_own_persona() -> None:
+    """Regression test for a cross-persona id collision.
+
+    ``slug_id`` only dedupes a non-negotiable's id within one persona, so two
+    personas can end up sharing an id (e.g. an editor customizing both). If
+    ``_authored_rule`` searched every persona's non-negotiables instead of
+    just the turn's own, it could return whichever persona's rule text
+    happened to come first in dict iteration order -- the wrong persona's
+    text, silently, in a printed report.
+    """
+    content = load_content()
+    technical_evaluator = content.personas["technical_evaluator"]
+    own_rule = technical_evaluator.non_negotiables[0]
+
+    contracting_officer = content.personas["contracting_officer"]
+    collided_contracting_officer = contracting_officer.model_copy(
+        update={
+            "non_negotiables": [
+                NonNegotiable(id=own_rule.id, text="a different persona's rule text"),
+                *contracting_officer.non_negotiables[1:],
+            ]
+        }
+    )
+    content = dataclasses.replace(
+        content,
+        personas={**content.personas, "contracting_officer": collided_contracting_officer},
+    )
+    # contracting_officer precedes technical_evaluator in dict iteration order
+    # (personas load sorted by filename), so a lookup that searched every
+    # persona instead of scoping to the turn's own would find the collided
+    # rule first and return the wrong persona's text.
+    assert list(content.personas) == ["contracting_officer", "program_rep", "technical_evaluator"]
+
+    extraction = Extraction(
+        red_line_hits=[
+            RedLineHit(
+                source_id=own_rule.id,
+                source_kind=RedLineSourceKind.non_negotiable,
+                span="we will simply lift and shift the mainframe data overnight",
+                why="hand-waves the migration",
+            )
+        ]
+    )
+    score = ScoreOutput(
+        support_delta=-2,
+        raw_support_delta=-2,
+        matched_rows=["red_line"],
+        row_counts={"red_line": 1},
+        capped=True,
+    )
+    findings = _turn_findings(
+        _turn(persona="technical_evaluator", concern_id="technical_approach"),
+        extraction,
+        score,
+        _values(),
+        content,
+    )
+    evidence = findings[0].evidence[0]
+    assert evidence.counter_span == own_rule.text
+    assert evidence.counter_span != "a different persona's rule text"
+    assert evidence.counter_label == f"non_negotiable: {own_rule.id}"
 
 
 def test_contradiction_is_a_finding_with_both_sides() -> None:

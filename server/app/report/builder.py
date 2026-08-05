@@ -70,23 +70,29 @@ def _row_values(rubric: Rubric) -> dict[str, int]:
     return {row.id: row.support_value for row in rubric.rows}
 
 
-def _authored_rule(hit: RedLineHit, content: Content, concern_id: str) -> str | None:
+def _authored_rule(
+    hit: RedLineHit, content: Content, concern_id: str, persona_id: str
+) -> str | None:
     """The authored text behind a validated ``source_id``.
 
     Resolved in code rather than quoted by the model: grounding has already
-    proven the id is authored, so the text is a lookup and a fabricated rule
-    reference is structurally impossible.
+    proven the id is authored against this turn's own concern or persona, so
+    the text is a lookup and a fabricated rule reference is structurally
+    impossible.
+
+    The ``non_negotiable`` lookup is scoped to the turn's own persona rather
+    than searched across every persona: ``slug_id`` only dedupes ids within
+    one persona, so two personas can share a non-negotiable id, and searching
+    all of them could return the wrong persona's rule text for a hit that
+    grounding already validated against exactly this turn's persona.
     """
     rules: list[RedLine] | list[NonNegotiable]
     if hit.source_kind is RedLineSourceKind.concern_red_line:
         concern = content.concerns.get(concern_id)
         rules = concern.red_lines if concern is not None else []
     else:
-        rules = [
-            nn
-            for persona in content.personas.values()
-            for nn in persona.non_negotiables
-        ]
+        persona = content.personas.get(persona_id)
+        rules = persona.non_negotiables if persona is not None else []
     return next((rule.text for rule in rules if rule.id == hit.source_id), None)
 
 
@@ -128,7 +134,7 @@ def _turn_findings(
             "red_line",
             hit.span,
             hit.why,
-            _authored_rule(hit, content, turn.concern_id),
+            _authored_rule(hit, content, turn.concern_id, turn.persona_id),
             f"{hit.source_kind.value}: {hit.source_id}",
         )
     for dodge in extraction.dodges:
