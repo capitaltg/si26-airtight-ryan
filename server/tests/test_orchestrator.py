@@ -108,13 +108,17 @@ def _full(concern: Concern) -> Extraction:
     )
 
 
-def _dodge(concern: Concern) -> Extraction:
+def _dodge(concern: Concern, answer: str) -> Extraction:
+    """``answer_span`` is a real slice (the whole thing) of ``answer``, the same
+    text the test then submits, so a future grounding check on dodges would not
+    drop it."""
     return Extraction(
         dodges=[
             Dodge(
                 sub_question_id=concern.sub_questions[0].id,
                 type=DodgeType.non_commitment,
-                evidence="answered with enthusiasm, no commitment",
+                answer_span=answer,
+                explanation="answered with enthusiasm, no commitment",
             )
         ]
     )
@@ -164,7 +168,9 @@ def test_dodge_yields_same_concern_follow_up_and_drops_meter(
 ) -> None:
     session = orchestrator.start_session(db, content)
     client = ScriptedClient()
-    client.next_extraction = _dodge(content.concerns["technical_approach"])
+    client.next_extraction = _dodge(
+        content.concerns["technical_approach"], "We're excited to deliver."
+    )
 
     result = orchestrator.submit_answer(db, content, client, session, "We're excited to deliver.")
 
@@ -440,7 +446,7 @@ def test_handoff_to_the_next_persona_carries_their_intro(
 
     # A dodge on Marcus's opening concern presses again on the same concern —
     # and he has now spoken, so his follow-up carries no intro.
-    client.next_extraction = _dodge(asg.concern)
+    client.next_extraction = _dodge(asg.concern, "We'll get you that later.")
     orchestrator.submit_answer(db, content, client, session, "We'll get you that later.")
     follow_up = orchestrator.next_concern(db, content, session)
     assert follow_up is not None
@@ -458,7 +464,7 @@ def test_follow_up_on_a_personas_first_concern_carries_no_intro(
     assert asg is not None
     assert asg.intro is not None  # first ask has it
 
-    client.next_extraction = _dodge(asg.concern)
+    client.next_extraction = _dodge(asg.concern, "We're very excited about this.")
     orchestrator.submit_answer(db, content, client, session, "We're very excited about this.")
 
     follow_up = orchestrator.next_concern(db, content, session)
@@ -493,7 +499,7 @@ def test_neither_prompt_kind_carries_the_speaker_label(db: Session, content: Con
     assert not core.prompt.startswith(label)
 
     # A dodge presses again on the same concern, which is the follow-up kind.
-    client.next_extraction = _dodge(core.concern)
+    client.next_extraction = _dodge(core.concern, "We're very excited about this.")
     orchestrator.submit_answer(db, content, client, session, "We're very excited about this.")
 
     follow_up = orchestrator.next_concern(db, content, session)

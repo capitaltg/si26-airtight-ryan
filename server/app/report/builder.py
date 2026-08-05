@@ -9,9 +9,9 @@ lives in ``render_narrative``, which produces a coaching recap tagged
 Findings vs counts
 ------------------
 A ``ScoredFinding`` must carry a verbatim span, so it is emitted only for the
-signals that carry one: ``red_line`` (hit span), ``dodge`` (evidence),
+signals that carry one: ``red_line`` (hit span), ``dodge`` (``answer_span``),
 ``evidence_backed`` (the backed claim's span), ``approach_cited`` (coverage
-span), and ``false_fact`` (the checked claim). ``contradiction`` and
+span), and ``false_fact`` (``answer_span``). ``contradiction`` and
 ``unsubstantiated`` have no verbatim span in the extraction schema, so they are
 surfaced as counts instead — never as a spanless "scored line".
 """
@@ -82,7 +82,7 @@ def _turn_findings(
     for hit in extraction.red_line_hits:
         add("red_line", hit.span, hit.why)
     for dodge in extraction.dodges:
-        add("dodge", dodge.evidence, dodge.type.value)
+        add("dodge", dodge.answer_span, dodge.type.value)
     for claim in extraction.claims:
         if claim.type is ClaimType.commitment and claim.backing is Backing.backed:
             add("evidence_backed", claim.span, claim.text)
@@ -91,7 +91,7 @@ def _turn_findings(
             add("approach_cited", cov.span, cov.addressed.value)
     for fc in extraction.fact_checks:
         if fc.verdict is Verdict.refuted and fc.tier >= 1:
-            add("false_fact", fc.claim, fc.source)
+            add("false_fact", fc.answer_span, fc.claim)
 
     return [
         ScoredFinding(

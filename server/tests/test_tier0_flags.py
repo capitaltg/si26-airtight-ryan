@@ -26,7 +26,12 @@ from .test_extraction import FakeBedrockClient, _fixture, _prior_claims
 def _flagged(*turns: int) -> Extraction:
     return Extraction(
         consistency_flags=[
-            ConsistencyFlag(conflicts_with_turn=t, detail=f"conflicts with turn {t}")
+            ConsistencyFlag(
+                conflicts_with_turn=t,
+                current_answer_span="three named leads on day one",
+                prior_answer_span=f"conflicts with turn {t}",
+                acknowledged_revision=False,
+            )
             for t in turns
         ]
     )
@@ -76,9 +81,23 @@ def test_dropping_flags_leaves_every_other_field_alone() -> None:
     """The guard touches consistency_flags only — fact checks in particular, since
     a document conflict belongs there and must still score as `false_fact`."""
     extraction = Extraction(
-        consistency_flags=[ConsistencyFlag(conflicts_with_turn=0, detail="bogus")],
+        consistency_flags=[
+            ConsistencyFlag(
+                conflicts_with_turn=0,
+                current_answer_span="bogus",
+                prior_answer_span="bogus",
+                acknowledged_revision=False,
+            )
+        ],
         fact_checks=[
-            {"claim": "42 million records", "tier": 1, "verdict": "refuted", "source": "PWS 3.1"}  # type: ignore[list-item]
+            {  # type: ignore[list-item]
+                "claim": "42 million records",
+                "answer_span": "42 million records",
+                "source_document_id": "rfp_pws",
+                "source_quote": "approximately 42 million records",
+                "tier": 1,
+                "verdict": "refuted",
+            }
         ],
     )
 

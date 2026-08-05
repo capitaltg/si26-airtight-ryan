@@ -20,6 +20,7 @@ from app.schemas.extraction import (
     FactCheck,
     RedLineHit,
     RedLineSourceKind,
+    SourceDocument,
     SubQuestionCoverage,
     Verdict,
 )
@@ -78,7 +79,7 @@ def test_dodge_scores_minus_two():
             Dodge(
                 sub_question_id="staffing",
                 type=DodgeType.non_commitment,
-                evidence="answered with enthusiasm but no name",
+                answer_span="answered with enthusiasm but no name",
             )
         ]
     )
@@ -90,7 +91,14 @@ def test_dodge_scores_minus_two():
 def test_refuted_fact_scores_minus_one():
     ext = Extraction(
         fact_checks=[
-            FactCheck(claim="we hold a GSA schedule", tier=1, verdict=Verdict.refuted, source="RFP")
+            FactCheck(
+                claim="we hold a GSA schedule",
+                answer_span="we hold a GSA schedule",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="RFP",
+                tier=1,
+                verdict=Verdict.refuted,
+            )
         ]
     )
     out = score_turn(ext, _rubric())
@@ -101,7 +109,12 @@ def test_refuted_fact_scores_minus_one():
 def test_contradiction_scores_minus_one():
     ext = Extraction(
         consistency_flags=[
-            ConsistencyFlag(conflicts_with_turn=2, detail="earlier said 3 leads, now 2")
+            ConsistencyFlag(
+                conflicts_with_turn=2,
+                current_answer_span="earlier said 3 leads, now 2",
+                prior_answer_span="earlier said 3 leads, now 2",
+                acknowledged_revision=False,
+            )
         ]
     )
     out = score_turn(ext, _rubric())
@@ -165,7 +178,7 @@ def test_over_limit_penalty_stacks_below_semantic_floor():
                 Dodge(
                     sub_question_id="staffing",
                     type=DodgeType.non_commitment,
-                    evidence="answered with enthusiasm but no name",
+                    answer_span="answered with enthusiasm but no name",
                 )
             ]
         ),
@@ -210,7 +223,14 @@ def test_cited_plus_contradiction_nets_zero():
         sub_question_coverage=[
             SubQuestionCoverage(id="tech_1", addressed=Addressed.partial, span="partial answer")
         ],
-        consistency_flags=[ConsistencyFlag(conflicts_with_turn=1, detail="conflict")],
+        consistency_flags=[
+            ConsistencyFlag(
+                conflicts_with_turn=1,
+                current_answer_span="conflict",
+                prior_answer_span="conflict",
+                acknowledged_revision=False,
+            )
+        ],
     )
     out = score_turn(ext, _rubric())
     assert out.support_delta == 0
@@ -220,9 +240,25 @@ def test_cited_plus_contradiction_nets_zero():
 def test_negatives_clamp_at_floor_minus_two():
     # dodge (-2) + refuted fact (-1) + contradiction (-1) = -4, clamps to -2.
     ext = Extraction(
-        dodges=[Dodge(sub_question_id="s", type=DodgeType.deflection, evidence="e")],
-        fact_checks=[FactCheck(claim="c", tier=1, verdict=Verdict.refuted, source="RFP")],
-        consistency_flags=[ConsistencyFlag(conflicts_with_turn=1, detail="d")],
+        dodges=[Dodge(sub_question_id="s", type=DodgeType.deflection, answer_span="e")],
+        fact_checks=[
+            FactCheck(
+                claim="c",
+                answer_span="c",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="RFP",
+                tier=1,
+                verdict=Verdict.refuted,
+            )
+        ],
+        consistency_flags=[
+            ConsistencyFlag(
+                conflicts_with_turn=1,
+                current_answer_span="d",
+                prior_answer_span="d",
+                acknowledged_revision=False,
+            )
+        ],
     )
     out = score_turn(ext, _rubric())
     assert out.support_delta == -2
@@ -231,9 +267,30 @@ def test_negatives_clamp_at_floor_minus_two():
 def test_multiple_refuted_facts_accumulate_before_clamp():
     ext = Extraction(
         fact_checks=[
-            FactCheck(claim="a", tier=1, verdict=Verdict.refuted, source="RFP"),
-            FactCheck(claim="b", tier=1, verdict=Verdict.refuted, source="RFP"),
-            FactCheck(claim="c", tier=1, verdict=Verdict.supported, source="RFP"),
+            FactCheck(
+                claim="a",
+                answer_span="a",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="RFP",
+                tier=1,
+                verdict=Verdict.refuted,
+            ),
+            FactCheck(
+                claim="b",
+                answer_span="b",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="RFP",
+                tier=1,
+                verdict=Verdict.refuted,
+            ),
+            FactCheck(
+                claim="c",
+                answer_span="c",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="RFP",
+                tier=1,
+                verdict=Verdict.supported,
+            ),
         ]
     )
     out = score_turn(ext, _rubric())
@@ -244,9 +301,30 @@ def test_multiple_refuted_facts_accumulate_before_clamp():
 def test_row_counts_report_false_fact_applications():
     ext = Extraction(
         fact_checks=[
-            FactCheck(claim="a", tier=1, verdict=Verdict.refuted, source="RFP"),
-            FactCheck(claim="b", tier=1, verdict=Verdict.refuted, source="RFP"),
-            FactCheck(claim="c", tier=1, verdict=Verdict.supported, source="RFP"),
+            FactCheck(
+                claim="a",
+                answer_span="a",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="RFP",
+                tier=1,
+                verdict=Verdict.refuted,
+            ),
+            FactCheck(
+                claim="b",
+                answer_span="b",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="RFP",
+                tier=1,
+                verdict=Verdict.refuted,
+            ),
+            FactCheck(
+                claim="c",
+                answer_span="c",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="RFP",
+                tier=1,
+                verdict=Verdict.supported,
+            ),
         ]
     )
     out = score_turn(ext, _rubric())
@@ -257,11 +335,32 @@ def test_row_counts_report_false_fact_applications():
 
 def test_raw_support_delta_keeps_the_points_the_clamp_absorbed():
     ext = Extraction(
-        dodges=[Dodge(sub_question_id="s", type=DodgeType.deflection, evidence="e")],
+        dodges=[Dodge(sub_question_id="s", type=DodgeType.deflection, answer_span="e")],
         fact_checks=[
-            FactCheck(claim="a", tier=1, verdict=Verdict.refuted, source="RFP"),
-            FactCheck(claim="b", tier=1, verdict=Verdict.refuted, source="RFP"),
-            FactCheck(claim="c", tier=1, verdict=Verdict.refuted, source="RFP"),
+            FactCheck(
+                claim="a",
+                answer_span="a",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="RFP",
+                tier=1,
+                verdict=Verdict.refuted,
+            ),
+            FactCheck(
+                claim="b",
+                answer_span="b",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="RFP",
+                tier=1,
+                verdict=Verdict.refuted,
+            ),
+            FactCheck(
+                claim="c",
+                answer_span="c",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="RFP",
+                tier=1,
+                verdict=Verdict.refuted,
+            ),
         ],
     )
     out = score_turn(ext, _rubric())
@@ -272,7 +371,7 @@ def test_raw_support_delta_keeps_the_points_the_clamp_absorbed():
 
 def test_single_dodge_sits_at_the_bound_without_clamping():
     out = score_turn(
-        Extraction(dodges=[Dodge(sub_question_id="s", type=DodgeType.deflection, evidence="e")]),
+        Extraction(dodges=[Dodge(sub_question_id="s", type=DodgeType.deflection, answer_span="e")]),
         _rubric(),
     )
     assert out.support_delta == out.raw_support_delta == -2
@@ -301,9 +400,25 @@ def test_unsubstantiated_turn_has_a_zero_raw_delta():
 
 def test_row_counts_ordering_follows_matched_rows():
     ext = Extraction(
-        dodges=[Dodge(sub_question_id="s", type=DodgeType.filibuster, evidence="e")],
-        fact_checks=[FactCheck(claim="c", tier=1, verdict=Verdict.refuted, source="RFP")],
-        consistency_flags=[ConsistencyFlag(conflicts_with_turn=1, detail="d")],
+        dodges=[Dodge(sub_question_id="s", type=DodgeType.filibuster, answer_span="e")],
+        fact_checks=[
+            FactCheck(
+                claim="c",
+                answer_span="c",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="RFP",
+                tier=1,
+                verdict=Verdict.refuted,
+            )
+        ],
+        consistency_flags=[
+            ConsistencyFlag(
+                conflicts_with_turn=1,
+                current_answer_span="d",
+                prior_answer_span="d",
+                acknowledged_revision=False,
+            )
+        ],
     )
     out = score_turn(ext, _rubric())
     assert list(out.row_counts) == out.matched_rows == ["dodge", "false_fact", "contradiction"]
@@ -345,8 +460,22 @@ def test_limit_penalty_preserves_counts_and_the_raw_delta():
     semantic = score_turn(
         Extraction(
             fact_checks=[
-                FactCheck(claim="a", tier=1, verdict=Verdict.refuted, source="RFP"),
-                FactCheck(claim="b", tier=1, verdict=Verdict.refuted, source="RFP"),
+                FactCheck(
+                    claim="a",
+                    answer_span="a",
+                    source_document_id=SourceDocument.rfp_pws,
+                    source_quote="RFP",
+                    tier=1,
+                    verdict=Verdict.refuted,
+                ),
+                FactCheck(
+                    claim="b",
+                    answer_span="b",
+                    source_document_id=SourceDocument.rfp_pws,
+                    source_quote="RFP",
+                    tier=1,
+                    verdict=Verdict.refuted,
+                ),
             ]
         ),
         _rubric(),
@@ -370,9 +499,25 @@ def test_limit_penalty_preserves_counts_and_the_raw_delta():
 def test_matched_rows_are_in_stable_rubric_order():
     # dodge + false_fact + contradiction should appear in rubric.yaml row order.
     ext = Extraction(
-        dodges=[Dodge(sub_question_id="s", type=DodgeType.filibuster, evidence="e")],
-        fact_checks=[FactCheck(claim="c", tier=1, verdict=Verdict.refuted, source="RFP")],
-        consistency_flags=[ConsistencyFlag(conflicts_with_turn=1, detail="d")],
+        dodges=[Dodge(sub_question_id="s", type=DodgeType.filibuster, answer_span="e")],
+        fact_checks=[
+            FactCheck(
+                claim="c",
+                answer_span="c",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="RFP",
+                tier=1,
+                verdict=Verdict.refuted,
+            )
+        ],
+        consistency_flags=[
+            ConsistencyFlag(
+                conflicts_with_turn=1,
+                current_answer_span="d",
+                prior_answer_span="d",
+                acknowledged_revision=False,
+            )
+        ],
     )
     out = score_turn(ext, _rubric())
     assert out.matched_rows == ["dodge", "false_fact", "contradiction"]

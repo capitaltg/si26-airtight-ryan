@@ -163,7 +163,7 @@ def test_prompt_summarizes_extraction_without_full_json_dump() -> None:
             Dodge(
                 sub_question_id="staffing",
                 type=DodgeType.topic_switch,
-                evidence="pivoted to timeline",
+                answer_span="pivoted to timeline",
             )
         ],
         red_line_hits=[

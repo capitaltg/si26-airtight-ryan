@@ -11,9 +11,10 @@ field and never raises. Runs after ``span_anchor.reanchor_spans`` so a replayed
 span is mapped onto the current phrasing before the membership test — reversed,
 a whitespace-only retype would discard legitimate findings.
 
-``fact_checks`` is deliberately untouched: ``FactCheck.claim`` is a model
-restatement rather than a quote and ``source`` is free text with no document
-registry to check it against. See the spec's out-of-scope section.
+``fact_checks`` is deliberately untouched here: ``FactCheck.claim`` is a model
+restatement rather than a quote, and verifying ``answer_span``/``source_quote``
+against the answer and the named ``source_document_id`` is added in a later
+task. See the spec's out-of-scope section.
 """
 
 from __future__ import annotations
@@ -44,8 +45,9 @@ def drop_ungrounded(
 ) -> Extraction:
     """Remove findings whose quote is not in ``answer`` or whose id is not real.
 
-    A dodge is about what is *absent*, so ``Dodge.evidence`` is prose rather than
-    a quote and gets no span check — only its ``sub_question_id`` is validated.
+    A dodge is about what is *absent*; ``Dodge.answer_span`` gets no span check
+    here — only its ``sub_question_id`` is validated. (Grounding the span itself
+    is added in a later task.)
     """
     folded_answer, _ = fold(answer)
     sub_question_ids = {sq.id for sq in concern.sub_questions}

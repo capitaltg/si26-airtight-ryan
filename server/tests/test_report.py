@@ -37,6 +37,7 @@ from app.schemas.extraction import (
     FactCheck,
     RedLineHit,
     RedLineSourceKind,
+    SourceDocument,
     SubQuestionCoverage,
     Verdict,
 )
@@ -55,7 +56,14 @@ class FakeReactClient:
         return self.text
 
 
-def _turn(index: int, persona: str, concern: str, ext: Extraction, rubric: Any) -> Turn:
+def _turn(
+    index: int,
+    persona: str,
+    concern: str,
+    ext: Extraction,
+    rubric: Any,
+    answer: str | None = None,
+) -> Turn:
     from app.pipeline.scoring import score_turn
 
     score = score_turn(ext, rubric)
@@ -64,7 +72,7 @@ def _turn(index: int, persona: str, concern: str, ext: Extraction, rubric: Any) 
         turn_index=index,
         persona_id=persona,
         concern_id=concern,
-        user_answer=f"answer {index}",
+        user_answer=answer if answer is not None else f"answer {index}",
         extraction_json=ext.model_dump(mode="json"),
         score_json=score.model_dump(mode="json"),
         reaction_json=None,
@@ -97,6 +105,7 @@ def _fixture() -> tuple[uuid.UUID, list[Turn], list[PersonaMeter], dict[str, str
         rubric,
     )
     # Turn 1: a dodge AND a Tier-0 contradiction -> dodge + contradiction.
+    t1_answer = "We're excited about staffing and will figure out the names later."
     t1 = _turn(
         1,
         "contracting_officer",
@@ -106,14 +115,22 @@ def _fixture() -> tuple[uuid.UUID, list[Turn], list[PersonaMeter], dict[str, str
                 Dodge(
                     sub_question_id="named_leads",
                     type=DodgeType.non_commitment,
-                    evidence="lots of enthusiasm, no names",
+                    answer_span="figure out the names later",
+                    explanation="lots of enthusiasm, no names",
                 )
             ],
             consistency_flags=[
-                ConsistencyFlag(conflicts_with_turn=0, detail="contradicts earlier staffing claim")
+                ConsistencyFlag(
+                    conflicts_with_turn=0,
+                    current_answer_span="figure out the names later",
+                    prior_answer_span="three named leads at contract start",
+                    acknowledged_revision=False,
+                    explanation="contradicts earlier staffing claim",
+                )
             ],
         ),
         rubric,
+        answer=t1_answer,
     )
     # Turn 2: a crossed red line -> capped.
     t2 = _turn(
@@ -230,14 +247,29 @@ def test_one_finding_per_row_carries_every_span() -> None:
 
 def test_false_fact_finding_count_matches_the_applications() -> None:
     content = load_content()
+    answer = "We process about 12M records and expect a six week cutover."
     ext = Extraction(
         fact_checks=[
-            FactCheck(claim="12M records", tier=1, verdict=Verdict.refuted, source="PWS 3.1"),
-            FactCheck(claim="six week cutover", tier=1, verdict=Verdict.refuted, source="PWS 3.4"),
+            FactCheck(
+                claim="claims 12M records",
+                answer_span="12M records",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="PWS 3.1 states approximately 42 million records",
+                tier=1,
+                verdict=Verdict.refuted,
+            ),
+            FactCheck(
+                claim="claims a six week cutover",
+                answer_span="six week cutover",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="PWS 3.4 requires a 90-day cutover window",
+                tier=1,
+                verdict=Verdict.refuted,
+            ),
         ]
     )
     findings = _turn_findings(
-        _turn(0, "technical_evaluator", "technical_approach", ext, content.rubric),
+        _turn(0, "technical_evaluator", "technical_approach", ext, content.rubric, answer=answer),
         ext,
         score_turn(ext, content.rubric),
         {row.id: row.support_value for row in content.rubric.rows},
@@ -250,15 +282,30 @@ def test_false_fact_finding_count_matches_the_applications() -> None:
 
 def test_tier_zero_refutation_never_becomes_a_false_fact_span() -> None:
     content = load_content()
+    answer = "We process 12M records with forty staff on site."
     ext = Extraction(
         fact_checks=[
-            FactCheck(claim="12M records", tier=1, verdict=Verdict.refuted, source="PWS 3.1"),
-            FactCheck(claim="forty staff", tier=0, verdict=Verdict.refuted, source="turn 1"),
+            FactCheck(
+                claim="claims 12M records",
+                answer_span="12M records",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="PWS 3.1 states approximately 42 million records",
+                tier=1,
+                verdict=Verdict.refuted,
+            ),
+            FactCheck(
+                claim="claims forty staff",
+                answer_span="forty staff",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="turn 1 ledger",
+                tier=0,
+                verdict=Verdict.refuted,
+            ),
         ]
     )
     score = score_turn(ext, content.rubric)
     findings = _turn_findings(
-        _turn(0, "technical_evaluator", "technical_approach", ext, content.rubric),
+        _turn(0, "technical_evaluator", "technical_approach", ext, content.rubric, answer=answer),
         ext,
         score,
         {row.id: row.support_value for row in content.rubric.rows},

@@ -48,9 +48,9 @@ def _render_extraction_summary(extraction: Extraction) -> str:
     the persona a contradiction was scored but not what it contradicted, and a
     persona told to react to an invisible penalty invents a source for it — in
     one observed run, an "org chart" and a "technical volume" that never existed
-    in the session. The flag detail already names the earlier turn and what it
-    said, so passing it through is what keeps the reply tied to the presenter's
-    own words. Same reason ``red_line_hits`` passes ``why``.
+    in the session. Passing both the current and prior spans is what keeps the
+    reply tied to the presenter's own words. Same reason ``red_line_hits`` passes
+    ``why``.
     """
     lines: list[str] = []
     if extraction.claims:
@@ -62,7 +62,8 @@ def _render_extraction_summary(extraction: Extraction) -> str:
     if extraction.consistency_flags:
         lines.append("Contradicts an earlier answer:")
         lines.extend(
-            f"  - (conflicts with turn {flag.conflicts_with_turn}) {flag.detail}"
+            f'  - (conflicts with turn {flag.conflicts_with_turn}) now: "'
+            f'{flag.current_answer_span}" / earlier: "{flag.prior_answer_span}"'
             for flag in extraction.consistency_flags
         )
     if extraction.red_line_hits:

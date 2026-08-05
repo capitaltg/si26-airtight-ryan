@@ -123,6 +123,17 @@ def build_extraction_static_prefix(
             "Classify the presenter's answer against the schema using the "
             f"{TOOL_NAME} tool. Quote spans verbatim from the answer; a claim with "
             "no verbatim span does not count. You never assign a score.",
+            "Evidence rules. Every span you emit must be copied character for "
+            "character out of the text it quotes. `answer_span` and "
+            "`current_answer_span` come from the presenter's answer below. "
+            "`prior_answer_span` comes from the earlier turn you name in "
+            "`conflicts_with_turn`, as shown in the claim ledger. `source_quote` "
+            "comes from the document you name in `source_document_id`: `rfp_pws` "
+            "is the solicitation above, `written_proposal` is the proposal above. "
+            "`red_line_hits.source_id` must be one of the bracketed ids listed "
+            "with the red lines and non-negotiables. A finding whose evidence "
+            "cannot be found in its stated source is discarded before scoring, "
+            "so an unverifiable finding is worth nothing.",
             "When you write a free-text reason in the schema (for example the "
             "'why' behind a red-line hit), write it the way a person would: plain "
             "and direct, short sentences, no em dashes, no three-part lists, no "
@@ -195,7 +206,7 @@ def drop_unanchored_flags(
                 "dropped Tier-0 flag naming turn %s (ledger turns: %s): %s",
                 flag.conflicts_with_turn,
                 sorted(ledger_turns) or "none",
-                flag.detail,
+                flag.current_answer_span,
             )
     return extraction.model_copy(update={"consistency_flags": kept})
 

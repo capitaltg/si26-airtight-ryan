@@ -150,7 +150,7 @@ def test_dodge_with_unknown_sub_question_id_is_dropped() -> None:
             Dodge(
                 sub_question_id="not_a_real_sub_question",
                 type=DodgeType.deflection,
-                evidence="talked about something else",
+                answer_span="talked about something else",
             )
         ]
     )
@@ -172,7 +172,7 @@ def test_everything_dropped_scores_zero_with_an_audit_row() -> None:
             Dodge(
                 sub_question_id="nope",
                 type=DodgeType.deflection,
-                evidence="x",
+                answer_span="x",
             )
         ],
     )
