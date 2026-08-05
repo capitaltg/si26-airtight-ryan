@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.content.loader import Content, load_content
+from app.schemas.content import Concern, NonNegotiable, PersonaDefinition
 
 STORE = Path(__file__).resolve().parent.parent / "app" / "content" / "store"
 
@@ -199,7 +200,14 @@ def test_extraction_fingerprint_changes_when_a_persona_changes() -> None:
     content = load_content()
     edited = {
         pid: (
-            p.model_copy(update={"non_negotiables": [*p.non_negotiables, "new line"]})
+            p.model_copy(
+                update={
+                    "non_negotiables": [
+                        *p.non_negotiables,
+                        NonNegotiable(id="new_line", text="new line"),
+                    ]
+                }
+            )
             if pid == "technical_evaluator"
             else p
         )
@@ -212,6 +220,44 @@ def test_extraction_fingerprint_changes_when_a_persona_changes() -> None:
         concerns=content.concerns,
     )
     assert changed != content.extraction_fingerprint
+
+
+def test_red_lines_and_non_negotiables_carry_authored_ids() -> None:
+    content = load_content()
+    concern = content.concerns["technical_approach"]
+    assert [rl.id for rl in concern.red_lines] == ["on_prem_hosting", "unbacked_capability"]
+    assert concern.red_lines[0].text.startswith("Proposes on-premises hosting")
+
+    persona = content.personas["contracting_officer"]
+    assert [nn.id for nn in persona.non_negotiables] == [
+        "no_work_outside_pws",
+        "no_off_proposal_terms",
+        "no_disparaging_incumbent",
+    ]
+
+
+def test_duplicate_red_line_ids_in_one_concern_fail_validation() -> None:
+    with pytest.raises(ValidationError):
+        Concern.model_validate(
+            {
+                "concern_id": "dupes",
+                "core_ask": "ask",
+                "sub_questions": [],
+                "red_lines": [
+                    {"id": "same", "text": "first"},
+                    {"id": "same", "text": "second"},
+                ],
+                "what_would_satisfy": "something",
+            }
+        )
+
+
+def test_duplicate_non_negotiable_ids_in_one_persona_fail_validation() -> None:
+    content = load_content()
+    raw = content.personas["program_rep"].model_dump(mode="json")
+    raw["non_negotiables"] = [{"id": "same", "text": "a"}, {"id": "same", "text": "b"}]
+    with pytest.raises(ValidationError):
+        PersonaDefinition.model_validate(raw)
 
 
 def test_extraction_fingerprint_ignores_the_rubric() -> None:

@@ -24,9 +24,12 @@ priorities:
   - transition
   - risk
 non_negotiables:
-  - do not dismiss operational continuity
-  - do not over-promise a zero-risk cutover
-  - do not ignore end-user needs
+  - id: no_dismissing_continuity
+    text: do not dismiss operational continuity
+  - id: no_zero_risk_promise
+    text: do not over-promise a zero-risk cutover
+  - id: no_ignoring_end_users
+    text: do not ignore end-user needs
 rubric_version: 1
 polly_voice_id: Danielle
 ---

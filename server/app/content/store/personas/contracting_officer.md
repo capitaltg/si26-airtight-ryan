@@ -23,9 +23,12 @@ priorities:
   - cost_realism
   - past_performance
 non_negotiables:
-  - do not promise work outside the PWS
-  - do not commit to prices or terms not in the proposal
-  - do not disparage the incumbent or competitors
+  - id: no_work_outside_pws
+    text: do not promise work outside the PWS
+  - id: no_off_proposal_terms
+    text: do not commit to prices or terms not in the proposal
+  - id: no_disparaging_incumbent
+    text: do not disparage the incumbent or competitors
 rubric_version: 1
 polly_voice_id: Matthew
 ---

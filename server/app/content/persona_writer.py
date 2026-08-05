@@ -8,6 +8,7 @@ the file changes.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -28,7 +29,34 @@ __all__ = [
     "reset_persona",
     "restore_persona_bytes",
     "save_persona",
+    "slug_id",
 ]
+
+_SLUG_STRIP = re.compile(r"[^a-z0-9]+")
+
+
+def slug_id(text: str, taken: set[str]) -> str:
+    """A stable, readable id for a newly added non-negotiable.
+
+    Only ever used for an entry the editor created without one. An existing entry
+    keeps its authored id, so rewording never repoints a stored finding.
+    """
+    base = _SLUG_STRIP.sub("_", text.strip().lower()).strip("_")[:48] or "non_negotiable"
+    candidate, suffix = base, 2
+    while candidate in taken:
+        candidate, suffix = f"{base}_{suffix}", suffix + 1
+    return candidate
+
+
+def _resolve_non_negotiables(update: PersonaUpdate) -> list[dict[str, str]]:
+    """Fill in an id for every incoming entry that lacks one."""
+    taken = {nn.id for nn in update.non_negotiables if nn.id}
+    resolved: list[dict[str, str]] = []
+    for nn in update.non_negotiables:
+        identifier = nn.id or slug_id(nn.text, taken)
+        taken.add(identifier)
+        resolved.append({"id": identifier, "text": nn.text})
+    return resolved
 
 
 def _root(content_dir: Path | None) -> Path:
@@ -76,6 +104,7 @@ def render_persona_file(
     post = frontmatter.load(path)
     metadata: dict[str, Any] = dict(post.metadata)
     metadata.update(update.model_dump(exclude={"exemplars"}))
+    metadata["non_negotiables"] = _resolve_non_negotiables(update)
 
     exemplars: list[dict[str, Any]] = [
         {"persona": persona_id, **exemplar.model_dump()} for exemplar in update.exemplars

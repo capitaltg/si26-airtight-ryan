@@ -113,7 +113,9 @@ def a_payload(**overrides: object) -> dict[str, object]:
         "demographics": "Contracting officer with warrant authority.",
         "values": ["compliance with the RFP"],
         "wants": ["answers that stay inside the PWS"],
-        "non_negotiables": ["do not promise work outside the PWS"],
+        "non_negotiables": [
+            {"id": "no_work_outside_pws", "text": "do not promise work outside the PWS"}
+        ],
         "polly_voice_id": "Joanna",
         "exemplars": [
             {

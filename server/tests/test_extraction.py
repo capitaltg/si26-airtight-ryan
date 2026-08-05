@@ -194,6 +194,19 @@ def test_prompt_handles_empty_ledger() -> None:
     assert concern.core_ask in prompt
 
 
+def test_prompt_renders_red_lines_and_non_negotiables_with_bracketed_ids() -> None:
+    content = load_content()
+    prompt = build_extraction_prompt(
+        answer="We will host on premises.",
+        concern=content.concerns["technical_approach"],
+        persona=content.personas["technical_evaluator"],
+        content=content,
+        prior_claims=[],
+    )
+    assert "[on_prem_hosting] Proposes on-premises hosting" in prompt
+    assert "[no_hand_waved_migration] do not hand-wave the migration" in prompt
+
+
 def test_run_extraction_returns_extraction_plus_computed_conciseness() -> None:
     content, persona, concern = _fixture()
     canned = Extraction(

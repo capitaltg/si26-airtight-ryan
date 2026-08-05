@@ -25,6 +25,37 @@ class Exemplar(BaseModel):
     note: str
 
 
+class RedLine(BaseModel):
+    """An authored hard limit on a concern, addressed by a stable id.
+
+    The id is what makes ``RedLineHit.source_id`` checkable: grounding matches
+    against it exactly the way it already matches ``SubQuestion.id``. Authored
+    rather than derived, so rewording the text never repoints a stored finding.
+    """
+
+    id: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+
+
+class NonNegotiable(BaseModel):
+    """An authored persona-level hard limit, addressed by a stable id."""
+
+    id: str = Field(min_length=1)
+    text: str = Field(min_length=1)
+
+
+class NonNegotiableUpdate(BaseModel):
+    """One non-negotiable as the editor sends it.
+
+    ``id`` is absent for an entry the editor just added; the write side assigns a
+    slug. An existing entry round-trips its id, so an edit to the wording cannot
+    repoint a finding that already cited it.
+    """
+
+    id: str | None = None
+    text: str = Field(min_length=1)
+
+
 class PersonaDefinition(BaseModel):
     id: str
     display_name: str
@@ -38,10 +69,17 @@ class PersonaDefinition(BaseModel):
     values: list[str] = Field(default_factory=list)
     wants: list[str] = Field(default_factory=list)
     priorities: list[str] = Field(default_factory=list)
-    non_negotiables: list[str] = Field(default_factory=list)
+    non_negotiables: list[NonNegotiable] = Field(default_factory=list)
     rubric_version: int
     polly_voice_id: str
     exemplars: list[Exemplar] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _non_negotiable_ids_are_unique(self) -> "PersonaDefinition":
+        ids = [nn.id for nn in self.non_negotiables]
+        if len(ids) != len(set(ids)):
+            raise ValueError(f"duplicate non_negotiable ids on persona {self.id}")
+        return self
 
 
 class ExemplarUpdate(BaseModel):
@@ -71,7 +109,7 @@ class PersonaUpdate(BaseModel):
     demographics: str
     values: list[str] = Field(default_factory=list)
     wants: list[str] = Field(default_factory=list)
-    non_negotiables: list[str] = Field(default_factory=list)
+    non_negotiables: list[NonNegotiableUpdate] = Field(default_factory=list)
     polly_voice_id: str
     exemplars: list[ExemplarUpdate] = Field(default_factory=list)
 
@@ -86,8 +124,15 @@ class Concern(BaseModel):
     concern_id: str
     core_ask: str
     sub_questions: list[SubQuestion] = Field(default_factory=list)
-    red_lines: list[str] = Field(default_factory=list)
+    red_lines: list[RedLine] = Field(default_factory=list)
     what_would_satisfy: str
+
+    @model_validator(mode="after")
+    def _red_line_ids_are_unique(self) -> "Concern":
+        ids = [rl.id for rl in self.red_lines]
+        if len(ids) != len(set(ids)):
+            raise ValueError(f"duplicate red_line ids on concern {self.concern_id}")
+        return self
 
 
 class RubricRow(BaseModel):

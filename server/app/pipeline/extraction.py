@@ -47,6 +47,7 @@ class ExtractionResult:
 
 
 def _render_persona(persona: PersonaDefinition) -> str:
+    non_negotiables = "; ".join(f"[{nn.id}] {nn.text}" for nn in persona.non_negotiables)
     return "\n".join(
         [
             f"You are {persona.display_name} ({persona.id}).",
@@ -55,7 +56,7 @@ def _render_persona(persona: PersonaDefinition) -> str:
             f"Values: {', '.join(persona.values)}",
             f"Wants: {', '.join(persona.wants)}",
             f"Priorities: {', '.join(persona.priorities)}",
-            f"Non-negotiables: {', '.join(persona.non_negotiables)}",
+            f"Non-negotiables: {non_negotiables}",
         ]
     )
 
@@ -65,7 +66,7 @@ def _render_concern(concern: Concern) -> str:
         f"  - [{sq.id}] {sq.text} (requires: {sq.requires.value})"
         for sq in concern.sub_questions
     )
-    red = "\n".join(f"  - {line}" for line in concern.red_lines)
+    red = "\n".join(f"  - [{line.id}] {line.text}" for line in concern.red_lines)
     return "\n".join(
         [
             f"Concern: {concern.concern_id}",

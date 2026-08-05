@@ -6,9 +6,12 @@ id: technical_evaluator
 intro: Dana Whitfield, senior technical evaluator on the source-selection board. I'll
   press on architecture, staffing depth, and how you sequence the migration.
 non_negotiables:
-- do not hand-wave the migration
-- do not propose staff who fail the labor-category qualifications
-- do not claim a capability the team cannot substantiate
+- id: no_hand_waved_migration
+  text: do not hand-wave the migration
+- id: no_unqualified_staff
+  text: do not propose staff who fail the labor-category qualifications
+- id: no_unsubstantiated_capability
+  text: do not claim a capability the team cannot substantiate
 polly_voice_id: Ruth
 priorities:
 - technical_approach
