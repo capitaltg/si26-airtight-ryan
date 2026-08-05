@@ -51,16 +51,27 @@ test("the form pre-fills from the server and shows the locked fields read-only",
   await page.getByTestId("toggle-contracting_officer").click()
 
   await expect(page.getByTestId("field-display_name")).toHaveValue("Marcus")
-  await expect(page.getByTestId("field-polly_voice_id")).toHaveValue("Matthew")
+  const pollyVoice = page.getByTestId("field-polly_voice_id")
+  await expect(pollyVoice).toHaveValue("Matthew")
+  await expect(pollyVoice).toHaveJSProperty("tagName", "SELECT")
+  await expect(pollyVoice.locator("option")).toHaveCount(3)
+  await expect(pollyVoice.locator('option[value="Matthew"]')).toHaveCount(1)
+  await expect(pollyVoice.locator('option[value="Ruth"]')).toHaveCount(1)
+  await expect(pollyVoice.locator('option[value="Danielle"]')).toHaveCount(1)
   await expect(page.getByTestId("field-intro")).toHaveValue(
     "Marcus Reyes, contracting officer on this acquisition.",
   )
   const supportDelta = page.getByTestId("exemplar-delta-0")
-  await expect(supportDelta).toHaveText("Score calibration: +2 (locked)")
+  await expect(supportDelta).toHaveText("+2")
   await expect(supportDelta).toHaveJSProperty("tagName", "P")
+  await expect(supportDelta).toHaveCSS("font-size", "14px")
+  const [scoreBox, detailsBox] = await Promise.all([
+    supportDelta.boundingBox(),
+    supportDelta.locator("..").boundingBox(),
+  ])
+  expect(scoreBox!.width).toBeLessThan(detailsBox!.width)
   await expect(page.locator('input[data-testid="exemplar-delta-0"]')).toHaveCount(0)
   await expect(page.getByTestId("locked-id")).toHaveText("contracting_officer")
-  await expect(page.getByTestId("locked-rubric-version")).toHaveText("1")
   // Locked fields render as text, not inputs — there is nothing to type into.
   await expect(page.getByTestId("locked-priorities")).toHaveJSProperty("tagName", "DD")
   await expect(page.getByTestId("locked-id")).toHaveJSProperty("tagName", "DD")
@@ -81,6 +92,7 @@ test("saving PUTs only the editable fields", async ({ page }) => {
   await openEditor(page)
   await page.getByTestId("toggle-contracting_officer").click()
   await page.getByTestId("field-display_name").fill("Mira")
+  await page.getByTestId("field-polly_voice_id").selectOption("Ruth")
   await page.getByRole("button", { name: "Save persona" }).click()
 
   await expect(page.getByRole("status")).toHaveText("Saved")
@@ -89,6 +101,7 @@ test("saving PUTs only the editable fields", async ({ page }) => {
   expect(sent).not.toHaveProperty("id")
   expect(sent).not.toHaveProperty("priorities")
   expect(sent).not.toHaveProperty("rubric_version")
+  expect(sent!.polly_voice_id).toBe("Ruth")
   // Exemplars go up without a persona — the server stamps it.
   expect(sent!.exemplars).toEqual([
     { user: "Firm-fixed price, 28 FTE.", support_delta: 2, note: "Backed." },
@@ -194,22 +207,19 @@ test("confirming a reset restores the shipped values in the form", async ({ page
   await expect(page.getByTestId("customized-contracting_officer")).toHaveCount(0)
 })
 
-test("closing the editor returns to the active rehearsal with its draft intact", async ({
-  page,
-}) => {
+// The editor is a pre-rehearsal surface. A running session has already fixed its
+// evaluators and its agenda, so there is deliberately no way into the editor from
+// the rehearsal screen — see docs/specs/2026-08-04-landing-layout-design.md §3.1a.
+test("a running rehearsal offers no way into the persona editor", async ({ page }) => {
   await mockList(page, [DANA, MARCUS])
   await page.goto("/")
+  await expect(page.getByTestId("open-persona-editor")).toBeVisible()
+
   await page.getByRole("button", { name: "Start rehearsal" }).click()
-
-  const answer = page.getByPlaceholder("Your answer… (⌘/Ctrl+Enter to submit)")
-  await answer.fill("Our technical lead owns the migration plan.")
-  await page.getByTestId("open-persona-editor").click()
-  await expect(page.getByRole("heading", { name: "Personas" })).toBeVisible()
-
-  await page.getByTestId("close-persona-editor").click()
-
   await expect(page.getByRole("button", { name: "How you're scored" })).toBeVisible()
-  await expect(answer).toHaveValue("Our technical lead owns the migration plan.")
+
+  await expect(page.getByTestId("open-persona-editor")).toHaveCount(0)
+  await expect(page.getByRole("heading", { name: "Personas" })).toHaveCount(0)
 })
 
 test("the editor has no WCAG 2.1 AA contrast violations", async ({ page }) => {

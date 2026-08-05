@@ -1,0 +1,122 @@
+/*
+ * Airtight design tokens.
+ *
+ * Names are carried over verbatim from the design handoff's prototype
+ * (`docs/design/Airtight.dc.html`) so that any inline `var(--x)` in those 885
+ * lines maps to the same token here without a lookup table. Do not rename.
+ *
+ * This is the only file in the repo that may contain a literal color value.
+ * Components author in Tailwind utilities that resolve to these variables.
+ *
+ * Provenance for every value: docs/specs/2026-08-03-design-system-foundation-design.md §3.1.
+ */
+
+:root {
+  /* ---- Raw palette ---------------------------------------------------- */
+  --crimson-700: #731D2C; /* primary action; at most one accent per view */
+  --crimson-600: #813441; /* crimson-700 mixed 10% white — hover */
+  --crimson-100: #E8DCD9; /* crimson-700 at 10% into sand-50 — speaking-row tint */
+  --navy-800: #122E40; /* structural chrome: nav rail, Layout B ground */
+  --navy-900: #0C1E2A; /* navy-800 mixed 35% black — gradient foot */
+  --teal-600: #1E4E59; /* calm accent: focus ring, member seals */
+  --teal-100: #E0E1DD; /* teal-600 at 10% into sand-50. No consumer today: it was
+                            the approach-cited chip tint until that row moved onto
+                            moss, and it is near-identical to --moss-100 (#E1E4DC)
+                            anyway, because two mid-tone accents reduced to a 10%
+                            wash land in the same place. Kept as the declared
+                            partner to --teal-600, not as a second green. */
+  --taupe-600: #73675D; /* staff seals, secondary borders */
+  --sand-300: #D9CEC5; /* NOT A TEXT GROUND — text-faint (3.91), moss-600
+                             (4.07) and taupe-600 (3.55) all fail AA on it.
+                             Borders and progress-pill fills only. */
+  --sand-200: #E8E1DA; /* 45% from sand-50 toward sand-300 */
+  --sand-50: #F5F1EC; /* page ground and card/section fills */
+  --moss-600: #2F6B4F; /* evidence-backed / success */
+  --amber-600: #B4762A; /* NEVER A TEXT COLOR — 3.77:1 on white fails AA at
+                             body size. Fill, border, or icon behind dark text
+                             only. A partial-verdict *label* needs a darker
+                             amber; until one exists, every "partial" signal is
+                             dark text on the --amber-100 tint. */
+  --moss-100: #E1E4DC; /* moss-600 at 10% into sand-50 — success tint behind dark text */
+  --amber-100: #EFE5D9; /* amber-600 at 10% into sand-50. amber-600 itself may
+                           never be text (3.77:1); this is how "partial" is
+                           expressed — dark text on the tint reaches 9.31:1. */
+  --white: #FFFFFF; /* card and topbar fill only; never the page ground */
+
+  /* ---- Semantic aliases ------------------------------------------------ */
+  --bg-page: var(--sand-50);
+  --text-body: #2A3B47;
+  --text-strong: var(--navy-800);
+  --text-muted: #5B5956; /* taupe-600 mixed 25% navy-800 */
+  --text-faint: #69615A; /* taupe-600 mixed 10% navy-800 — only one step below
+                             text-muted on purpose; AA forbids genuinely faint
+                             small text, so recession comes from size/weight. */
+  --text-link: var(--teal-600);
+  --text-link-hover: #183E47; /* teal-600 mixed 20% black */
+  --text-inverse: var(--sand-50);
+  --text-inverse-muted: rgba(255, 255, 255, 0.72);
+  --border-subtle: #DFD5CD; /* 80% from sand-50 toward sand-300 */
+  --border-default: var(--sand-300);
+  --border-inverse: rgba(255, 255, 255, 0.14);
+  --status-live: var(--crimson-600);
+  --scrim: rgba(12, 30, 42, 0.40); /* navy-900 at 40% — every dialog and drawer
+                                      overlay. Authored as rgba() because it sits
+                                      over content; a token color cannot take a
+                                      Tailwind opacity modifier. */
+
+  /* ---- Type ------------------------------------------------------------ */
+  /* Body and body-sm sit at 14/12px on main's density, not the handoff's 15/13:
+     the pre-restyle screens were authored in `text-sm`/`text-xs` at Tailwind's
+     leading-5/leading-4, and that density is the one being kept. Leading moves
+     with the size for the same reason. The heading and display steps are still
+     the handoff's. Families are unchanged.
+     CSS `font:` shorthand cannot carry letter-spacing, so tracking rides on
+     the Tailwind fontSize tuples instead. These composites exist for
+     traceability against the handoff; utilities are the authoring API. */
+  --font-display: "Source Serif 4 Variable", "Source Serif 4", Georgia, serif;
+  --font-ui: "Public Sans Variable", "Public Sans", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, monospace;
+  --type-body: 400 14px/1.43 var(--font-ui);
+  --type-body-sm: 400 12px/1.33 var(--font-ui);
+  --type-label: 600 12px/1.2 var(--font-ui);
+  --type-heading: 600 17px/1.3 var(--font-ui);
+  --type-subheading: 600 14px/1.35 var(--font-ui);
+  --type-quote: italic 600 20px/1.4 var(--font-display);
+
+  /* ---- Radius ---------------------------------------------------------- */
+  /* Not the handoff's 3/5/8/14/20. These are the values the screens actually
+     used before the restyle, mapped step for step off Tailwind's default scale
+     (4 / 6 / 8 / 16px) so the geometry is unchanged from main and only the
+     color moved. Card and block coincide at 8px because main styled both
+     surfaces with the same 8px step. */
+  --radius-chip: 4px; /* badges, chips, tracks */
+  --radius-control: 6px; /* buttons, inputs */
+  --radius-block: 8px; /* nested / small blocks */
+  --radius-card: 8px; /* cards, dialogs, drawers */
+  --radius-panel: 16px; /* rare large panels */
+  --radius-pill: 999px; /* tags, seals, mic, live badge */
+
+  /* ---- Shadow ---------------------------------------------------------- */
+  /* Neutral black, and deliberately against the spec's "never neutral black"
+     rule: these are Tailwind's own default steps, which is what every card
+     carried before the restyle — its lightest step on 29 surfaces, its heaviest
+     on the modal. The warm taupe-over-navy steps read heavier than those
+     surfaces, so they are not kept. `--shadow-overlay` takes the heaviest
+     default step; `--shadow-xs` has no pre-restyle counterpart and is the one
+     derived value. */
+  --shadow-xs: 0 1px 1px 0 rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.10), 0 2px 4px -2px rgba(0, 0, 0, 0.10);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.10), 0 4px 6px -4px rgba(0, 0, 0, 0.10);
+  --shadow-overlay: 0 20px 25px -5px rgba(0, 0, 0, 0.10), 0 8px 10px -6px rgba(0, 0, 0, 0.10);
+  --shadow-focus: 0 0 0 3px rgba(30, 78, 89, 0.38); /* a ring, not a shadow step */
+
+  /* ---- Motion ---------------------------------------------------------- */
+  /* No bounce, overshoot, or spring anywhere in the system. */
+  --duration-press: 80ms;
+  --duration-hover: 130ms;
+  --duration-enter: 200ms;
+  --duration-panel: 320ms;
+  --ease-in: cubic-bezier(0.2, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}

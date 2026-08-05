@@ -10,14 +10,21 @@ import { prettify, rowLabel } from "../lib"
 import type { PersonaLine, Report, ScoredFinding } from "../types"
 import { MeterPanel } from "./MeterBar"
 import { PersonaAvatar } from "./PersonaAvatar"
+import { Badge } from "./ui/Badge"
+import { Button } from "./ui/Button"
+import { Card } from "./ui/Card"
+import { MicroCaps } from "./ui/MicroCaps"
+import { type RubricRow, VerdictChip } from "./ui/VerdictChip"
 
 function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm print:shadow-none">
-      <div className="text-2xl font-semibold tabular-nums text-slate-900">{value}</div>
-      <div className="text-xs font-medium text-slate-500">{label}</div>
-      {hint && <div className="mt-0.5 text-[11px] text-slate-400">{hint}</div>}
-    </div>
+    <Card className="print:shadow-none">
+      <div className="font-data text-display-xs font-semibold tabular-nums text-text-strong">
+        {value}
+      </div>
+      <MicroCaps>{label}</MicroCaps>
+      {hint && <div className="mt-0.5 text-body-sm text-text-faint">{hint}</div>}
+    </Card>
   )
 }
 
@@ -27,53 +34,47 @@ function pct(rate: number): string {
 
 function CountRow({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex items-center justify-between border-b border-slate-100 py-1.5 text-sm last:border-0">
-      <span className="text-slate-600">{label}</span>
-      <span className="tabular-nums font-semibold text-slate-800">{value}</span>
+    <div className="flex items-center justify-between border-b border-subtle py-1.5 text-body-sm last:border-0">
+      <span className="text-text-muted">{label}</span>
+      <span className="font-data font-semibold tabular-nums text-text-strong">{value}</span>
     </div>
   )
 }
 
-const ROW_TONE: Record<string, string> = {
-  red_line: "bg-red-100 text-red-700",
-  dodge: "bg-orange-100 text-orange-700",
-  false_fact: "bg-orange-100 text-orange-700",
-  approach_cited: "bg-emerald-100 text-emerald-700",
-  evidence_backed: "bg-emerald-100 text-emerald-700",
-}
-
 function FindingCard({ f }: { f: ScoredFinding }) {
-  const tone = ROW_TONE[f.rubric_row] ?? "bg-slate-100 text-slate-600"
   const total = f.support_value * f.count
   const sign = total > 0 ? `+${total}` : `${total}`
   // dodge and approach_cited carry a category enum (e.g. "non_commitment") as
   // their detail; the rest carry prose, which must stay verbatim.
   const prettifyDetail = f.rubric_row === "dodge" || f.rubric_row === "approach_cited"
   return (
-    <details className="rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm print:shadow-none">
-      <summary className="flex cursor-pointer items-center gap-2 text-sm">
-        <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${tone}`}>
-          {rowLabel(f.rubric_row, f.count)} {sign}
-        </span>
-        <span className="flex items-center gap-1.5 text-slate-500">
+    <Card as="details" padding="sm" className="print:shadow-none">
+      <summary className="flex cursor-pointer items-center gap-2 text-body-sm">
+        {/* The server owns the rubric vocabulary, so the row id is cast at the
+            boundary rather than widening VerdictChip's prop. */}
+        <VerdictChip
+          row={f.rubric_row as RubricRow}
+          label={`${rowLabel(f.rubric_row, f.count)} ${sign}`}
+        />
+        <span className="flex items-center gap-1.5 text-text-muted">
           <PersonaAvatar personaId={f.persona_id} size={16} />
           {prettify(f.persona_id)} · {prettify(f.concern_id)}
         </span>
-        <span className="ml-auto text-xs text-slate-400">turn {f.turn_index + 1}</span>
+        <span className="ml-auto text-micro text-text-faint">turn {f.turn_index + 1}</span>
       </summary>
-      <div className="mt-2 space-y-1.5 text-xs text-slate-600">
+      <div className="mt-2 space-y-1.5 text-body-sm text-text-muted">
         {f.evidence.map((e, i) => (
           <div key={`${e.span}-${i}`} className="space-y-1">
-            <blockquote className="border-l-2 border-slate-300 pl-2 italic text-slate-700">
-              “{e.span}”
-            </blockquote>
+            {/* No color utility: preflight already defaults every border to
+                sand-300, so adding a bare `border` would draw all four sides. */}
+            <blockquote className="border-l-2 pl-2 italic text-text-body">“{e.span}”</blockquote>
             {e.detail && (
-              <p className="text-slate-500">{prettifyDetail ? prettify(e.detail) : e.detail}</p>
+              <p className="text-text-muted">{prettifyDetail ? prettify(e.detail) : e.detail}</p>
             )}
           </div>
         ))}
       </div>
-    </details>
+    </Card>
   )
 }
 
@@ -91,7 +92,7 @@ function ReportBody({ report }: { report: Report }) {
   return (
     <div className="space-y-6">
       {capped.length > 0 && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 print:border-red-400">
+        <div className="rounded-card border border-crimson-700 bg-crimson-100 p-4 text-body-sm text-crimson-700 print:border-crimson-700">
           <span className="font-semibold">Red line crossed.</span>{" "}
           {capped.map((p) => prettify(p.persona_id)).join(", ")} pinned at the cap for the rest of
           the session.
@@ -100,9 +101,7 @@ function ReportBody({ report }: { report: Report }) {
 
       {/* rate stats lead — length-independent so a short strong run isn't punished */}
       <section className="space-y-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Headline rates
-        </h2>
+        <MicroCaps as="h2">Headline rates</MicroCaps>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatTile
             label="Concerns satisfied"
@@ -121,25 +120,25 @@ function ReportBody({ report }: { report: Report }) {
 
       {report.limit_findings.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Answer limits
-          </h2>
+          <MicroCaps as="h2">Answer limits</MicroCaps>
           <div className="space-y-2">
             {report.limit_findings.map((finding) => {
               const isText = finding.kind === "text_words"
               const measured = isText ? finding.measured.toFixed(0) : finding.measured.toFixed(1)
               const unit = isText ? "words" : "seconds"
               return (
+                // Cautionary, not negative: dark text on the amber tint, because
+                // amber can never be a text color (spec §3.2).
                 <div
                   key={`${finding.turn_index}-${finding.kind}`}
-                  className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-900 print:border-orange-400"
+                  className="rounded-card border border-amber-600 bg-amber-100 px-3 py-2 text-body-sm text-text-body print:border-amber-600"
                 >
                   <span className="flex items-center gap-1.5">
                     <PersonaAvatar personaId={finding.persona_id} size={16} />
                     Turn {finding.turn_index + 1} · {prettify(finding.persona_id)} ·{" "}
                     {prettify(finding.concern_id)}
                   </span>
-                  <div className="text-xs">
+                  <div className="text-body-sm">
                     {isText ? "Text length" : "Voice duration"}: {measured} {unit} (
                     {finding.limit_threshold} {unit} limit) · {finding.penalty}
                   </div>
@@ -154,35 +153,35 @@ function ReportBody({ report }: { report: Report }) {
         <div className="space-y-6">
           {/* breakdown counts */}
           <section className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm print:shadow-none">
-              <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <Card className="print:shadow-none">
+              <MicroCaps as="h3" className="mb-1">
                 Sub-question coverage
-              </h3>
+              </MicroCaps>
               <CountRow label="Full" value={cov.full} />
               <CountRow label="Partial" value={cov.partial} />
               <CountRow label="None" value={cov.none} />
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm print:shadow-none">
-              <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            </Card>
+            <Card className="print:shadow-none">
+              <MicroCaps as="h3" className="mb-1">
                 Dodges by type
-              </h3>
+              </MicroCaps>
               {dodgeTypes.length === 0 ? (
-                <p className="py-1.5 text-sm text-slate-400">No dodges. Clean run.</p>
+                <p className="py-1.5 text-body-sm text-text-faint">No dodges. Clean run.</p>
               ) : (
                 dodgeTypes.map(([type, n]) => (
                   <CountRow key={type} label={prettify(type)} value={n} />
                 ))
               )}
-            </div>
+            </Card>
           </section>
 
           {/* scored findings, each with its verbatim quote */}
           <section className="space-y-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Scored findings: every line carries its quote
-            </h2>
+            <MicroCaps as="h2">Scored findings: every line carries its quote</MicroCaps>
             {report.findings.length === 0 ? (
-              <p className="text-sm text-slate-400">No span-bearing findings were recorded.</p>
+              <p className="text-body-sm text-text-faint">
+                No span-bearing findings were recorded.
+              </p>
             ) : (
               <div className="space-y-2">
                 {report.findings.map((f) => (
@@ -209,47 +208,42 @@ function ReportBody({ report }: { report: Report }) {
       {/* clarifications — non-scored exchanges, shown so overuse is auditable */}
       {report.clarifications.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Clarifications (not scored)
-          </h2>
+          <MicroCaps as="h2">Clarifications (not scored)</MicroCaps>
           <div className="space-y-2">
             {report.clarifications.map((c, i) => (
-              <div
+              <Card
                 key={`${c.concern_id}-${i}`}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm print:shadow-none"
+                padding="sm"
+                className="text-body-sm print:shadow-none"
               >
                 <div className="flex items-center gap-2">
-                  <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
-                    Not scored
-                  </span>
+                  <Badge tone="neutral">Not scored</Badge>
                   <PersonaAvatar personaId={c.persona_id} size={16} />
-                  <span className="text-xs text-slate-500">
+                  <span className="text-body-sm text-text-muted">
                     {prettify(c.persona_id)} · {prettify(c.concern_id)}
                   </span>
                 </div>
-                <p className="mt-1.5 text-slate-800">
-                  <span className="font-medium text-slate-500">Q: </span>
+                <p className="mt-1.5 text-text-body">
+                  <MicroCaps as="span">Q: </MicroCaps>
                   {c.question}
                 </p>
-                <p className="text-slate-800">
-                  <span className="font-medium text-slate-500">A: </span>
+                <p className="text-text-body">
+                  <MicroCaps as="span">A: </MicroCaps>
                   {c.reply}
                 </p>
-              </div>
+              </Card>
             ))}
           </div>
         </section>
       )}
 
       {/* the one model narrative — explicitly not scored */}
-      <section className="space-y-2 border-t-2 border-dashed border-slate-300 pt-6">
+      <section className="space-y-2 border-t-2 border-dashed pt-6">
         <div className="flex items-center gap-2">
-          <span className="rounded bg-slate-200 px-2 py-0.5 text-xs font-semibold uppercase tracking-wide text-slate-600">
-            {report.narrative.header}
-          </span>
-          <span className="text-xs text-slate-400">model recap: never feeds a score</span>
+          <Badge tone="neutral">{report.narrative.header}</Badge>
+          <span className="text-body-sm text-text-faint">model recap: never feeds a score</span>
         </div>
-        <p className="text-sm leading-relaxed text-slate-700">{report.narrative.text}</p>
+        <p className="text-body leading-relaxed text-text-body">{report.narrative.text}</p>
       </section>
     </div>
   )
@@ -261,19 +255,16 @@ export function AfterActionReport({ sessionId }: { sessionId: string }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between print:hidden">
-        <h1 className="text-xl font-semibold text-slate-900">After-action report</h1>
+        <h1 className="text-display-xs font-semibold text-text-strong">After-action report</h1>
         {data && (
-          <button
-            onClick={() => window.print()}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-          >
+          <Button variant="secondary" size="sm" iconLeft="download" onClick={() => window.print()}>
             Print / export
-          </button>
+          </Button>
         )}
       </div>
 
-      {isLoading && <p className="text-sm text-slate-500">Building the report…</p>}
-      {isError && <p className="text-sm text-red-700">{(error as Error).message}</p>}
+      {isLoading && <p className="text-body-sm text-text-muted">Building the report…</p>}
+      {isError && <p className="text-body-sm text-crimson-700">{(error as Error).message}</p>}
       {data && <ReportBody report={data} />}
     </div>
   )

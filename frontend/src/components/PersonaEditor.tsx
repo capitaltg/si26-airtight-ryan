@@ -2,9 +2,9 @@
 // back the way it came. Owns the query and both mutations; PersonaForm owns the
 // draft for whichever persona is expanded.
 //
-// The three personas are fixed — there is no add or remove. Their ids,
-// priorities, and rubric version are what give each of the eight concerns
-// exactly one owner, so those fields are read-only here and refused by the API.
+// The three personas are fixed — there is no add or remove. Their ids and
+// priorities are what give each of the eight concerns exactly one owner, so
+// those fields are read-only here and refused by the API.
 
 import { useState } from "react"
 
@@ -13,6 +13,9 @@ import { prettify } from "../lib"
 import type { PersonaUpdate } from "../types"
 import { PersonaAvatar } from "./PersonaAvatar"
 import { PersonaForm } from "./PersonaForm"
+import { Badge } from "./ui/Badge"
+import { Button } from "./ui/Button"
+import { Card } from "./ui/Card"
 
 export function PersonaEditor({ onClose }: { onClose: () => void }) {
   const personas = usePersonas()
@@ -31,18 +34,13 @@ export function PersonaEditor({ onClose }: { onClose: () => void }) {
   return (
     <div className="mx-auto max-w-3xl space-y-4 px-4 py-6">
       <header className="flex items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold text-slate-800">Personas</h1>
-        <button
-          type="button"
-          data-testid="close-persona-editor"
-          onClick={onClose}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-        >
+        <h1 className="text-display-xs font-semibold text-text-strong">Personas</h1>
+        <Button variant="secondary" size="sm" data-testid="close-persona-editor" onClick={onClose}>
           Back to rehearsal
-        </button>
+        </Button>
       </header>
 
-      <p className="text-sm text-slate-600">
+      <p className="text-body text-text-muted">
         Edit how each evaluator sounds and what they reward. Changes apply to the next question
         asked; a rehearsal already under way keeps the persona it started with.
       </p>
@@ -51,15 +49,20 @@ export function PersonaEditor({ onClose }: { onClose: () => void }) {
         <p
           role="alert"
           data-testid="persona-editor-error"
-          className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-800"
+          className="rounded-card bg-crimson-100 px-3 py-2 text-body-sm font-medium text-crimson-700"
         >
           {bannerError}
         </p>
       ) : null}
 
-      {personas.isPending ? <p className="text-sm text-slate-600">Loading personas…</p> : null}
+      {personas.isPending ? (
+        <p className="text-body-sm text-text-muted">Loading personas…</p>
+      ) : null}
       {personas.error ? (
-        <p role="alert" className="text-sm font-medium text-red-800">
+        <p
+          role="alert"
+          className="rounded-card bg-crimson-100 px-3 py-2 text-body-sm font-medium text-crimson-700"
+        >
           {personas.error.message}
         </p>
       ) : null}
@@ -71,36 +74,39 @@ export function PersonaEditor({ onClose }: { onClose: () => void }) {
           const busyResetting = reset.isPending && reset.variables === persona.id
           const mine = save.variables?.id === persona.id
           return (
-            <li
+            // A <div> wrapping a <button>: Card takes `padding="none"` so the
+            // inner button keeps its own padding and stays the click target.
+            <Card
+              as="li"
+              padding="none"
               key={persona.id}
               data-testid={`persona-row-${persona.id}`}
-              className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+              className="overflow-hidden"
             >
               <button
                 type="button"
                 data-testid={`toggle-${persona.id}`}
                 aria-expanded={open}
                 onClick={() => setOpenId(open ? null : persona.id)}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-50"
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-hover ease-in hover:bg-sand-50"
               >
                 <PersonaAvatar personaId={persona.id} size={32} />
                 <span className="flex-1">
-                  <span className="block text-sm font-semibold text-slate-800">
+                  <span className="block text-body-sm font-semibold text-text-strong">
                     {persona.display_name}, {prettify(persona.id)}
                   </span>
-                  <span className="block text-xs text-slate-500">
+                  <span className="block text-body-sm text-text-muted">
                     {persona.priorities.map(prettify).join(" · ")}
                   </span>
                 </span>
                 {persona.is_customized ? (
-                  <span
-                    data-testid={`customized-${persona.id}`}
-                    className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900"
-                  >
+                  <Badge tone="caution" data-testid={`customized-${persona.id}`}>
                     Customized
-                  </span>
+                  </Badge>
                 ) : null}
-                <span aria-hidden="true" className="text-slate-400">
+                {/* The glyph carries the expanded state, so it stays a +/− pair
+                    rather than becoming a static chevron. */}
+                <span aria-hidden="true" className="text-text-faint">
                   {open ? "−" : "+"}
                 </span>
               </button>
@@ -122,7 +128,7 @@ export function PersonaEditor({ onClose }: { onClose: () => void }) {
                   }}
                 />
               ) : null}
-            </li>
+            </Card>
           )
         })}
       </ul>

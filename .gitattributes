@@ -1,0 +1,18 @@
+# Repo is developed on Windows but built and run inside a Linux dev container,
+# which bind-mounts this worktree. CRLF in a shebang makes the kernel look for
+# an interpreter literally named "bash\r", so force LF in the working tree.
+* text=auto eol=lf
+
+# Binary assets: never touch.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.mp3 binary
+*.wav binary
+*.webm binary
+*.pdf binary

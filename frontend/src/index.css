@@ -1,6 +1,19 @@
+@import "@fontsource-variable/source-serif-4";
+@import "@fontsource-variable/source-serif-4/wght-italic.css";
+@import "@fontsource-variable/public-sans";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "./tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+body {
+  background: var(--bg-page);
+  font: var(--type-body);
+  color: var(--text-body);
+}
 
 @media print {
   details > *:not(summary) {

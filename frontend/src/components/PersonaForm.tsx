@@ -2,26 +2,23 @@
 // query, both mutations, and the server's field errors, and re-supplies
 // `persona` after every successful save or reset.
 //
-// `id`, `priorities`, and `rubric_version` are shown for context and are not
-// editable — the backend refuses them and the turn order depends on them.
+// `id` and `priorities` are shown for context and are not editable — the
+// backend refuses them and the turn order depends on them.
 
 import { useEffect, useState } from "react"
 
 import { prettify } from "../lib"
 import type { FieldError, Persona, PersonaUpdate } from "../types"
+import { Button } from "./ui/Button"
+import { Card } from "./ui/Card"
+import { Input } from "./ui/Input"
+import { MicroCaps } from "./ui/MicroCaps"
+import { Modal } from "./ui/Modal"
+import { Select } from "./ui/Select"
+import { Textarea } from "./ui/Textarea"
 
-const INPUT =
-  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm"
-const LABEL = "block text-xs font-semibold uppercase tracking-wide text-slate-500"
-const GHOST_BUTTON =
-  "rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-const SOLID_BUTTON =
-  "rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 disabled:opacity-50"
-
-const LINE_FIELDS = [
-  { key: "display_name", label: "Display name" },
-  { key: "polly_voice_id", label: "Polly voice id" },
-] as const
+const LINE_FIELDS = [{ key: "display_name", label: "Display name" }] as const
+const POLLY_VOICE_IDS = ["Matthew", "Ruth", "Danielle"]
 
 const BLOCK_FIELDS = [
   { key: "intro", label: "Intro" },
@@ -64,7 +61,7 @@ function errorFor(errors: FieldError[], path: string): string | undefined {
 function FieldMessage({ message }: { message: string | undefined }) {
   if (!message) return null
   return (
-    <p role="alert" className="mt-1 text-xs font-medium text-red-700">
+    <p role="alert" className="mt-1 text-body-sm font-medium text-crimson-700">
       {message}
     </p>
   )
@@ -117,7 +114,7 @@ export function PersonaForm({
   return (
     <form
       data-testid={`persona-form-${persona.id}`}
-      className="space-y-5 border-t border-slate-200 px-4 py-5"
+      className="space-y-5 border-t border-subtle px-4 py-5"
       noValidate
       onSubmit={(event) => {
         event.preventDefault()
@@ -127,9 +124,10 @@ export function PersonaForm({
       <div className="grid gap-4 sm:grid-cols-2">
         {LINE_FIELDS.map((field) => (
           <label key={field.key} className="block">
-            <span className={LABEL}>{field.label}</span>
-            <input
-              className={INPUT}
+            <MicroCaps as="span" className="block">
+              {field.label}
+            </MicroCaps>
+            <Input
               data-testid={`field-${field.key}`}
               value={draft[field.key]}
               onChange={(e) => setField(field.key, e.target.value)}
@@ -137,16 +135,35 @@ export function PersonaForm({
             <FieldMessage message={errorFor(errors, field.key)} />
           </label>
         ))}
+        <label className="block">
+          <MicroCaps as="span" className="block">
+            Polly voice id
+          </MicroCaps>
+          <Select
+            data-testid="field-polly_voice_id"
+            value={draft.polly_voice_id}
+            onChange={(event) => setField("polly_voice_id", event.target.value)}
+          >
+            {POLLY_VOICE_IDS.map((voiceId) => (
+              <option key={voiceId} value={voiceId}>
+                {voiceId}
+              </option>
+            ))}
+          </Select>
+          <FieldMessage message={errorFor(errors, "polly_voice_id")} />
+        </label>
       </div>
 
       {BLOCK_FIELDS.map((field) => (
         <label key={field.key} className="block">
-          <span className={LABEL}>{field.label}</span>
-          <textarea
-            className={`${INPUT} min-h-[4.5rem]`}
+          <MicroCaps as="span" className="block">
+            {field.label}
+          </MicroCaps>
+          <Textarea
+            rows={3}
             data-testid={`field-${field.key}`}
             value={draft[field.key]}
-            onChange={(e) => setField(field.key, e.target.value)}
+            onChange={(value) => setField(field.key, value)}
           />
           <FieldMessage message={errorFor(errors, field.key)} />
         </label>
@@ -154,21 +171,20 @@ export function PersonaForm({
 
       {LIST_FIELDS.map((field) => (
         <fieldset key={field.key} data-testid={`list-${field.key}`}>
-          <legend className={LABEL}>{field.label}</legend>
+          <MicroCaps as="legend">{field.label}</MicroCaps>
           <div className="mt-1 space-y-2">
             {draft[field.key].map((item, i) => (
               // Index keys are correct here: the rows are positional and a row's
               // identity is its position in the authored list.
               <div key={`${field.key}-${i}`} className="flex items-start gap-2">
-                <input
-                  className={INPUT}
+                <Input
                   aria-label={`${field.label} ${i + 1}`}
                   value={item}
                   onChange={(e) => setListItem(field.key, i, e.target.value)}
                 />
-                <button
-                  type="button"
-                  className={GHOST_BUTTON}
+                <Button
+                  variant="secondary"
+                  size="sm"
                   aria-label={`Remove ${field.label.toLowerCase()} ${i + 1}`}
                   onClick={() =>
                     setField(
@@ -178,57 +194,64 @@ export function PersonaForm({
                   }
                 >
                   Remove
-                </button>
+                </Button>
               </div>
             ))}
-            <button
-              type="button"
-              className={GHOST_BUTTON}
+            <Button
+              variant="secondary"
+              size="sm"
               data-testid={`add-${field.key}`}
               onClick={() => setField(field.key, [...draft[field.key], ""])}
             >
               Add {field.label.toLowerCase().replace(/s$/, "")}
-            </button>
+            </Button>
             <FieldMessage message={errorFor(errors, field.key)} />
           </div>
         </fieldset>
       ))}
 
       <fieldset data-testid="list-exemplars">
-        <legend className={LABEL}>Exemplars</legend>
+        <MicroCaps as="legend">Exemplars</MicroCaps>
         <div className="mt-1 space-y-3">
           {draft.exemplars.map((exemplar, i) => (
-            <div key={`exemplar-${i}`} className="space-y-2 rounded-lg bg-slate-50 p-3">
-              <label className="block">
-                <span className={LABEL}>Answer</span>
-                <textarea
-                  className={`${INPUT} min-h-[3.5rem]`}
+            <Card key={`exemplar-${i}`} nested padding="sm" className="space-y-2">
+              {/* Explicit htmlFor/id: the label wraps a component rather than a
+                  native control, which the a11y lint cannot see through. */}
+              <label className="block" htmlFor={`exemplar-${i}-user`}>
+                <MicroCaps as="span" className="block">
+                  Answer
+                </MicroCaps>
+                <Textarea
+                  id={`exemplar-${i}-user`}
+                  rows={2}
                   value={exemplar.user}
-                  onChange={(e) => setExemplar(i, { user: e.target.value })}
+                  onChange={(value) => setExemplar(i, { user: value })}
                 />
                 <FieldMessage message={errorFor(errors, `exemplars.${i}.user`)} />
               </label>
               <div className="grid gap-2 sm:grid-cols-[8rem_1fr]">
                 <p
-                  className="block rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-sm text-slate-700"
+                  className="block rounded-control border border-subtle bg-sand-200 px-3 py-2 text-body font-semibold text-text-body"
                   data-testid={`exemplar-delta-${i}`}
                 >
-                  Score calibration: {exemplar.support_delta >= 0 ? "+" : ""}
-                  {exemplar.support_delta} (locked)
+                  {exemplar.support_delta >= 0 ? "+" : ""}
+                  {exemplar.support_delta}
                 </p>
-                <label className="block">
-                  <span className={LABEL}>Note</span>
-                  <input
-                    className={INPUT}
+                <label className="block" htmlFor={`exemplar-${i}-note`}>
+                  <MicroCaps as="span" className="block">
+                    Note
+                  </MicroCaps>
+                  <Input
+                    id={`exemplar-${i}-note`}
                     value={exemplar.note}
                     onChange={(e) => setExemplar(i, { note: e.target.value })}
                   />
                   <FieldMessage message={errorFor(errors, `exemplars.${i}.note`)} />
                 </label>
               </div>
-              <button
-                type="button"
-                className={GHOST_BUTTON}
+              <Button
+                variant="secondary"
+                size="sm"
                 aria-label={`Remove exemplar ${i + 1}`}
                 onClick={() =>
                   setField(
@@ -238,94 +261,90 @@ export function PersonaForm({
                 }
               >
                 Remove
-              </button>
-            </div>
+              </Button>
+            </Card>
           ))}
-          <button
-            type="button"
-            className={GHOST_BUTTON}
+          <Button
+            variant="secondary"
+            size="sm"
             data-testid="add-exemplar"
             onClick={() =>
               setField("exemplars", [...draft.exemplars, { user: "", support_delta: 0, note: "" }])
             }
           >
             Add exemplar
-          </button>
+          </Button>
         </div>
       </fieldset>
 
-      <dl className="grid gap-2 rounded-lg bg-slate-50 p-3 text-xs text-slate-600 sm:grid-cols-3">
+      <Card
+        as="div"
+        nested
+        padding="sm"
+        className="grid gap-2 text-body-sm text-text-muted sm:grid-cols-2"
+      >
         <div>
-          <dt className={LABEL}>Id</dt>
+          <MicroCaps as="dt">Id</MicroCaps>
           <dd data-testid="locked-id">{persona.id}</dd>
         </div>
         <div>
-          <dt className={LABEL}>Priorities</dt>
+          <MicroCaps as="dt">Priorities</MicroCaps>
           <dd data-testid="locked-priorities">{persona.priorities.map(prettify).join(", ")}</dd>
         </div>
-        <div>
-          <dt className={LABEL}>Rubric version</dt>
-          <dd data-testid="locked-rubric-version">{persona.rubric_version}</dd>
-        </div>
-      </dl>
+      </Card>
 
       <div className="flex flex-wrap items-center justify-end gap-3">
-        {saved ? <output className="text-xs font-medium text-emerald-700">Saved</output> : null}
-        <button
-          type="button"
-          className={GHOST_BUTTON}
+        {saved ? <output className="text-body-sm font-medium text-moss-600">Saved</output> : null}
+        <Button
+          variant="secondary"
+          size="sm"
           data-testid={`reset-${persona.id}`}
           disabled={resetting}
           onClick={() => setConfirmingReset(true)}
         >
           Reset to default
-        </button>
-        <button type="submit" className={SOLID_BUTTON} disabled={saving}>
+        </Button>
+        <Button variant="primary" type="submit" disabled={saving}>
           {saving ? "Saving…" : "Save persona"}
-        </button>
+        </Button>
       </div>
 
-      {confirmingReset ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 p-4">
-          {/* Native <dialog open> for the dialog semantics, matching
-              DiscardRecordingDialog. */}
-          <dialog
-            open
-            aria-modal="true"
-            aria-label={`Reset ${persona.display_name} to the shipped default?`}
-            data-testid="confirm-reset"
-            className="relative m-0 w-full max-w-sm space-y-3 rounded-lg bg-white p-4 shadow-lg"
+      {/* No `onClose`: the dialog has no dismiss affordance today beyond its own
+          "Keep my edits" button, so it must be answered. */}
+      <Modal
+        open={confirmingReset}
+        label={`Reset ${persona.display_name} to the shipped default?`}
+        size="sm"
+        aria-modal="true"
+        data-testid="confirm-reset"
+      >
+        <h2 className="text-heading font-semibold text-text-strong">
+          Reset {persona.display_name} to the shipped default?
+        </h2>
+        <p className="text-body-sm text-text-muted">
+          Every customization to this persona is discarded. This cannot be undone.
+        </p>
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            data-testid="confirm-reset-cancel"
+            onClick={() => setConfirmingReset(false)}
           >
-            <h2 className="text-sm font-semibold text-slate-800">
-              Reset {persona.display_name} to the shipped default?
-            </h2>
-            <p className="text-xs text-slate-600">
-              Every customization to this persona is discarded. This cannot be undone.
-            </p>
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                className={GHOST_BUTTON}
-                data-testid="confirm-reset-cancel"
-                onClick={() => setConfirmingReset(false)}
-              >
-                Keep my edits
-              </button>
-              <button
-                type="button"
-                className={SOLID_BUTTON}
-                data-testid="confirm-reset-confirm"
-                onClick={() => {
-                  setConfirmingReset(false)
-                  onReset()
-                }}
-              >
-                Reset persona
-              </button>
-            </div>
-          </dialog>
+            Keep my edits
+          </Button>
+          <Button
+            variant="primary"
+            data-testid="confirm-reset-confirm"
+            onClick={() => {
+              setConfirmingReset(false)
+              onReset()
+            }}
+          >
+            Reset persona
+          </Button>
         </div>
-      ) : null}
+      </Modal>
     </form>
   )
 }

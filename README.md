@@ -99,7 +99,7 @@ demographics, values, wants, non-negotiables, Polly voice, and exemplars are edi
 take effect on the next question asked, with no restart. Each persona's shipped version is
 frozen under `personas/defaults/`, and **Reset to default** restores it.
 
-`id`, `priorities`, and `rubric_version` are not editable. Together with `PERSONA_ORDER`
+`id` and `priorities` are not editable. Together with `PERSONA_ORDER`
 in `app/pipeline/orchestrator.py` they guarantee each of the eight concerns has exactly
 one owner, so changing them is a scenario change, not a reskin.
 

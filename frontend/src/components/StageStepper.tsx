@@ -14,7 +14,7 @@ const STEPS: { stage: Stage; label: string }[] = [
 function Spinner() {
   return (
     <span
-      className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700"
+      className="inline-block h-3 w-3 animate-spin rounded-pill border-2 border-sand-300 border-t-navy-800"
       aria-hidden
     />
   )
@@ -24,7 +24,7 @@ export function StageStepper({ stage, elapsed }: { stage: Stage; elapsed: number
   const current = STEPS.findIndex((s) => s.stage === stage)
 
   return (
-    <div className="flex items-center gap-2 text-xs">
+    <div className="flex items-center gap-2 text-body-sm">
       {STEPS.map((step, i) => {
         const done = i < current
         const active = i === current
@@ -32,17 +32,21 @@ export function StageStepper({ stage, elapsed }: { stage: Stage; elapsed: number
           <div key={step.stage} className="flex items-center gap-2">
             <span
               className={`flex items-center gap-1.5 ${
-                active ? "font-semibold text-slate-700" : done ? "text-slate-400" : "text-slate-300"
+                active
+                  ? "font-semibold text-text-strong"
+                  : done
+                    ? "text-text-muted"
+                    : "text-text-faint"
               }`}
             >
               {active ? <Spinner /> : done ? <span aria-hidden>✓</span> : null}
               {step.label}
             </span>
-            {i < STEPS.length - 1 && <span className="text-slate-300">→</span>}
+            {i < STEPS.length - 1 && <span className="text-text-faint">→</span>}
           </div>
         )
       })}
-      <span className="ml-1 tabular-nums text-slate-400">{elapsed}s</span>
+      <span className="ml-1 font-data tabular-nums text-text-faint">{elapsed}s</span>
     </div>
   )
 }

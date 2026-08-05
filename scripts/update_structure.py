@@ -129,7 +129,7 @@ def main() -> int:
     claude = root / "AGENTS.md"
     if not claude.exists():
         return 0
-    content = claude.read_text()
+    content = claude.read_text(encoding="utf-8")
     if START not in content or END not in content:
         return 0
 
@@ -147,7 +147,9 @@ def main() -> int:
     new_content = pre + START + new_block + END + post
 
     if new_content != content:
-        claude.write_text(new_content)
+        # Explicit utf-8 + LF: Windows defaults to cp1252 (can't encode the
+        # box-drawing chars) and would rewrite the whole file with CRLF.
+        claude.write_text(new_content, encoding="utf-8", newline="\n")
         print("update_structure: refreshed AGENTS.md tree")
     return 0
 

@@ -7,7 +7,7 @@
 export function PromptIntro({ intro }: { intro?: string | null }) {
   if (!intro) return null
   return (
-    <p data-testid="prompt-intro" className="text-sm italic text-slate-500">
+    <p data-testid="prompt-intro" className="font-display text-body italic text-text-muted">
       {intro}
     </p>
   )
