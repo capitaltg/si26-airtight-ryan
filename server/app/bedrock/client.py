@@ -2,12 +2,15 @@
 
 Extraction is forced through tool-use, validated against a Pydantic model,
 retried once, then fails loud. Unvalidated model JSON never reaches the scorer
-(AGENTS.md locked constraints). Both methods pin the configured model id and
-send ``temperature=0``.
+(AGENTS.md locked constraints). ``extract_result`` also reports whether the
+response was replayed from ``model_response_cache``; ``extract`` is the same call
+without that flag. Every method pins the configured model id and sends
+``temperature=0``.
 """
 
 import logging
-from typing import Any, Protocol, TypeVar, cast
+from dataclasses import dataclass
+from typing import Any, Generic, Protocol, TypeVar, cast
 
 from anthropic import AnthropicBedrock
 from pydantic import BaseModel, ValidationError
@@ -20,6 +23,19 @@ logger = logging.getLogger(__name__)
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
 _ATTEMPTS = 2  # initial call + one retry
+
+
+@dataclass(frozen=True)
+class ExtractOutcome(Generic[ModelT]):
+    """The validated tool input plus how it got here.
+
+    ``cache_hit`` is True only when ``model_response_cache`` replayed a stored
+    response, so a caller can record whether this turn actually reached the
+    model. ``extract`` drops it; ``run_extraction`` keeps it.
+    """
+
+    content: ModelT
+    cache_hit: bool
 
 
 class ExtractionValidationError(RuntimeError):
@@ -76,7 +92,7 @@ class BedrockClient:
         # golden suite and unit tests) means every call hits the transport.
         self._cache = cache
 
-    def extract(
+    def extract_result(
         self,
         content: str | list[dict[str, Any]],
         *,
@@ -84,8 +100,9 @@ class BedrockClient:
         tool_name: str,
         max_tokens: int = 4096,
         cache_key: CacheKeyInput | None = None,
-    ) -> ModelT:
-        """Force `tool_name`, validate its input, retry once, then raise.
+    ) -> ExtractOutcome[ModelT]:
+        """Force `tool_name`, validate its input, retry once, then raise, and
+        report whether the response came from the cache.
 
         ``content`` is either a plain string (wrapped as a single text block) or
         a pre-built list of content blocks. A caller passing blocks can place a
@@ -124,7 +141,10 @@ class BedrockClient:
             if cached is not None:
                 # Replay: re-validate the stored tool input so the returned
                 # object is byte-identical to the first run's, without a call.
-                return content_schema.model_validate(cached["tool_input"])
+                return ExtractOutcome(
+                    content=content_schema.model_validate(cached["tool_input"]),
+                    cache_hit=True,
+                )
 
         last: Exception | None = None
 
@@ -169,9 +189,29 @@ class BedrockClient:
                     {"tool_input": block.input},
                     normalized_answer=cache_key.normalized_answer if cache_key else None,
                 )
-            return validated
+            return ExtractOutcome(content=validated, cache_hit=False)
 
         raise ExtractionValidationError(str(last)) from last
+
+    def extract(
+        self,
+        content: str | list[dict[str, Any]],
+        *,
+        content_schema: type[ModelT],
+        tool_name: str,
+        max_tokens: int = 4096,
+        cache_key: CacheKeyInput | None = None,
+    ) -> ModelT:
+        """:meth:`extract_result` without the provenance. Kept so callers that do
+        not care whether the response was cached — ``run_reaction`` above all —
+        need no change."""
+        return self.extract_result(
+            content,
+            content_schema=content_schema,
+            tool_name=tool_name,
+            max_tokens=max_tokens,
+            cache_key=cache_key,
+        ).content
 
     def react(
         self,

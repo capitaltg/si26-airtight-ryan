@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from app.bedrock.client import BedrockClient, ExtractionValidationError
+from app.bedrock.client import BedrockClient, ExtractionValidationError, ExtractOutcome
 from app.config import settings
 from app.schemas.extraction import Extraction
 
@@ -62,6 +62,12 @@ def _valid_input() -> dict:
 
 def _extract(client: BedrockClient) -> Extraction:
     return client.extract("prompt", content_schema=Extraction, tool_name="record_extraction")
+
+
+def _extract_result(client: BedrockClient) -> ExtractOutcome[Extraction]:
+    return client.extract_result(
+        "prompt", content_schema=Extraction, tool_name="record_extraction"
+    )
 
 
 def test_valid_tool_input_returns_validated_instance() -> None:
@@ -224,3 +230,41 @@ def test_cache_keys_differ_by_prompt() -> None:
     assert client.react("prompt A") == "A reply."
     assert client.react("prompt B") == "B reply."
     assert len(transport.calls) == 2  # distinct prompts, no false cache hit
+
+
+def test_extract_result_reports_a_transport_call_as_not_a_cache_hit() -> None:
+    transport = FakeTransport(_tool_response(_valid_input()))
+    outcome = _extract_result(BedrockClient(transport=transport, cache=DictCache()))
+    assert outcome.cache_hit is False
+    assert isinstance(outcome.content, Extraction)
+    assert len(transport.calls) == 1
+
+
+def test_extract_result_reports_a_response_cache_replay() -> None:
+    transport = FakeTransport(
+        _tool_response(_valid_input()), _tool_response(_other_valid_input())
+    )
+    client = BedrockClient(transport=transport, cache=DictCache())
+
+    first = _extract_result(client)
+    second = _extract_result(client)
+
+    assert (first.cache_hit, second.cache_hit) == (False, True)
+    assert second.content == first.content
+    assert len(transport.calls) == 1
+
+
+def test_extract_result_without_a_cache_never_reports_a_hit() -> None:
+    transport = FakeTransport(
+        _tool_response(_valid_input()), _tool_response(_other_valid_input())
+    )
+    client = BedrockClient(transport=transport)
+    assert _extract_result(client).cache_hit is False
+    assert _extract_result(client).cache_hit is False
+
+
+def test_extract_still_returns_the_bare_validated_object() -> None:
+    """The wrapper's contract: `run_reaction` and every existing caller keep
+    receiving the model, not an outcome."""
+    transport = FakeTransport(_tool_response(_valid_input()))
+    assert isinstance(_extract(BedrockClient(transport=transport)), Extraction)
