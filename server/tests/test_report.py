@@ -41,7 +41,7 @@ from app.schemas.extraction import (
     SubQuestionCoverage,
     Verdict,
 )
-from app.schemas.report import ScoredFinding
+from app.schemas.report import ScoredFinding, ScoredReport
 from app.schemas.scoring import ScoreOutput
 
 
@@ -172,6 +172,54 @@ def _fixture() -> tuple[uuid.UUID, list[Turn], list[PersonaMeter], dict[str, str
         "transition": "dodged",
     }
     return session_id, [t0, t1, t2], meters, concern_statuses, content
+
+
+def _turns_fixture() -> list[Turn]:
+    """The turns half of ``_fixture()``, for tests that only need the turns."""
+    _, turns, _, _, _ = _fixture()
+    return turns
+
+
+def _build_report_over_turns() -> ScoredReport:
+    """Build a scored report over ``_fixture()``'s turns, unmodified."""
+    session_id, turns, meters, statuses, content = _fixture()
+    return build_scored_report(
+        session_id=session_id,
+        status="complete",
+        turns=turns,
+        meters=meters,
+        concern_statuses=statuses,
+        content=content,
+    )
+
+
+def test_score_audit_agrees_on_a_normal_build() -> None:
+    report = _build_report_over_turns()
+    assert report.score_audit_agrees is True
+    assert [a.turn_index for a in report.score_audit] == list(range(len(report.score_audit)))
+    assert all(a.agrees for a in report.score_audit)
+
+
+def test_score_audit_reports_a_turn_whose_persisted_number_disagrees() -> None:
+    turns = _turns_fixture()
+    tampered = dict(turns[0].score_json)
+    tampered["support_delta"] = tampered["support_delta"] - 1
+    turns[0].score_json = tampered
+
+    report = build_scored_report(
+        session_id=turns[0].session_id,
+        status="complete",
+        turns=turns,
+        meters=[],
+        concern_statuses={},
+        content=load_content(),
+    )
+    assert report.score_audit_agrees is False
+    assert report.score_audit[0].agrees is False
+    assert (
+        report.score_audit[0].persisted_support_delta
+        != report.score_audit[0].recomputed_support_delta
+    )
 
 
 def test_scored_report_counts_match_hand_computed() -> None:

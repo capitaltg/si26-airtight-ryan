@@ -110,6 +110,21 @@ class NarrativeSection(BaseModel):
     text: str
 
 
+class TurnScoreAudit(BaseModel):
+    """An independent recomputation of one turn's number from its stored evidence.
+
+    The report renders the disagreement rather than hiding it: the persisted value
+    is never rewritten from here.
+    """
+
+    turn_index: int
+    persisted_support_delta: int
+    recomputed_support_delta: int
+    persisted_matched_rows: list[str]
+    recomputed_matched_rows: list[str]
+    agrees: bool
+
+
 class ScoredReport(BaseModel):
     """The deterministic, code-rendered part of the after-action report."""
 
@@ -123,6 +138,8 @@ class ScoredReport(BaseModel):
     findings: list[ScoredFinding] = Field(default_factory=list)
     limit_findings: list[LimitFinding] = Field(default_factory=list)
     clarifications: list[ClarificationLine] = Field(default_factory=list)
+    score_audit: list[TurnScoreAudit] = Field(default_factory=list)
+    score_audit_agrees: bool = True
 
 
 class Report(ScoredReport):

@@ -21,12 +21,14 @@ instead — never as a spanless "scored line".
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections import Counter
 from typing import Protocol
 
 from app.content.loader import Content
 from app.db.models import Clarification, PersonaMeter, Turn
+from app.pipeline.scoring import apply_limit_penalty, score_turn
 from app.schemas.content import NonNegotiable, RedLine, Rubric
 from app.schemas.extraction import (
     Addressed,
@@ -48,8 +50,11 @@ from app.schemas.report import (
     Report,
     ScoredFinding,
     ScoredReport,
+    TurnScoreAudit,
 )
-from app.schemas.scoring import ScoreOutput
+from app.schemas.scoring import LimitMeasurement, ScoreOutput
+
+logger = logging.getLogger(__name__)
 
 _SATISFIED = "satisfied"
 
@@ -170,6 +175,51 @@ def _turn_findings(
     ]
 
 
+def _audit_turn(
+    turn: Turn, extraction: Extraction, persisted: ScoreOutput, rubric: Rubric
+) -> TurnScoreAudit:
+    """Re-derive this turn's number from the extraction stored beside it.
+
+    Runs the same pure path the live turn ran: ``score_turn`` for the semantic
+    rows, then ``apply_limit_penalty`` when the turn recorded a limit
+    measurement. Row combination, the clamp, and the limit penalty are therefore
+    all exercised again against the evidence the report prints.
+    """
+    recomputed = score_turn(extraction, rubric)
+    if persisted.limit is not None:
+        recomputed = apply_limit_penalty(
+            recomputed,
+            rubric,
+            LimitMeasurement(
+                kind=persisted.limit.kind,
+                measured=persisted.limit.measured,
+                warning_threshold=persisted.limit.warning_threshold,
+                limit_threshold=persisted.limit.limit_threshold,
+            ),
+        )
+    agrees = (
+        recomputed.support_delta == persisted.support_delta
+        and recomputed.matched_rows == persisted.matched_rows
+    )
+    if not agrees:
+        logger.warning(
+            "score audit disagrees on turn %s: persisted %+d %s, recomputed %+d %s",
+            turn.turn_index,
+            persisted.support_delta,
+            persisted.matched_rows,
+            recomputed.support_delta,
+            recomputed.matched_rows,
+        )
+    return TurnScoreAudit(
+        turn_index=turn.turn_index,
+        persisted_support_delta=persisted.support_delta,
+        recomputed_support_delta=recomputed.support_delta,
+        persisted_matched_rows=list(persisted.matched_rows),
+        recomputed_matched_rows=list(recomputed.matched_rows),
+        agrees=agrees,
+    )
+
+
 def build_scored_report(
     *,
     session_id: uuid.UUID,
@@ -196,6 +246,7 @@ def build_scored_report(
     dodge_count = 0
     findings: list[ScoredFinding] = []
     limit_findings: list[LimitFinding] = []
+    audits: list[TurnScoreAudit] = []
 
     for turn, extraction, score in zip(turns, extractions, scores, strict=True):
         for cov in extraction.sub_question_coverage:
@@ -210,6 +261,7 @@ def build_scored_report(
             dodge_count += 1
         contradiction_count += len(extraction.consistency_flags)
         findings.extend(_turn_findings(turn, extraction, score, values, content))
+        audits.append(_audit_turn(turn, extraction, score, content.rubric))
         if score.limit is not None and score.limit.penalty_applied:
             limit_findings.append(
                 LimitFinding(
@@ -251,6 +303,8 @@ def build_scored_report(
         contradiction_count=contradiction_count,
         findings=findings,
         limit_findings=limit_findings,
+        score_audit=audits,
+        score_audit_agrees=all(a.agrees for a in audits),
         clarifications=[
             ClarificationLine(
                 persona_id=c.persona_id,
