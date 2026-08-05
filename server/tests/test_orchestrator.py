@@ -128,7 +128,7 @@ def _red_line() -> Extraction:
     return Extraction(
         red_line_hits=[
             RedLineHit(
-                source_id="technical_approach",
+                source_id="on_prem_hosting",
                 source_kind=RedLineSourceKind.concern_red_line,
                 span="we'll just lift and shift the mainframe overnight",
                 why="hand-waves the migration, crossing a non-negotiable",

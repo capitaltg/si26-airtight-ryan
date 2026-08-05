@@ -52,9 +52,9 @@ def test_fabricated_red_line_span_is_dropped_and_does_not_cap() -> None:
 
 
 def test_real_red_line_span_is_kept() -> None:
-    _, persona, concern = _fixture()
+    _, _, concern = _fixture()
     hit = RedLineHit(
-        source_id="whatever",
+        source_id=concern.red_lines[0].id,
         source_kind=RedLineSourceKind.concern_red_line,
         span="three named leads at contract start",
         why="grounded",
@@ -64,8 +64,9 @@ def test_real_red_line_span_is_kept() -> None:
 
 
 def test_span_differing_only_in_case_and_spacing_is_kept() -> None:
+    _, _, concern = _fixture()
     hit = RedLineHit(
-        source_id="whatever",
+        source_id=concern.red_lines[0].id,
         source_kind=RedLineSourceKind.concern_red_line,
         span="Three   Named\nLeads",
         why="same words, different typing",
@@ -179,6 +180,62 @@ def test_everything_dropped_scores_zero_with_an_audit_row() -> None:
     score = score_turn(_ground(extraction), content.rubric)
     assert score.support_delta == 0
     assert score.matched_rows == ["unsubstantiated"]
+
+
+def test_invented_source_id_with_a_real_span_cannot_cap() -> None:
+    content, _, _ = _fixture()
+    extraction = Extraction(
+        red_line_hits=[
+            RedLineHit(
+                source_id="not-a-real-authored-red-line",
+                source_kind=RedLineSourceKind.concern_red_line,
+                span="three named leads at contract start",
+                why="real span, invented rule",
+            )
+        ]
+    )
+    grounded = _ground(extraction)
+    assert grounded.red_line_hits == []
+    score = score_turn(grounded, content.rubric)
+    assert score.support_delta == 0
+    assert score.capped is False
+
+
+def test_authored_concern_red_line_id_is_kept() -> None:
+    _, _, concern = _fixture()
+    hit = RedLineHit(
+        source_id=concern.red_lines[0].id,
+        source_kind=RedLineSourceKind.concern_red_line,
+        span="three named leads at contract start",
+        why="authored id, real span",
+    )
+    assert _ground(Extraction(red_line_hits=[hit])).red_line_hits == [hit]
+
+
+def test_authored_persona_non_negotiable_id_is_kept() -> None:
+    _, persona, _ = _fixture()
+    hit = RedLineHit(
+        source_id=persona.non_negotiables[0].id,
+        source_kind=RedLineSourceKind.non_negotiable,
+        span="three named leads at contract start",
+        why="authored id, real span",
+    )
+    assert _ground(Extraction(red_line_hits=[hit])).red_line_hits == [hit]
+
+
+def test_id_valid_for_the_other_kind_is_dropped() -> None:
+    _, persona, _ = _fixture()
+    extraction = Extraction(
+        red_line_hits=[
+            RedLineHit(
+                source_id=persona.non_negotiables[0].id,
+                source_kind=RedLineSourceKind.concern_red_line,
+                span="three named leads at contract start",
+                why="right id, wrong list",
+            )
+        ]
+    )
+    assert _ground(extraction).red_line_hits == []
 
 
 def test_nothing_to_drop_returns_the_same_object() -> None:

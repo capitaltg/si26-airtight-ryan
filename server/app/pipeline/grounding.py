@@ -9,7 +9,8 @@ stickily and forever, on the model's word alone.
 Pure code, no model call, no I/O. It only ever removes; it never rewrites a
 field and never raises. Runs after ``span_anchor.reanchor_spans`` so a replayed
 span is mapped onto the current phrasing before the membership test — reversed,
-a whitespace-only retype would discard legitimate findings.
+a whitespace-only retype would discard legitimate findings. ``RedLineHit.source_id``
+is also validated against the authored ids of its ``source_kind``.
 
 ``fact_checks`` is deliberately untouched here: ``FactCheck.claim`` is a model
 restatement rather than a quote, and verifying ``answer_span``/``source_quote``
@@ -51,22 +52,25 @@ def drop_ungrounded(
     """
     folded_answer, _ = fold(answer)
     sub_question_ids = {sq.id for sq in concern.sub_questions}
+    red_line_ids = {rl.id for rl in concern.red_lines}
+    non_negotiable_ids = {nn.id for nn in persona.non_negotiables}
 
     red_line_hits = []
     for hit in extraction.red_line_hits:
         if not _is_quoted(hit.span, folded_answer):
             logger.warning("dropped red_line_hit with ungrounded span: %r", hit.span)
             continue
-        if hit.source_kind is RedLineSourceKind.concern_red_line and not concern.red_lines:
+        authored = (
+            red_line_ids
+            if hit.source_kind is RedLineSourceKind.concern_red_line
+            else non_negotiable_ids
+        )
+        if hit.source_id not in authored:
             logger.warning(
-                "dropped concern_red_line hit: concern %s lists no red lines",
-                concern.concern_id,
-            )
-            continue
-        if hit.source_kind is RedLineSourceKind.non_negotiable and not persona.non_negotiables:
-            logger.warning(
-                "dropped non_negotiable hit: persona %s lists no non-negotiables",
-                persona.id,
+                "dropped red_line_hit citing unknown %s id %r (authored: %s)",
+                hit.source_kind.value,
+                hit.source_id,
+                sorted(authored) or "none",
             )
             continue
         red_line_hits.append(hit)
