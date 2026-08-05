@@ -16,8 +16,10 @@
       text: How do the three downstream systems keep reading case status?
       requires: fact_or_commitment
   red_lines:
-    - Proposes on-premises hosting, which the PWS forbids.
-    - Claims a capability with no component, sequence, or evidence behind it.
+    - id: on_prem_hosting
+      text: Proposes on-premises hosting, which the PWS forbids.
+    - id: unbacked_capability
+      text: Claims a capability with no component, sequence, or evidence behind it.
   what_would_satisfy: >-
     A concrete component breakdown, a FedRAMP-authorized hosting environment, and a
     named plan for the three required integrations.
@@ -34,8 +36,10 @@
       text: Is the PM committed full-time, and for how long?
       requires: commitment
   red_lines:
-    - Proposes a PM who does not meet the stated labor-category qualifications.
-    - Claims experience the written proposal does not support.
+    - id: pm_underqualified
+      text: Proposes a PM who does not meet the stated labor-category qualifications.
+    - id: unsupported_experience
+      text: Claims experience the written proposal does not support.
   what_would_satisfy: >-
     A named PM whose experience meets or exceeds the PWS minimums, with a clear
     full-time commitment.
@@ -52,8 +56,10 @@
       text: How is adjudication work protected during the handover?
       requires: commitment
   red_lines:
-    - Commits to a transition longer than the 90-day PWS limit.
-    - Skips the required 60-day parallel run before retiring the legacy system.
+    - id: transition_over_90_days
+      text: Commits to a transition longer than the 90-day PWS limit.
+    - id: skipped_parallel_run
+      text: Skips the required 60-day parallel run before retiring the legacy system.
   what_would_satisfy: >-
     A transition-in inside 90 days, knowledge transfer from the incumbent, and a
     parallel run that protects live cases.
@@ -69,8 +75,10 @@
       text: What was the measurable result, and is it verifiable?
       requires: fact
   red_lines:
-    - Cites a past project that contradicts the written proposal.
-    - Inflates an outcome the proposal does not claim.
+    - id: past_project_conflicts_proposal
+      text: Cites a past project that contradicts the written proposal.
+    - id: inflated_outcome
+      text: Inflates an outcome the proposal does not claim.
   what_would_satisfy: >-
     A comparable-scale project with a concrete, verifiable outcome consistent with the
     written proposal.
@@ -86,8 +94,10 @@
       text: Is the price firm-fixed with no hidden assumption of adjustment?
       requires: commitment
   red_lines:
-    - Commits to prices or terms not in the written proposal.
-    - Signals scope creep to justify the price.
+    - id: price_or_terms_off_proposal
+      text: Commits to prices or terms not in the written proposal.
+    - id: scope_creep_pricing
+      text: Signals scope creep to justify the price.
   what_would_satisfy: >-
     A staffing basis tied to the scope and a firm-fixed price consistent with PWS
     Section 4.
@@ -102,8 +112,10 @@
       text: Is production data held until the ATO is granted?
       requires: commitment
   red_lines:
-    - Claims to process production data before ATO.
-    - Overstates the authorization level of the hosting environment.
+    - id: production_data_before_ato
+      text: Claims to process production data before ATO.
+    - id: overstated_authorization
+      text: Overstates the authorization level of the hosting environment.
   what_would_satisfy: >-
     A moderate-baseline system, a FedRAMP-authorized environment, and no production
     data before ATO.
@@ -118,8 +130,10 @@
       text: What is the staffed support and incident-response model?
       requires: commitment
   red_lines:
-    - Over-promises a zero-risk or seamless cutover.
-    - Ignores the training and help-desk obligations in the PWS.
+    - id: zero_risk_cutover
+      text: Over-promises a zero-risk or seamless cutover.
+    - id: ignores_training_obligations
+      text: Ignores the training and help-desk obligations in the PWS.
   what_would_satisfy: >-
     A realistic cutover story with training, a staffed help desk, and a fallback if
     something breaks.
@@ -134,7 +148,9 @@
       text: Is there a concrete mitigation tied to that risk?
       requires: commitment
   red_lines:
-    - Denies that any real risk exists.
-    - Names a risk but offers no mitigation.
+    - id: denies_risk
+      text: Denies that any real risk exists.
+    - id: risk_without_mitigation
+      text: Names a risk but offers no mitigation.
   what_would_satisfy: >-
     An honest, specific risk with a concrete, committed mitigation.

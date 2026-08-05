@@ -12,7 +12,10 @@
       "voice": "Practical and user-centered. Presses for continuity plans that a busy adjudicator can feel.",
       "values": ["predictable daily operations", "supported users", "reversible cutovers"],
       "wants": ["specific user support coverage", "a fallback path for interrupted work"],
-      "non_negotiables": ["do not minimize the effect of change on users", "do not promise a risk-free cutover"],
+      "non_negotiables": [
+        {"text": "do not minimize the effect of change on users"},
+        {"text": "do not promise a risk-free cutover"}
+      ],
       "polly_voice_id": "Danielle",
       "exemplars": [
         {"user": "Users will not notice the switch because there is no cutover risk.", "support_delta": -2, "note": "Dismisses user disruption and promises an unrealistic risk-free cutover."},

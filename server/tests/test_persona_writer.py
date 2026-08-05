@@ -67,7 +67,9 @@ def an_update(**overrides: object) -> PersonaUpdate:
         "demographics": "Contracting officer with warrant authority.",
         "values": ["compliance with the RFP"],
         "wants": ["answers that stay inside the PWS"],
-        "non_negotiables": ["do not promise work outside the PWS"],
+        "non_negotiables": [
+            {"id": "no_work_outside_pws", "text": "do not promise work outside the PWS"}
+        ],
         "polly_voice_id": "Joanna",
         "exemplars": [{"user": "Firm-fixed price, 28 FTE.", "support_delta": 2, "note": "Backed."}],
     }
@@ -243,6 +245,43 @@ def test_is_customized_raises_when_the_frozen_default_is_missing(store: Path) ->
 
     with pytest.raises(FileNotFoundError):
         is_customized("contracting_officer", store)
+
+
+def test_editing_a_non_negotiable_preserves_its_id(store: Path) -> None:
+    from app.content.persona_writer import save_persona
+
+    update = an_update(
+        non_negotiables=[
+            {"id": "no_work_outside_pws", "text": "do not promise work outside the PWS, ever"}
+        ]
+    )
+    saved = save_persona("contracting_officer", update, store)
+    assert [nn.id for nn in saved.non_negotiables] == ["no_work_outside_pws"]
+    assert saved.non_negotiables[0].text.endswith("ever")
+
+
+def test_new_non_negotiable_without_an_id_gets_a_unique_slug(store: Path) -> None:
+    from app.content.persona_writer import save_persona
+
+    update = an_update(
+        non_negotiables=[
+            {"id": "no_work_outside_pws", "text": "do not promise work outside the PWS"},
+            {"text": "Do not accept unpriced options!"},
+        ]
+    )
+    saved = save_persona("contracting_officer", update, store)
+    assert [nn.id for nn in saved.non_negotiables] == [
+        "no_work_outside_pws",
+        "do_not_accept_unpriced_options",
+    ]
+
+
+def test_slug_id_deduplicates_against_taken_ids() -> None:
+    from app.content.persona_writer import slug_id
+
+    assert slug_id("do not promise work outside the PWS", {"do_not_promise_work"}) != (
+        "do_not_promise_work"
+    )
 
 
 def test_saving_identical_content_is_not_a_customization(store: Path) -> None:

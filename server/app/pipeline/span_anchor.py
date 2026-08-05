@@ -14,6 +14,12 @@ the first match when a quote occurs more than once, and leaves a span alone when
 it cannot be located rather than inventing one. Only quoted fields are rewritten;
 free-text reasons and claim restatements are the model's own words and are left
 as emitted. Nothing the scorer reads is touched, so the score cannot move.
+
+``ConsistencyFlag.prior_answer_span`` and ``FactCheck.source_quote`` quote a
+*different* text than the answer under evaluation — an earlier turn's answer and
+a frozen source document, respectively — and are deliberately left alone here.
+Anchoring them against the current answer would corrupt them, since neither one
+is a quote of it.
 """
 
 from __future__ import annotations
@@ -89,7 +95,12 @@ def reanchor_spans(extraction: Extraction, answer: str) -> Extraction:
                 for cov in extraction.sub_question_coverage
             ],
             "dodges": [
-                d.model_copy(update={"evidence": fix(d.evidence)}) for d in extraction.dodges
+                d.model_copy(update={"answer_span": fix(d.answer_span)})
+                for d in extraction.dodges
+            ],
+            "consistency_flags": [
+                f.model_copy(update={"current_answer_span": fix(f.current_answer_span)})
+                for f in extraction.consistency_flags
             ],
             "red_line_hits": [
                 h.model_copy(update={"span": fix(h.span)}) for h in extraction.red_line_hits

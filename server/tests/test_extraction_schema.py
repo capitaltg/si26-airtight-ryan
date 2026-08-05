@@ -1,7 +1,19 @@
+import json
+
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.extraction import Claim, Extraction, RedLineHit
+from app.schemas.extraction import (
+    Claim,
+    ConsistencyFlag,
+    Dodge,
+    DodgeType,
+    Extraction,
+    FactCheck,
+    RedLineHit,
+    SourceDocument,
+    Verdict,
+)
 
 
 def _valid_extraction_dict() -> dict:
@@ -21,18 +33,25 @@ def _valid_extraction_dict() -> dict:
             {
                 "sub_question_id": "transition",
                 "type": "non_commitment",
-                "evidence": "answered with enthusiasm but no date",
+                "answer_span": "answered with enthusiasm but no date",
             }
         ],
         "consistency_flags": [
-            {"conflicts_with_turn": 2, "detail": "earlier said 90 days, now says 60"}
+            {
+                "conflicts_with_turn": 2,
+                "current_answer_span": "we now say 60 days",
+                "prior_answer_span": "earlier said 90 days",
+                "acknowledged_revision": False,
+            }
         ],
         "fact_checks": [
             {
                 "claim": "we hold FedRAMP High",
+                "answer_span": "we hold FedRAMP High",
+                "source_document_id": "written_proposal",
+                "source_quote": "proposal states Moderate",
                 "tier": 1,
                 "verdict": "refuted",
-                "source": "proposal states Moderate",
             }
         ],
         "red_line_hits": [
@@ -99,3 +118,51 @@ def test_conciseness_not_part_of_extraction_tool_schema() -> None:
     # conciseness is computed in code and attached later — never a model-emitted field
     schema = Extraction.model_json_schema()
     assert "conciseness" not in schema["properties"]
+
+
+def test_dodge_requires_an_answer_span_and_takes_optional_prose() -> None:
+    dodge = Dodge(
+        sub_question_id="hosting",
+        type=DodgeType.non_commitment,
+        answer_span="we are exploring options",
+        explanation="never named an environment",
+    )
+    assert dodge.answer_span == "we are exploring options"
+    with pytest.raises(ValidationError):
+        Dodge(sub_question_id="hosting", type=DodgeType.non_commitment)  # type: ignore[call-arg]
+
+
+def test_consistency_flag_requires_both_sides_of_the_conflict() -> None:
+    with pytest.raises(ValidationError):
+        ConsistencyFlag(
+            conflicts_with_turn=1,
+            current_answer_span="a",
+            acknowledged_revision=False,
+        )  # type: ignore[call-arg]
+
+
+def test_fact_check_requires_a_registered_document_and_a_source_quote() -> None:
+    check = FactCheck(
+        claim="claims 25 million records",
+        answer_span="roughly 25 million case records",
+        source_document_id=SourceDocument.rfp_pws,
+        source_quote="approximately 42 million case records",
+        tier=1,
+        verdict=Verdict.refuted,
+    )
+    assert check.source_document_id is SourceDocument.rfp_pws
+    with pytest.raises(ValidationError):
+        FactCheck(
+            claim="c",
+            answer_span="a",
+            source_document_id="some_other_doc",
+            source_quote="q",
+            tier=1,
+            verdict=Verdict.refuted,
+        )
+
+
+def test_extraction_tool_schema_forbids_the_dropped_free_text_fields() -> None:
+    schema = json.dumps(Extraction.model_json_schema())
+    assert '"evidence"' not in schema
+    assert '"detail"' not in schema

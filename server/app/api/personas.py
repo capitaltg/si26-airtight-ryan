@@ -9,7 +9,7 @@ from app.api.deps import get_content, reload_content
 from app.content import persona_writer
 from app.content.loader import Content
 from app.pipeline.orchestrator import PERSONA_ORDER
-from app.schemas.content import Exemplar, PersonaDefinition, PersonaUpdate
+from app.schemas.content import Exemplar, NonNegotiable, PersonaDefinition, PersonaUpdate
 
 router = APIRouter(prefix="/content/personas", tags=["personas"])
 
@@ -25,7 +25,7 @@ class PersonaDTO(BaseModel):
     values: list[str]
     wants: list[str]
     priorities: list[str]
-    non_negotiables: list[str]
+    non_negotiables: list[NonNegotiable]
     rubric_version: int
     polly_voice_id: str
     exemplars: list[Exemplar]

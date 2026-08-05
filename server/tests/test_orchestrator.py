@@ -108,13 +108,17 @@ def _full(concern: Concern) -> Extraction:
     )
 
 
-def _dodge(concern: Concern) -> Extraction:
+def _dodge(concern: Concern, answer: str) -> Extraction:
+    """``answer_span`` is a real slice (the whole thing) of ``answer``, the same
+    text the test then submits, so a future grounding check on dodges would not
+    drop it."""
     return Extraction(
         dodges=[
             Dodge(
                 sub_question_id=concern.sub_questions[0].id,
                 type=DodgeType.non_commitment,
-                evidence="answered with enthusiasm, no commitment",
+                answer_span=answer,
+                explanation="answered with enthusiasm, no commitment",
             )
         ]
     )
@@ -124,7 +128,7 @@ def _red_line() -> Extraction:
     return Extraction(
         red_line_hits=[
             RedLineHit(
-                source_id="technical_approach",
+                source_id="on_prem_hosting",
                 source_kind=RedLineSourceKind.concern_red_line,
                 span="we'll just lift and shift the mainframe overnight",
                 why="hand-waves the migration, crossing a non-negotiable",
@@ -164,7 +168,9 @@ def test_dodge_yields_same_concern_follow_up_and_drops_meter(
 ) -> None:
     session = orchestrator.start_session(db, content)
     client = ScriptedClient()
-    client.next_extraction = _dodge(content.concerns["technical_approach"])
+    client.next_extraction = _dodge(
+        content.concerns["technical_approach"], "We're excited to deliver."
+    )
 
     result = orchestrator.submit_answer(db, content, client, session, "We're excited to deliver.")
 
@@ -217,6 +223,38 @@ def test_red_line_caps_and_stays_capped_across_next_good_answer(
     assert second.persona_id == "technical_evaluator"
     assert second.meter == 25  # +2 would be 27, held at the ceiling
     assert second.capped is True
+
+
+def test_invented_red_line_source_id_leaves_meter_and_concern_status_untouched(
+    db: Session, content: Content
+) -> None:
+    """An invented ``source_id`` must not survive grounding, so the finding that
+    would otherwise cap the meter and terminate the concern as ``dodged`` never
+    reaches ``score_turn`` or ``_next_status`` at all. The turn scores exactly as
+    if the model had returned nothing: no delta, no cap, and the concern gets
+    another attempt like any other unaddressed first turn."""
+    session = orchestrator.start_session(db, content)
+    client = ScriptedClient()
+    client.next_extraction = Extraction(
+        red_line_hits=[
+            RedLineHit(
+                source_id="not-a-real-authored-red-line",
+                source_kind=RedLineSourceKind.concern_red_line,
+                span="we'll just lift and shift the mainframe overnight",
+                why="real span, invented rule",
+            )
+        ]
+    )
+
+    result = orchestrator.submit_answer(
+        db, content, client, session, "We'll just lift and shift the mainframe overnight."
+    )
+
+    assert result.support_delta == 0
+    assert result.meter == 50  # unchanged from the starting meter
+    assert result.capped is False
+    assert result.concern_status != "dodged"
+    assert result.concern_status == "partial"  # first attempt with no grounded finding
 
 
 def test_submit_answer_with_audio_persists_it_on_the_turn(db: Session, content: Content) -> None:
@@ -440,7 +478,7 @@ def test_handoff_to_the_next_persona_carries_their_intro(
 
     # A dodge on Marcus's opening concern presses again on the same concern —
     # and he has now spoken, so his follow-up carries no intro.
-    client.next_extraction = _dodge(asg.concern)
+    client.next_extraction = _dodge(asg.concern, "We'll get you that later.")
     orchestrator.submit_answer(db, content, client, session, "We'll get you that later.")
     follow_up = orchestrator.next_concern(db, content, session)
     assert follow_up is not None
@@ -458,7 +496,7 @@ def test_follow_up_on_a_personas_first_concern_carries_no_intro(
     assert asg is not None
     assert asg.intro is not None  # first ask has it
 
-    client.next_extraction = _dodge(asg.concern)
+    client.next_extraction = _dodge(asg.concern, "We're very excited about this.")
     orchestrator.submit_answer(db, content, client, session, "We're very excited about this.")
 
     follow_up = orchestrator.next_concern(db, content, session)
@@ -493,7 +531,7 @@ def test_neither_prompt_kind_carries_the_speaker_label(db: Session, content: Con
     assert not core.prompt.startswith(label)
 
     # A dodge presses again on the same concern, which is the follow-up kind.
-    client.next_extraction = _dodge(core.concern)
+    client.next_extraction = _dodge(core.concern, "We're very excited about this.")
     orchestrator.submit_answer(db, content, client, session, "We're very excited about this.")
 
     follow_up = orchestrator.next_concern(db, content, session)

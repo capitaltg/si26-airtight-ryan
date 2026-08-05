@@ -143,6 +143,17 @@ const REPORT = {
       reply: "Base year only.",
     },
   ],
+  score_audit: [
+    {
+      turn_index: 2,
+      persisted_support_delta: -1,
+      recomputed_support_delta: -1,
+      persisted_matched_rows: ["dodge"],
+      recomputed_matched_rows: ["dodge"],
+      agrees: true,
+    },
+  ],
+  score_audit_agrees: true,
   narrative: { scored: false, header: "Not scored", text: "You held the technical line." },
 }
 

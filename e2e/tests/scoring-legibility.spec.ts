@@ -208,7 +208,14 @@ test("an archived turn renders counts and the marker", async ({ page }) => {
             rubric_row: "false_fact",
             support_value: -1,
             count: 1,
-            evidence: [{ span: "Twelve million records", detail: "PWS 3.1" }],
+            evidence: [
+              {
+                span: "Twelve million records",
+                detail: "PWS 3.1",
+                counter_span: "The PWS states nine million records across two waves.",
+                counter_label: "Source: PWS 3.1",
+              },
+            ],
           },
           {
             turn_index: 0,
@@ -222,6 +229,17 @@ test("an archived turn renders counts and the marker", async ({ page }) => {
         ],
         limit_findings: [],
         clarifications: [],
+        score_audit: [
+          {
+            turn_index: 0,
+            persisted_support_delta: -2,
+            recomputed_support_delta: -2,
+            persisted_matched_rows: ["false_fact"],
+            recomputed_matched_rows: ["false_fact"],
+            agrees: true,
+          },
+        ],
+        score_audit_agrees: true,
         narrative: { scored: false, header: "Not scored", text: "Keep drilling details." },
       }),
     }),
@@ -240,4 +258,106 @@ test("an archived turn renders counts and the marker", async ({ page }) => {
   await page.locator("details").filter({ hasText: "Three waves" }).locator("summary").click()
   await expect(page.getByText("“Twelve million records”", { exact: true })).toBeVisible()
   await expect(page.getByText("“Three waves”", { exact: true })).toBeVisible()
+  await expect(
+    page.getByText("“The PWS states nine million records across two waves.”", { exact: true }),
+  ).toBeVisible()
+  await expect(page.getByText("Source: PWS 3.1")).toBeVisible()
+  await expect(
+    page.getByText(
+      "Every turn's score was recomputed from the evidence above and matched what was recorded (1 of 1).",
+    ),
+  ).toBeVisible()
+})
+
+test("a pre-audit archived report shows no false recomputed-and-matched assurance", async ({
+  page,
+}) => {
+  const sessionId = "22222222-2222-2222-2222-222222222222"
+  await page.route("**/api/sessions/history", (route) =>
+    route.fulfill({
+      status: 200,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify([
+        {
+          id: sessionId,
+          status: "complete",
+          created_at: "2026-07-30T12:00:00Z",
+          archived_at: "2026-07-30T12:40:00Z",
+          turn_count: 1,
+          meters: [{ persona_id: "technical_evaluator", support: 48, capped: false }],
+          concerns_satisfied: 1,
+          concerns_total: 8,
+        },
+      ]),
+    }),
+  )
+  await page.route(`**/api/sessions/${sessionId}/transcript`, (route) =>
+    route.fulfill({
+      status: 200,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        turns: [
+          {
+            persona_id: "technical_evaluator",
+            display_name: "Dana",
+            concern_id: "technical_approach",
+            is_follow_up: false,
+            prompt: "Walk me through the architecture you are proposing.",
+            intro: null,
+            answer: "Twelve million records, three waves.",
+            reply: "That is not what the PWS says.",
+            rationale: "Two refuted counts.",
+            support_delta: -2,
+            raw_support_delta: -4,
+            matched_rows: ["false_fact"],
+            row_counts: { false_fact: 2 },
+            capped: false,
+            scored: true,
+            transcript: null,
+            limit: null,
+          },
+        ],
+      }),
+    }),
+  )
+  await page.route(`**/api/sessions/${sessionId}/report`, (route) =>
+    route.fulfill({
+      status: 200,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        session_id: sessionId,
+        status: "complete",
+        rate_stats: {
+          total_turns: 1,
+          dodge_count: 0,
+          dodges_per_turn: 0,
+          contradiction_count: 0,
+          concerns_total: 8,
+          concerns_satisfied: 1,
+          coverage_rate: 0.125,
+        },
+        personas: [],
+        coverage_counts: { full: 0, partial: 0, none: 0 },
+        dodge_counts_by_type: {},
+        contradiction_count: 0,
+        // A session archived before the score-audit feature shipped: the
+        // schema default fills in an empty audit rather than failing to
+        // validate. The report must not claim it recomputed and matched
+        // anything against zero audited turns.
+        findings: [],
+        limit_findings: [],
+        clarifications: [],
+        score_audit: [],
+        score_audit_agrees: true,
+        narrative: { scored: false, header: "Not scored", text: "Keep drilling details." },
+      }),
+    }),
+  )
+
+  await page.goto("/")
+  await page.getByTestId("history-card").first().click()
+  await expect(page.getByTestId("archive-view")).toBeVisible()
+  await expect(page.getByText("No score audit is available for this report.")).toBeVisible()
+  await expect(page.getByText("recomputed from the evidence above")).toHaveCount(0)
+  await expect(page.getByText("disagreed with the recorded score")).toHaveCount(0)
 })

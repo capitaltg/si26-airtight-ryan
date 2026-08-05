@@ -163,6 +163,7 @@ def test_run_extraction_sends_cached_prefix_and_uncached_suffix() -> None:
         persona=persona,
         content=content,
         prior_claims=prior,
+        prior_answers={},
         client=client,
     )
 
@@ -194,6 +195,19 @@ def test_prompt_handles_empty_ledger() -> None:
     assert concern.core_ask in prompt
 
 
+def test_prompt_renders_red_lines_and_non_negotiables_with_bracketed_ids() -> None:
+    content = load_content()
+    prompt = build_extraction_prompt(
+        answer="We will host on premises.",
+        concern=content.concerns["technical_approach"],
+        persona=content.personas["technical_evaluator"],
+        content=content,
+        prior_claims=[],
+    )
+    assert "[on_prem_hosting] Proposes on-premises hosting" in prompt
+    assert "[no_hand_waved_migration] do not hand-wave the migration" in prompt
+
+
 def test_run_extraction_returns_extraction_plus_computed_conciseness() -> None:
     content, persona, concern = _fixture()
     canned = Extraction(
@@ -215,6 +229,7 @@ def test_run_extraction_returns_extraction_plus_computed_conciseness() -> None:
         persona=persona,
         content=content,
         prior_claims=[],
+        prior_answers={},
         client=client,
     )
 
@@ -323,6 +338,7 @@ def _run(
         persona=persona if persona is not None else default_persona,
         content=content,
         prior_claims=prior_claims if prior_claims is not None else [],
+        prior_answers={},
         client=client,
     )
 
@@ -609,6 +625,7 @@ def test_same_input_scores_the_same_when_the_model_disagrees_with_itself() -> No
             persona=persona,
             content=content,
             prior_claims=[],
+            prior_answers={},
             client=client,  # type: ignore[arg-type]
             pin=pin,
         )
@@ -632,6 +649,7 @@ def test_concurrent_first_misses_return_the_canonical_pinned_extraction() -> Non
             persona=persona,
             content=content,
             prior_claims=[],
+            prior_answers={},
             client=client,  # type: ignore[arg-type]
             pin=pin,
         )
@@ -659,6 +677,7 @@ def test_whitespace_variant_of_the_same_answer_replays_the_pin() -> None:
         persona=persona,
         content=content,
         prior_claims=[],
+        prior_answers={},
         client=client,  # type: ignore[arg-type]
         pin=pin,
     )
@@ -668,6 +687,7 @@ def test_whitespace_variant_of_the_same_answer_replays_the_pin() -> None:
         persona=persona,
         content=content,
         prior_claims=[],
+        prior_answers={},
         client=client,  # type: ignore[arg-type]
         pin=pin,
     )
@@ -684,6 +704,7 @@ def test_a_rubric_change_rescores_without_touching_the_model() -> None:
         persona=persona,
         content=content,
         prior_claims=[],
+        prior_answers={},
         client=client,  # type: ignore[arg-type]
         pin=pin,
     )
@@ -718,6 +739,7 @@ def test_run_extraction_grounds_before_scoring() -> None:
         persona=persona,
         content=content,
         prior_claims=[],
+        prior_answers={},
         client=client,  # type: ignore[arg-type]
     )
     assert result.extraction.claims == []
@@ -734,6 +756,7 @@ def test_pin_defaults_to_null_so_existing_callers_are_unpinned() -> None:
             persona=persona,
             content=content,
             prior_claims=[],
+            prior_answers={},
             client=client,  # type: ignore[arg-type]
         )
     assert client.calls == 2

@@ -47,10 +47,18 @@ class RateStats(BaseModel):
 
 
 class FindingEvidence(BaseModel):
-    """One verbatim quote that fed a row application, with its per-quote detail."""
+    """One verbatim quote that fed a row application, with its per-quote detail.
+
+    ``counter_span`` is the other side of the relationship the row charges: the
+    prior answer for a contradiction, the document quote for a false fact, the
+    authored rule for a red line. ``None`` for rows that assert nothing about a
+    second text.
+    """
 
     span: str = Field(min_length=1)
     detail: str
+    counter_span: str | None = None
+    counter_label: str | None = None
 
 
 class ScoredFinding(BaseModel):
@@ -102,6 +110,21 @@ class NarrativeSection(BaseModel):
     text: str
 
 
+class TurnScoreAudit(BaseModel):
+    """An independent recomputation of one turn's number from its stored evidence.
+
+    The report renders the disagreement rather than hiding it: the persisted value
+    is never rewritten from here.
+    """
+
+    turn_index: int
+    persisted_support_delta: int
+    recomputed_support_delta: int
+    persisted_matched_rows: list[str]
+    recomputed_matched_rows: list[str]
+    agrees: bool
+
+
 class ScoredReport(BaseModel):
     """The deterministic, code-rendered part of the after-action report."""
 
@@ -115,6 +138,8 @@ class ScoredReport(BaseModel):
     findings: list[ScoredFinding] = Field(default_factory=list)
     limit_findings: list[LimitFinding] = Field(default_factory=list)
     clarifications: list[ClarificationLine] = Field(default_factory=list)
+    score_audit: list[TurnScoreAudit] = Field(default_factory=list)
+    score_audit_agrees: bool = True
 
 
 class Report(ScoredReport):

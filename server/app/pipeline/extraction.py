@@ -16,7 +16,7 @@ attached here rather than emitted by the model.
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -30,7 +30,7 @@ from app.pipeline.extraction_pin import ExtractionPin, NullExtractionPin, extrac
 from app.pipeline.grounding import drop_ungrounded
 from app.pipeline.span_anchor import reanchor_spans
 from app.schemas.content import Concern, PersonaDefinition
-from app.schemas.extraction import Conciseness, Extraction
+from app.schemas.extraction import Conciseness, Extraction, SourceDocument
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,7 @@ class ExtractionResult:
 
 
 def _render_persona(persona: PersonaDefinition) -> str:
+    non_negotiables = "; ".join(f"[{nn.id}] {nn.text}" for nn in persona.non_negotiables)
     return "\n".join(
         [
             f"You are {persona.display_name} ({persona.id}).",
@@ -55,7 +56,7 @@ def _render_persona(persona: PersonaDefinition) -> str:
             f"Values: {', '.join(persona.values)}",
             f"Wants: {', '.join(persona.wants)}",
             f"Priorities: {', '.join(persona.priorities)}",
-            f"Non-negotiables: {', '.join(persona.non_negotiables)}",
+            f"Non-negotiables: {non_negotiables}",
         ]
     )
 
@@ -65,7 +66,7 @@ def _render_concern(concern: Concern) -> str:
         f"  - [{sq.id}] {sq.text} (requires: {sq.requires.value})"
         for sq in concern.sub_questions
     )
-    red = "\n".join(f"  - {line}" for line in concern.red_lines)
+    red = "\n".join(f"  - [{line.id}] {line.text}" for line in concern.red_lines)
     return "\n".join(
         [
             f"Concern: {concern.concern_id}",
@@ -122,6 +123,22 @@ def build_extraction_static_prefix(
             "Classify the presenter's answer against the schema using the "
             f"{TOOL_NAME} tool. Quote spans verbatim from the answer; a claim with "
             "no verbatim span does not count. You never assign a score.",
+            "Evidence rules. Every span you emit must be copied character for "
+            "character out of the text it quotes. `answer_span` and "
+            "`current_answer_span` come from the presenter's answer below. "
+            "`prior_answer_span` comes from the earlier turn you name in "
+            "`conflicts_with_turn`: in the claim ledger, each line is `[turn N] "
+            "\"<quoted span>\": <your own earlier restatement>`. Copy "
+            "`prior_answer_span` from the quoted span inside the quotation marks "
+            "only, never from the restatement after the colon, since that text is "
+            "your own paraphrase and will not be found in the presenter's actual "
+            "answer. `source_quote` "
+            "comes from the document you name in `source_document_id`: `rfp_pws` "
+            "is the solicitation above, `written_proposal` is the proposal above. "
+            "`red_line_hits.source_id` must be one of the bracketed ids listed "
+            "with the red lines and non-negotiables. A finding whose evidence "
+            "cannot be found in its stated source is discarded before scoring, "
+            "so an unverifiable finding is worth nothing.",
             "When you write a free-text reason in the schema (for example the "
             "'why' behind a red-line hit), write it the way a person would: plain "
             "and direct, short sentences, no em dashes, no three-part lists, no "
@@ -161,42 +178,6 @@ def build_extraction_dynamic_suffix(
             answer,
         ]
     )
-
-
-def drop_unanchored_flags(
-    extraction: Extraction, prior_claims: Sequence[ClaimLedger]
-) -> Extraction:
-    """Remove Tier-0 flags that do not name a turn in the claim ledger.
-
-    A ``ConsistencyFlag`` is a conflict with something the presenter already
-    said, so ``conflicts_with_turn`` has to be a turn that is actually in the
-    ledger. The model has been observed filing document conflicts here (that is
-    Tier-1, and scores as ``false_fact``) and raising a flag on the session's
-    first turn, where the ledger is empty and ``conflicts_with_turn: 0`` points
-    at the turn being scored. Either way the presenter loses a point the rubric
-    never authorized, so the flag is dropped before it reaches the scorer.
-
-    The prompt states the rule; this is the code that does not depend on the
-    model following it. Only ``consistency_flags`` is touched — a real Tier-1
-    conflict still scores through ``fact_checks``.
-    """
-    if not extraction.consistency_flags:
-        return extraction
-
-    ledger_turns = {row.turn_index for row in prior_claims}
-    kept = [f for f in extraction.consistency_flags if f.conflicts_with_turn in ledger_turns]
-    if len(kept) == len(extraction.consistency_flags):
-        return extraction
-
-    for flag in extraction.consistency_flags:
-        if flag.conflicts_with_turn not in ledger_turns:
-            logger.warning(
-                "dropped Tier-0 flag naming turn %s (ledger turns: %s): %s",
-                flag.conflicts_with_turn,
-                sorted(ledger_turns) or "none",
-                flag.detail,
-            )
-    return extraction.model_copy(update={"consistency_flags": kept})
 
 
 def build_extraction_prompt(
@@ -258,6 +239,7 @@ def run_extraction(
     persona: PersonaDefinition,
     content: Content,
     prior_claims: Sequence[ClaimLedger],
+    prior_answers: Mapping[int, str],
     client: BedrockClient,
     pin: ExtractionPin | None = None,
 ) -> ExtractionResult:
@@ -276,9 +258,11 @@ def run_extraction(
     Post-processing runs on the replay path too, and the order matters. A pinned
     span was quoted out of an earlier phrasing, so ``reanchor_spans`` maps it onto
     this answer first; then ``drop_ungrounded`` discards anything the answer does
-    not actually support; then ``drop_unanchored_flags`` handles Tier-0. Running
-    grounding before anchoring would throw out real findings whenever a presenter
-    retypes the same answer with different spacing.
+    not actually support, Tier-0 contradictions included: it keeps a
+    ``ConsistencyFlag`` only when the named turn has a stored prior answer and
+    both the current and prior spans are quoted in their respective answers.
+    Running grounding before anchoring would throw out real findings whenever a
+    presenter retypes the same answer with different spacing.
     """
     resolved_pin: ExtractionPin = pin if pin is not None else NullExtractionPin()
     key = extraction_key(
@@ -286,6 +270,7 @@ def run_extraction(
         persona_id=persona.id,
         concern_id=concern.concern_id,
         prior_claims=prior_claims,
+        prior_answers=prior_answers,
         extraction_fingerprint=content.extraction_fingerprint,
     )
 
@@ -327,8 +312,15 @@ def run_extraction(
 
     anchored = reanchor_spans(extraction, answer)
     grounded = drop_ungrounded(
-        anchored, answer=answer, concern=concern, persona=persona
+        anchored,
+        answer=answer,
+        concern=concern,
+        persona=persona,
+        prior_answers=prior_answers,
+        documents={
+            SourceDocument.rfp_pws: content.rfp_text,
+            SourceDocument.written_proposal: content.proposal_text,
+        },
     )
-    guarded = drop_unanchored_flags(grounded, prior_claims)
-    conciseness = compute_conciseness(answer, guarded)
-    return ExtractionResult(extraction=guarded, conciseness=conciseness)
+    conciseness = compute_conciseness(answer, grounded)
+    return ExtractionResult(extraction=grounded, conciseness=conciseness)

@@ -23,7 +23,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, Protocol
 
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -42,6 +42,7 @@ def extraction_key(
     persona_id: str,
     concern_id: str,
     prior_claims: Sequence[ClaimLedger],
+    prior_answers: Mapping[int, str],
     extraction_fingerprint: str,
 ) -> str:
     """Stable sha256 over everything that legitimately changes an extraction.
@@ -50,6 +51,14 @@ def extraction_key(
     relative to what was said earlier — the same answer after a different history
     is a different input. ``Extraction.model_json_schema()`` is included so a
     schema change can never replay a payload that no longer validates.
+
+    ``prior_answers`` is included too: grounding reads it to keep or drop a
+    ``ConsistencyFlag``, so two histories that share a ledger but differ in
+    stored answer text are different inputs. The rendered prompt does not
+    depend on ``prior_answers`` (only the ledger goes into the prompt), so a pin
+    miss caused purely by a change here lands on ``model_response_cache`` rather
+    than on the model — the cache key is unaffected and the byte-identical
+    prompt still replays.
     """
     payload = {
         "answer": normalize_answer(answer),
@@ -64,6 +73,10 @@ def extraction_key(
                 "span": row.span,
             }
             for row in prior_claims
+        ],
+        "prior_answers": [
+            {"turn_index": index, "answer": normalize_answer(text)}
+            for index, text in sorted(prior_answers.items())
         ],
         "content": extraction_fingerprint,
         "schema": Extraction.model_json_schema(),

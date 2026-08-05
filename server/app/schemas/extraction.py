@@ -59,6 +59,18 @@ class RedLineSourceKind(StrEnum):
     concern_red_line = "concern_red_line"
 
 
+class SourceDocument(StrEnum):
+    """The frozen documents a Tier-1 fact check may cite.
+
+    A registry, not free text: ``source_quote`` is verified against the document
+    named here. Tier 2 (open web) has no entry, so a tier-2 check has no
+    verifiable source and never survives grounding.
+    """
+
+    rfp_pws = "rfp_pws"
+    written_proposal = "written_proposal"
+
+
 class Claim(_Strict):
     text: str
     type: ClaimType
@@ -84,20 +96,31 @@ class SubQuestionCoverage(_Strict):
 class Dodge(_Strict):
     sub_question_id: str
     type: DodgeType
-    evidence: str
+    # A dodge is about what is absent, but there is always present text standing
+    # in for the missing answer. That text is what the report quotes, so it must
+    # be verbatim; the prose reason moves to `explanation`, which no path quotes.
+    answer_span: str
+    explanation: str | None = None
 
 
 class ConsistencyFlag(_Strict):
     conflicts_with_turn: int  # Tier-0, index into the claim ledger
-    detail: str
+    current_answer_span: str  # verbatim from the answer being scored
+    prior_answer_span: str  # verbatim from that turn's stored answer
+    # True when the presenter openly revised the earlier statement. Recorded and
+    # displayed; deliberately does NOT change the score (see the spec).
+    acknowledged_revision: bool
+    explanation: str | None = None
 
 
 class FactCheck(_Strict):
-    claim: str
-    # 0 = consistency, 1 = RFP + proposal, 2 = open web (deferred)
+    claim: str  # model restatement; never rendered as a quote
+    answer_span: str  # verbatim from the answer being scored
+    source_document_id: SourceDocument
+    source_quote: str  # verbatim from the document named above
+    # 0 = consistency, 1 = RFP + proposal, 2 = open web (deferred, unverifiable)
     tier: int = Field(ge=0, le=2)
     verdict: Verdict
-    source: str
 
 
 class RedLineHit(_Strict):

@@ -24,6 +24,7 @@ from app.schemas.extraction import (
     ConsistencyFlag,
     Extraction,
     FactCheck,
+    SourceDocument,
     Verdict,
 )
 from app.schemas.scoring import ScoreOutput
@@ -38,14 +39,12 @@ def _rubric() -> object:
     return load_content().rubric
 
 
-_DETAIL = (
-    "Turn 0 stated a dedicated 14-person migration squad for the whole base "
-    "period. This answer now claims the migration squad is 6 people."
-)
+_CURRENT_SPAN = "the migration squad is 6 people"
+_PRIOR_SPAN = "a dedicated 14-person migration squad for the whole base period"
 
 
 def test_reaction_prompt_shows_what_was_contradicted() -> None:
-    """Without the detail the model has to invent a source for the penalty."""
+    """Without both spans the model has to invent a source for the penalty."""
     persona, concern = _persona_concern()
     extraction = Extraction(
         claims=[
@@ -56,7 +55,14 @@ def test_reaction_prompt_shows_what_was_contradicted() -> None:
                 span="The migration squad is 6 people",
             )
         ],
-        consistency_flags=[ConsistencyFlag(conflicts_with_turn=0, detail=_DETAIL)],
+        consistency_flags=[
+            ConsistencyFlag(
+                conflicts_with_turn=0,
+                current_answer_span=_CURRENT_SPAN,
+                prior_answer_span=_PRIOR_SPAN,
+                acknowledged_revision=False,
+            )
+        ],
     )
 
     prompt = build_reaction_prompt(
@@ -66,13 +72,21 @@ def test_reaction_prompt_shows_what_was_contradicted() -> None:
         score=ScoreOutput(support_delta=-1, matched_rows=["contradiction"], capped=False),
     )
 
-    assert _DETAIL in prompt
+    assert _CURRENT_SPAN in prompt
+    assert _PRIOR_SPAN in prompt
 
 
 def test_reaction_prompt_names_the_turn_that_was_contradicted() -> None:
     persona, concern = _persona_concern()
     extraction = Extraction(
-        consistency_flags=[ConsistencyFlag(conflicts_with_turn=3, detail=_DETAIL)]
+        consistency_flags=[
+            ConsistencyFlag(
+                conflicts_with_turn=3,
+                current_answer_span=_CURRENT_SPAN,
+                prior_answer_span=_PRIOR_SPAN,
+                acknowledged_revision=False,
+            )
+        ]
     )
 
     prompt = build_reaction_prompt(
@@ -103,13 +117,22 @@ def test_tier0_fact_check_does_not_also_score_false_fact() -> None:
     """The Tier-0 conflict already scores as `contradiction`; counting the mirrored
     fact check as well charges the presenter twice for one statement."""
     extraction = Extraction(
-        consistency_flags=[ConsistencyFlag(conflicts_with_turn=3, detail=_DETAIL)],
+        consistency_flags=[
+            ConsistencyFlag(
+                conflicts_with_turn=3,
+                current_answer_span=_CURRENT_SPAN,
+                prior_answer_span=_PRIOR_SPAN,
+                acknowledged_revision=False,
+            )
+        ],
         fact_checks=[
             FactCheck(
                 claim="Meridian rolls off after the first 30 days",
+                answer_span="Meridian rolls off after the first 30 days",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="Turn 3 ledger: Meridian stays on through the entire 90 days",
                 tier=0,
                 verdict=Verdict.refuted,
-                source="Turn 3 ledger: Meridian stays on through the entire 90 days",
             )
         ],
     )
@@ -126,9 +149,11 @@ def test_tier1_fact_check_still_scores_false_fact() -> None:
         fact_checks=[
             FactCheck(
                 claim="roughly 25 million case records",
+                answer_span="roughly 25 million case records",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="PWS 3.1 states approximately 42 million records",
                 tier=1,
                 verdict=Verdict.refuted,
-                source="PWS 3.1 states approximately 42 million records",
             )
         ]
     )
@@ -142,10 +167,31 @@ def test_tier1_fact_check_still_scores_false_fact() -> None:
 def test_a_tier0_and_a_tier1_refutation_score_one_false_fact_each_way() -> None:
     """Mixed case: the Tier-1 refutation counts, the Tier-0 mirror does not."""
     extraction = Extraction(
-        consistency_flags=[ConsistencyFlag(conflicts_with_turn=1, detail=_DETAIL)],
+        consistency_flags=[
+            ConsistencyFlag(
+                conflicts_with_turn=1,
+                current_answer_span=_CURRENT_SPAN,
+                prior_answer_span=_PRIOR_SPAN,
+                acknowledged_revision=False,
+            )
+        ],
         fact_checks=[
-            FactCheck(claim="a", tier=0, verdict=Verdict.refuted, source="Turn 1 ledger"),
-            FactCheck(claim="b", tier=1, verdict=Verdict.refuted, source="PWS 3.1"),
+            FactCheck(
+                claim="a",
+                answer_span="a",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="Turn 1 ledger",
+                tier=0,
+                verdict=Verdict.refuted,
+            ),
+            FactCheck(
+                claim="b",
+                answer_span="b",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="PWS 3.1",
+                tier=1,
+                verdict=Verdict.refuted,
+            ),
         ],
     )
 

@@ -91,6 +91,19 @@ def _prior_claims(case: dict[str, Any]) -> list[ClaimLedger]:
     ]
 
 
+def _prior_answers(case: dict[str, Any]) -> dict[int, str]:
+    """Stored prior answers for a case's Tier-0 context.
+
+    The extraction prompt tells the model that ``prior_answer_span`` is quoted
+    out of the ledger row shown for the named turn, so that row's ``span`` is
+    exactly what a grounded flag must be quotable against — using it here (a
+    guaranteed-verbatim substring of the real historical answer) as the stored
+    prior answer keeps a genuine Tier-0 contradiction gradeable without
+    inventing text the case does not already specify.
+    """
+    return {row["turn_index"]: row["span"] for row in case.get("prior_claims", [])}
+
+
 def _grade_once(case: dict[str, Any], content: Content, client: BedrockClient) -> _Grade:
     """One full extraction -> scoring pass for a case."""
     persona = content.personas[case["persona_id"]]
@@ -101,6 +114,7 @@ def _grade_once(case: dict[str, Any], content: Content, client: BedrockClient) -
         persona=persona,
         content=content,
         prior_claims=_prior_claims(case),
+        prior_answers=_prior_answers(case),
         client=client,
     )
     score = score_turn(result.extraction, content.rubric)

@@ -9,15 +9,21 @@ from app.schemas.extraction import (
     Backing,
     Claim,
     ClaimType,
+    ConsistencyFlag,
     Dodge,
     DodgeType,
     Extraction,
+    FactCheck,
     RedLineHit,
     RedLineSourceKind,
+    SourceDocument,
     SubQuestionCoverage,
+    Verdict,
 )
 
 ANSWER = "We staff three named leads at contract start and the PM has twelve years of federal work."
+
+PRIOR_ANSWERS = {0: "We have not identified the leads yet."}
 
 
 def _fixture() -> tuple[Content, PersonaDefinition, Concern]:
@@ -29,7 +35,70 @@ def _fixture() -> tuple[Content, PersonaDefinition, Concern]:
 
 def _ground(extraction: Extraction) -> Extraction:
     _, persona, concern = _fixture()
-    return drop_ungrounded(extraction, answer=ANSWER, concern=concern, persona=persona)
+    return drop_ungrounded(
+        extraction,
+        answer=ANSWER,
+        concern=concern,
+        persona=persona,
+        prior_answers={},
+        documents=_documents(),
+    )
+
+
+def _ground_with_history(extraction: Extraction) -> Extraction:
+    _, persona, concern = _fixture()
+    return drop_ungrounded(
+        extraction,
+        answer=ANSWER,
+        concern=concern,
+        persona=persona,
+        prior_answers=PRIOR_ANSWERS,
+        documents=_documents(),
+    )
+
+
+def _flag(**overrides: object) -> ConsistencyFlag:
+    fields: dict[str, object] = {
+        "conflicts_with_turn": 0,
+        "current_answer_span": "three named leads at contract start",
+        "prior_answer_span": "We have not identified the leads yet",
+        "acknowledged_revision": False,
+    }
+    return ConsistencyFlag.model_validate({**fields, **overrides})
+
+
+def _documents() -> dict[SourceDocument, str]:
+    content = load_content()
+    return {
+        SourceDocument.rfp_pws: content.rfp_text,
+        SourceDocument.written_proposal: content.proposal_text,
+    }
+
+
+def _ground_with_docs(extraction: Extraction) -> Extraction:
+    _, persona, concern = _fixture()
+    return drop_ungrounded(
+        extraction,
+        answer=ANSWER,
+        concern=concern,
+        persona=persona,
+        prior_answers={},
+        documents=_documents(),
+    )
+
+
+def _check(**overrides: object) -> FactCheck:
+    content = load_content()
+    real_quote = content.rfp_text.split("\n")[0].strip()
+    fields: dict[str, object] = {
+        "claim": "claims twelve years of federal work",
+        "answer_span": "the PM has twelve years of federal work",
+        "source_document_id": SourceDocument.rfp_pws,
+        "source_quote": real_quote,
+        "tier": 1,
+        "verdict": Verdict.refuted,
+    }
+    return FactCheck.model_validate({**fields, **overrides})
 
 
 def test_fabricated_red_line_span_is_dropped_and_does_not_cap() -> None:
@@ -52,9 +121,9 @@ def test_fabricated_red_line_span_is_dropped_and_does_not_cap() -> None:
 
 
 def test_real_red_line_span_is_kept() -> None:
-    _, persona, concern = _fixture()
+    _, _, concern = _fixture()
     hit = RedLineHit(
-        source_id="whatever",
+        source_id=concern.red_lines[0].id,
         source_kind=RedLineSourceKind.concern_red_line,
         span="three named leads at contract start",
         why="grounded",
@@ -64,8 +133,9 @@ def test_real_red_line_span_is_kept() -> None:
 
 
 def test_span_differing_only_in_case_and_spacing_is_kept() -> None:
+    _, _, concern = _fixture()
     hit = RedLineHit(
-        source_id="whatever",
+        source_id=concern.red_lines[0].id,
         source_kind=RedLineSourceKind.concern_red_line,
         span="Three   Named\nLeads",
         why="same words, different typing",
@@ -91,7 +161,12 @@ def test_non_negotiable_hit_dropped_when_persona_lists_none() -> None:
         ]
     )
     grounded = drop_ungrounded(
-        extraction, answer=ANSWER, concern=concern, persona=persona
+        extraction,
+        answer=ANSWER,
+        concern=concern,
+        persona=persona,
+        prior_answers={},
+        documents=_documents(),
     )
     assert grounded.red_line_hits == []
 
@@ -150,7 +225,7 @@ def test_dodge_with_unknown_sub_question_id_is_dropped() -> None:
             Dodge(
                 sub_question_id="not_a_real_sub_question",
                 type=DodgeType.deflection,
-                evidence="talked about something else",
+                answer_span="talked about something else",
             )
         ]
     )
@@ -172,7 +247,7 @@ def test_everything_dropped_scores_zero_with_an_audit_row() -> None:
             Dodge(
                 sub_question_id="nope",
                 type=DodgeType.deflection,
-                evidence="x",
+                answer_span="x",
             )
         ],
     )
@@ -181,6 +256,163 @@ def test_everything_dropped_scores_zero_with_an_audit_row() -> None:
     assert score.matched_rows == ["unsubstantiated"]
 
 
+def test_invented_source_id_with_a_real_span_cannot_cap() -> None:
+    content, _, _ = _fixture()
+    extraction = Extraction(
+        red_line_hits=[
+            RedLineHit(
+                source_id="not-a-real-authored-red-line",
+                source_kind=RedLineSourceKind.concern_red_line,
+                span="three named leads at contract start",
+                why="real span, invented rule",
+            )
+        ]
+    )
+    grounded = _ground(extraction)
+    assert grounded.red_line_hits == []
+    score = score_turn(grounded, content.rubric)
+    assert score.support_delta == 0
+    assert score.capped is False
+
+
+def test_authored_concern_red_line_id_is_kept() -> None:
+    _, _, concern = _fixture()
+    hit = RedLineHit(
+        source_id=concern.red_lines[0].id,
+        source_kind=RedLineSourceKind.concern_red_line,
+        span="three named leads at contract start",
+        why="authored id, real span",
+    )
+    assert _ground(Extraction(red_line_hits=[hit])).red_line_hits == [hit]
+
+
+def test_authored_persona_non_negotiable_id_is_kept() -> None:
+    _, persona, _ = _fixture()
+    hit = RedLineHit(
+        source_id=persona.non_negotiables[0].id,
+        source_kind=RedLineSourceKind.non_negotiable,
+        span="three named leads at contract start",
+        why="authored id, real span",
+    )
+    assert _ground(Extraction(red_line_hits=[hit])).red_line_hits == [hit]
+
+
+def test_id_valid_for_the_other_kind_is_dropped() -> None:
+    _, persona, _ = _fixture()
+    extraction = Extraction(
+        red_line_hits=[
+            RedLineHit(
+                source_id=persona.non_negotiables[0].id,
+                source_kind=RedLineSourceKind.concern_red_line,
+                span="three named leads at contract start",
+                why="right id, wrong list",
+            )
+        ]
+    )
+    assert _ground(extraction).red_line_hits == []
+
+
 def test_nothing_to_drop_returns_the_same_object() -> None:
     extraction = Extraction()
     assert _ground(extraction) is extraction
+
+
+def test_dodge_with_an_ungrounded_answer_span_is_dropped() -> None:
+    content, _, concern = _fixture()
+    extraction = Extraction(
+        dodges=[
+            Dodge(
+                sub_question_id=concern.sub_questions[0].id,
+                type=DodgeType.non_commitment,
+                answer_span="we will circle back on that later",
+                explanation="invented prose that is not in the answer",
+            )
+        ]
+    )
+    grounded = _ground(extraction)
+    assert grounded.dodges == []
+    assert score_turn(grounded, content.rubric).support_delta == 0
+
+
+def test_dodge_with_a_real_answer_span_is_kept_and_scores() -> None:
+    content, _, concern = _fixture()
+    dodge = Dodge(
+        sub_question_id=concern.sub_questions[0].id,
+        type=DodgeType.non_commitment,
+        answer_span="three named leads at contract start",
+        explanation="named staffing, never described the architecture",
+    )
+    grounded = _ground(Extraction(dodges=[dodge]))
+    assert grounded.dodges == [dodge]
+    assert score_turn(grounded, content.rubric).support_delta == -2
+
+
+def test_contradiction_with_both_sides_grounded_is_kept_and_scores() -> None:
+    content, _, _ = _fixture()
+    flag = _flag()
+    grounded = _ground_with_history(Extraction(consistency_flags=[flag]))
+    assert grounded.consistency_flags == [flag]
+    assert score_turn(grounded, content.rubric).support_delta == -1
+
+
+def test_contradiction_naming_a_turn_with_no_stored_answer_is_dropped() -> None:
+    grounded = _ground_with_history(Extraction(consistency_flags=[_flag(conflicts_with_turn=7)]))
+    assert grounded.consistency_flags == []
+
+
+def test_contradiction_with_an_ungrounded_current_span_is_dropped() -> None:
+    grounded = _ground_with_history(
+        Extraction(consistency_flags=[_flag(current_answer_span="we never said this")])
+    )
+    assert grounded.consistency_flags == []
+
+
+def test_contradiction_with_a_span_absent_from_the_prior_answer_is_dropped() -> None:
+    grounded = _ground_with_history(
+        Extraction(consistency_flags=[_flag(prior_answer_span="we promised four leads")])
+    )
+    assert grounded.consistency_flags == []
+
+
+def test_acknowledged_revision_still_scores_a_contradiction() -> None:
+    content, _, _ = _fixture()
+    grounded = _ground_with_history(
+        Extraction(consistency_flags=[_flag(acknowledged_revision=True)])
+    )
+    assert len(grounded.consistency_flags) == 1
+    assert score_turn(grounded, content.rubric).support_delta == -1
+
+
+def test_fact_check_quoting_the_named_document_is_kept_and_scores() -> None:
+    content, _, _ = _fixture()
+    grounded = _ground_with_docs(Extraction(fact_checks=[_check()]))
+    assert len(grounded.fact_checks) == 1
+    assert score_turn(grounded, content.rubric).support_delta == -1
+
+
+def test_fact_check_with_an_invented_source_quote_is_dropped() -> None:
+    content, _, _ = _fixture()
+    grounded = _ground_with_docs(
+        Extraction(fact_checks=[_check(source_quote="the PWS requires unicorns")])
+    )
+    assert grounded.fact_checks == []
+    assert score_turn(grounded, content.rubric).support_delta == 0
+
+
+def test_fact_check_quoting_the_other_document_is_dropped() -> None:
+    grounded = _ground_with_docs(
+        Extraction(fact_checks=[_check(source_document_id=SourceDocument.written_proposal)])
+    )
+    assert grounded.fact_checks == []
+
+
+def test_fact_check_with_an_ungrounded_answer_span_is_dropped() -> None:
+    grounded = _ground_with_docs(
+        Extraction(fact_checks=[_check(answer_span="we promised a fourth lead")])
+    )
+    assert grounded.fact_checks == []
+
+
+def test_tier_two_fact_check_is_always_dropped() -> None:
+    grounded = _ground_with_docs(Extraction(fact_checks=[_check(tier=2)]))
+    assert grounded.fact_checks == []

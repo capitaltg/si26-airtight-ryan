@@ -107,11 +107,14 @@ export interface RubricRow {
   note: string | null
 }
 
+// A red line is the server's `{id, text}` shape for an authored finding —
+// the same shape the persona editor's `NonNegotiable` (defined below) uses,
+// so this reuses it rather than declaring an identical type under a new name.
 export interface ConcernDisclosure {
   concern_id: string
   core_ask: string
   what_would_satisfy: string
-  red_lines: string[]
+  red_lines: NonNegotiable[]
 }
 
 export interface RubricDisclosure {
@@ -150,6 +153,8 @@ export interface RateStats {
 export interface FindingEvidence {
   span: string
   detail: string
+  counter_span?: string | null
+  counter_label?: string | null
 }
 
 export interface ScoredFinding {
@@ -175,6 +180,17 @@ export interface NarrativeSection {
   text: string
 }
 
+// An independent recomputation of one turn's number from its stored evidence,
+// so the report can show the audit rather than assert it happened.
+export interface TurnScoreAudit {
+  turn_index: number
+  persisted_support_delta: number
+  recomputed_support_delta: number
+  persisted_matched_rows: string[]
+  recomputed_matched_rows: string[]
+  agrees: boolean
+}
+
 export interface Report {
   session_id: string
   status: string
@@ -186,6 +202,8 @@ export interface Report {
   findings: ScoredFinding[]
   limit_findings: LimitFinding[]
   clarifications: ClarificationLine[]
+  score_audit: TurnScoreAudit[]
+  score_audit_agrees: boolean
   narrative: NarrativeSection
 }
 
@@ -281,6 +299,19 @@ export interface PersonaExemplar {
   note: string
 }
 
+// A non-negotiable's `id` is the server's join key for a scored red-line
+// finding, so both this and `ConcernDisclosure.red_lines` above carry it
+// through unedited — one `{id, text}` shape, not a duplicate per call site.
+export interface NonNegotiable {
+  id: string
+  text: string
+}
+
+export interface NonNegotiableDraft {
+  id?: string
+  text: string
+}
+
 // Read shape: includes the fields the editor renders read-only.
 export interface Persona {
   id: string
@@ -291,7 +322,7 @@ export interface Persona {
   values: string[]
   wants: string[]
   priorities: string[]
-  non_negotiables: string[]
+  non_negotiables: NonNegotiable[]
   rubric_version: number
   polly_voice_id: string
   exemplars: PersonaExemplar[]
@@ -306,7 +337,7 @@ export interface PersonaUpdate {
   demographics: string
   values: string[]
   wants: string[]
-  non_negotiables: string[]
+  non_negotiables: NonNegotiableDraft[]
   polly_voice_id: string
   exemplars: { user: string; support_delta: number; note: string }[]
 }

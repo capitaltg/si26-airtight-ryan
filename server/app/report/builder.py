@@ -9,27 +9,34 @@ lives in ``render_narrative``, which produces a coaching recap tagged
 Findings vs counts
 ------------------
 A ``ScoredFinding`` must carry a verbatim span, so it is emitted only for the
-signals that carry one: ``red_line`` (hit span), ``dodge`` (evidence),
-``evidence_backed`` (the backed claim's span), ``approach_cited`` (coverage
-span), and ``false_fact`` (the checked claim). ``contradiction`` and
-``unsubstantiated`` have no verbatim span in the extraction schema, so they are
-surfaced as counts instead — never as a spanless "scored line".
+signals that carry one: ``red_line`` (hit span, countered by the authored rule
+text behind its validated ``source_id``), ``dodge`` (``answer_span``),
+``contradiction`` (``current_answer_span``, countered by the prior turn's
+``prior_answer_span``), ``evidence_backed`` (the backed claim's span),
+``approach_cited`` (coverage span), and ``false_fact`` (``answer_span``,
+countered by the document's ``source_quote``). ``unsubstantiated`` has no
+verbatim span in the extraction schema, so it alone is surfaced as a count
+instead — never as a spanless "scored line".
 """
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections import Counter
 from typing import Protocol
 
 from app.content.loader import Content
 from app.db.models import Clarification, PersonaMeter, Turn
-from app.schemas.content import Rubric
+from app.pipeline.scoring import apply_limit_penalty, score_turn
+from app.schemas.content import NonNegotiable, RedLine, Rubric
 from app.schemas.extraction import (
     Addressed,
     Backing,
     ClaimType,
     Extraction,
+    RedLineHit,
+    RedLineSourceKind,
     Verdict,
 )
 from app.schemas.report import (
@@ -43,8 +50,11 @@ from app.schemas.report import (
     Report,
     ScoredFinding,
     ScoredReport,
+    TurnScoreAudit,
 )
-from app.schemas.scoring import ScoreOutput
+from app.schemas.scoring import LimitMeasurement, ScoreOutput
+
+logger = logging.getLogger(__name__)
 
 _SATISFIED = "satisfied"
 
@@ -60,29 +70,86 @@ def _row_values(rubric: Rubric) -> dict[str, int]:
     return {row.id: row.support_value for row in rubric.rows}
 
 
+def _authored_rule(
+    hit: RedLineHit, content: Content, concern_id: str, persona_id: str
+) -> str | None:
+    """The authored text behind a validated ``source_id``.
+
+    Resolved in code rather than quoted by the model: grounding has already
+    proven the id is authored against this turn's own concern or persona, so
+    the text is a lookup and a fabricated rule reference is structurally
+    impossible.
+
+    The ``non_negotiable`` lookup is scoped to the turn's own persona rather
+    than searched across every persona: ``slug_id`` only dedupes ids within
+    one persona, so two personas can share a non-negotiable id, and searching
+    all of them could return the wrong persona's rule text for a hit that
+    grounding already validated against exactly this turn's persona.
+    """
+    rules: list[RedLine] | list[NonNegotiable]
+    if hit.source_kind is RedLineSourceKind.concern_red_line:
+        concern = content.concerns.get(concern_id)
+        rules = concern.red_lines if concern is not None else []
+    else:
+        persona = content.personas.get(persona_id)
+        rules = persona.non_negotiables if persona is not None else []
+    return next((rule.text for rule in rules if rule.id == hit.source_id), None)
+
+
 def _turn_findings(
     turn: Turn,
     extraction: Extraction,
     score: ScoreOutput,
     values: dict[str, int],
+    content: Content,
 ) -> list[ScoredFinding]:
-    """Emit one grouped finding per charged row with its evidence spans.
+    """Emit one grouped finding per charged row, with both sides of its evidence.
 
     Driven by ``matched_rows`` so a finding always maps to a row that moved the
-    number (e.g. a backed claim on a red-lined turn is not shown, because the red
-    line fired first and suppressed it).
+    number. Every span here was verified by ``drop_ungrounded`` against a real
+    source, so no row can print an unverifiable quote.
     """
     matched = set(score.matched_rows)
     evidence: dict[str, list[FindingEvidence]] = {}
 
-    def add(row: str, span: str, detail: str) -> None:
+    def add(
+        row: str,
+        span: str,
+        detail: str,
+        counter_span: str | None = None,
+        counter_label: str | None = None,
+    ) -> None:
         if row in matched and span.strip():
-            evidence.setdefault(row, []).append(FindingEvidence(span=span, detail=detail))
+            evidence.setdefault(row, []).append(
+                FindingEvidence(
+                    span=span,
+                    detail=detail,
+                    counter_span=counter_span,
+                    counter_label=counter_label,
+                )
+            )
 
     for hit in extraction.red_line_hits:
-        add("red_line", hit.span, hit.why)
+        add(
+            "red_line",
+            hit.span,
+            hit.why,
+            _authored_rule(hit, content, turn.concern_id, turn.persona_id),
+            f"{hit.source_kind.value}: {hit.source_id}",
+        )
     for dodge in extraction.dodges:
-        add("dodge", dodge.evidence, dodge.type.value)
+        add("dodge", dodge.answer_span, dodge.explanation or dodge.type.value)
+    for flag in extraction.consistency_flags:
+        detail = flag.explanation or "conflicts with an earlier answer"
+        if flag.acknowledged_revision:
+            detail = f"{detail} (presenter acknowledged the revision)"
+        add(
+            "contradiction",
+            flag.current_answer_span,
+            detail,
+            flag.prior_answer_span,
+            f"turn {flag.conflicts_with_turn + 1}",
+        )
     for claim in extraction.claims:
         if claim.type is ClaimType.commitment and claim.backing is Backing.backed:
             add("evidence_backed", claim.span, claim.text)
@@ -91,7 +158,13 @@ def _turn_findings(
             add("approach_cited", cov.span, cov.addressed.value)
     for fc in extraction.fact_checks:
         if fc.verdict is Verdict.refuted and fc.tier >= 1:
-            add("false_fact", fc.claim, fc.source)
+            add(
+                "false_fact",
+                fc.answer_span,
+                fc.claim,
+                fc.source_quote,
+                fc.source_document_id.value,
+            )
 
     return [
         ScoredFinding(
@@ -106,6 +179,51 @@ def _turn_findings(
         for row in score.matched_rows
         if row in evidence
     ]
+
+
+def _audit_turn(
+    turn: Turn, extraction: Extraction, persisted: ScoreOutput, rubric: Rubric
+) -> TurnScoreAudit:
+    """Re-derive this turn's number from the extraction stored beside it.
+
+    Runs the same pure path the live turn ran: ``score_turn`` for the semantic
+    rows, then ``apply_limit_penalty`` when the turn recorded a limit
+    measurement. Row combination, the clamp, and the limit penalty are therefore
+    all exercised again against the evidence the report prints.
+    """
+    recomputed = score_turn(extraction, rubric)
+    if persisted.limit is not None:
+        recomputed = apply_limit_penalty(
+            recomputed,
+            rubric,
+            LimitMeasurement(
+                kind=persisted.limit.kind,
+                measured=persisted.limit.measured,
+                warning_threshold=persisted.limit.warning_threshold,
+                limit_threshold=persisted.limit.limit_threshold,
+            ),
+        )
+    agrees = (
+        recomputed.support_delta == persisted.support_delta
+        and recomputed.matched_rows == persisted.matched_rows
+    )
+    if not agrees:
+        logger.warning(
+            "score audit disagrees on turn %s: persisted %+d %s, recomputed %+d %s",
+            turn.turn_index,
+            persisted.support_delta,
+            persisted.matched_rows,
+            recomputed.support_delta,
+            recomputed.matched_rows,
+        )
+    return TurnScoreAudit(
+        turn_index=turn.turn_index,
+        persisted_support_delta=persisted.support_delta,
+        recomputed_support_delta=recomputed.support_delta,
+        persisted_matched_rows=list(persisted.matched_rows),
+        recomputed_matched_rows=list(recomputed.matched_rows),
+        agrees=agrees,
+    )
 
 
 def build_scored_report(
@@ -134,6 +252,7 @@ def build_scored_report(
     dodge_count = 0
     findings: list[ScoredFinding] = []
     limit_findings: list[LimitFinding] = []
+    audits: list[TurnScoreAudit] = []
 
     for turn, extraction, score in zip(turns, extractions, scores, strict=True):
         for cov in extraction.sub_question_coverage:
@@ -147,7 +266,8 @@ def build_scored_report(
             dodge_types[dodge.type.value] += 1
             dodge_count += 1
         contradiction_count += len(extraction.consistency_flags)
-        findings.extend(_turn_findings(turn, extraction, score, values))
+        findings.extend(_turn_findings(turn, extraction, score, values, content))
+        audits.append(_audit_turn(turn, extraction, score, content.rubric))
         if score.limit is not None and score.limit.penalty_applied:
             limit_findings.append(
                 LimitFinding(
@@ -189,6 +309,8 @@ def build_scored_report(
         contradiction_count=contradiction_count,
         findings=findings,
         limit_findings=limit_findings,
+        score_audit=audits,
+        score_audit_agrees=all(a.agrees for a in audits),
         clarifications=[
             ClarificationLine(
                 persona_id=c.persona_id,

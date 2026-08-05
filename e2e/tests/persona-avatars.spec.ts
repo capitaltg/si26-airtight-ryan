@@ -186,6 +186,17 @@ test("the after-action report carries avatars on every persona line", async ({ p
             reply: "Yes - the first thirty days.",
           },
         ],
+        score_audit: [
+          {
+            turn_index: 0,
+            persisted_support_delta: -2,
+            recomputed_support_delta: -2,
+            persisted_matched_rows: ["false_fact"],
+            recomputed_matched_rows: ["false_fact"],
+            agrees: true,
+          },
+        ],
+        score_audit_agrees: true,
         narrative: { scored: false, header: "Not scored", text: "Keep drilling details." },
       }),
     }),

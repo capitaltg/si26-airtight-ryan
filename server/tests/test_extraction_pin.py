@@ -23,6 +23,7 @@ def _key(**overrides: object) -> str:
         "persona_id": "technical_evaluator",
         "concern_id": "technical_approach",
         "prior_claims": [],
+        "prior_answers": {},
         "extraction_fingerprint": content.extraction_fingerprint,
     }
     kwargs.update(overrides)
@@ -63,6 +64,12 @@ def test_different_prior_claims_change_the_key() -> None:
 
 def test_content_fingerprint_change_changes_the_key() -> None:
     assert _key(extraction_fingerprint="0" * 64) != _key()
+
+
+def test_different_prior_answers_change_the_key() -> None:
+    """Same answer and ledger, different stored history: grounding reads
+    ``prior_answers`` to decide a Tier-0 flag, so it must be part of the key."""
+    assert _key(prior_answers={0: "We have not identified the leads yet."}) != _key()
 
 
 def test_in_memory_pin_round_trips() -> None:

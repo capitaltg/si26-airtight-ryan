@@ -120,7 +120,7 @@ export function RubricPanel({ open, onClose }: { open: boolean; onClose: () => v
                         <span className="font-semibold text-crimson-700">Red lines:</span>
                         <ul className="ml-4 list-disc">
                           {c.red_lines.map((rl) => (
-                            <li key={rl}>{rl}</li>
+                            <li key={rl.id}>{rl.text}</li>
                           ))}
                         </ul>
                       </div>

@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from app.api.deps import get_content
 from app.config import settings
 from app.content.loader import Content
-from app.schemas.content import RubricRow
+from app.schemas.content import RedLine, RubricRow
 
 router = APIRouter(prefix="/content", tags=["content"])
 
@@ -22,7 +22,7 @@ class ConcernDisclosureDTO(BaseModel):
     concern_id: str
     core_ask: str
     what_would_satisfy: str
-    red_lines: list[str]
+    red_lines: list[RedLine]
 
 
 class RubricDisclosureDTO(BaseModel):

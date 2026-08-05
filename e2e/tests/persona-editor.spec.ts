@@ -15,7 +15,7 @@ const MARCUS = {
   values: ["compliance with the RFP"],
   wants: ["answers that stay inside the PWS"],
   priorities: ["compliance_security", "cost_realism", "past_performance"],
-  non_negotiables: ["do not promise work outside the PWS"],
+  non_negotiables: [{ id: "no-pws-overreach", text: "do not promise work outside the PWS" }],
   rubric_version: 1,
   polly_voice_id: "Matthew",
   exemplars: [
@@ -108,6 +108,51 @@ test("saving PUTs only the editable fields", async ({ page }) => {
   ])
 })
 
+test("saving an edited non-negotiable preserves its id, and a reload shows the saved text", async ({
+  page,
+}) => {
+  let listed = [MARCUS]
+  await page.route("**/api/content/personas", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(listed) }),
+  )
+  let sent: Record<string, unknown> | null = null
+  await page.route("**/api/content/personas/contracting_officer", async (route) => {
+    sent = route.request().postDataJSON() as Record<string, unknown>
+    listed = [
+      {
+        ...MARCUS,
+        non_negotiables: [
+          { id: "no-pws-overreach", text: "no verbal commitments outside the PWS" },
+        ],
+        is_customized: true,
+      },
+    ]
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(listed[0]),
+    })
+  })
+
+  await openEditor(page)
+  await page.getByTestId("toggle-contracting_officer").click()
+  await page.getByTestId("field-non_negotiables-0").fill("no verbal commitments outside the PWS")
+  await page.getByRole("button", { name: "Save persona" }).click()
+
+  await expect(page.getByRole("status")).toHaveText("Saved")
+  expect(sent).not.toBeNull()
+  expect(sent!.non_negotiables).toEqual([
+    { id: "no-pws-overreach", text: "no verbal commitments outside the PWS" },
+  ])
+
+  await page.reload()
+  await page.getByTestId("open-persona-editor").click()
+  await page.getByTestId("toggle-contracting_officer").click()
+  await expect(page.getByTestId("field-non_negotiables-0")).toHaveValue(
+    "no verbal commitments outside the PWS",
+  )
+})
+
 test("a 422 renders against the editable exemplar field that caused it", async ({ page }) => {
   await mockList(page, [MARCUS])
   await page.route("**/api/content/personas/contracting_officer", (route) =>
@@ -131,6 +176,33 @@ test("a 422 renders against the editable exemplar field that caused it", async (
   await page.getByRole("button", { name: "Save persona" }).click()
 
   await expect(page.getByRole("alert")).toHaveText("Note is required")
+  await expect(page.getByRole("status")).toHaveCount(0)
+})
+
+test("a 422 renders against the editable non-negotiable row that caused it", async ({ page }) => {
+  await mockList(page, [MARCUS])
+  await page.route("**/api/content/personas/contracting_officer", (route) =>
+    route.fulfill({
+      status: 422,
+      contentType: "application/json",
+      body: JSON.stringify({
+        detail: [
+          {
+            loc: ["body", "non_negotiables", 0, "text"],
+            msg: "String should have at least 1 character",
+            type: "string_too_short",
+          },
+        ],
+      }),
+    }),
+  )
+
+  await openEditor(page)
+  await page.getByTestId("toggle-contracting_officer").click()
+  await page.getByTestId("field-non_negotiables-0").fill("")
+  await page.getByRole("button", { name: "Save persona" }).click()
+
+  await expect(page.getByRole("alert")).toHaveText("String should have at least 1 character")
   await expect(page.getByRole("status")).toHaveCount(0)
 })
 

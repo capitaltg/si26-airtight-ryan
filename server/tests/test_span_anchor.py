@@ -22,6 +22,7 @@ from app.schemas.extraction import (
     FactCheck,
     RedLineHit,
     RedLineSourceKind,
+    SourceDocument,
     SubQuestionCoverage,
     Verdict,
 )
@@ -113,7 +114,7 @@ def test_every_span_bearing_field_is_reanchored() -> None:
             Dodge(
                 sub_question_id="sq2",
                 type=DodgeType.non_commitment,
-                evidence="With a named PM",
+                answer_span="With a named PM",
             )
         ],
         red_line_hits=[
@@ -128,7 +129,7 @@ def test_every_span_bearing_field_is_reanchored() -> None:
     result = reanchor_spans(extraction, typed)
     assert result.claims[0].span in typed
     assert result.sub_question_coverage[0].span in typed
-    assert result.dodges[0].evidence in typed
+    assert result.dodges[0].answer_span in typed
     assert result.red_line_hits[0].span in typed
 
 
@@ -246,20 +247,34 @@ def test_prose_fields_are_not_touched() -> None:
             )
         ],
         consistency_flags=[
-            ConsistencyFlag(conflicts_with_turn=0, detail="We follow a phased approach, earlier.")
+            ConsistencyFlag(
+                conflicts_with_turn=0,
+                current_answer_span="a phased approach",
+                prior_answer_span="We follow a phased approach, earlier.",
+                acknowledged_revision=False,
+                explanation="Contradicts what was said before, in different words.",
+            )
         ],
         fact_checks=[
             FactCheck(
                 claim="We follow a phased approach",
+                answer_span="a phased approach",
+                source_document_id=SourceDocument.written_proposal,
+                source_quote="proposal states a phased approach",
                 tier=1,
                 verdict=Verdict.unverifiable,
-                source="proposal",
             )
         ],
     )
     result = reanchor_spans(extraction, typed)
     assert result.red_line_hits[0].why == "We follow a phased approach with no dates attached."
-    assert result.consistency_flags[0].detail == "We follow a phased approach, earlier."
+    assert (
+        result.consistency_flags[0].prior_answer_span == "We follow a phased approach, earlier."
+    )
+    assert (
+        result.consistency_flags[0].explanation
+        == "Contradicts what was said before, in different words."
+    )
     assert result.fact_checks[0].claim == "We follow a phased approach"
 
 
@@ -274,7 +289,7 @@ def test_scored_signals_are_untouched() -> None:
             SubQuestionCoverage(id="sq1", addressed=Addressed.full, span="Our PM")
         ],
         dodges=[
-            Dodge(sub_question_id="sq2", type=DodgeType.deflection, evidence="Our PM"),
+            Dodge(sub_question_id="sq2", type=DodgeType.deflection, answer_span="Our PM"),
         ],
     )
     result = reanchor_spans(extraction, typed)
@@ -285,3 +300,31 @@ def test_scored_signals_are_untouched() -> None:
     assert result.sub_question_coverage[0].id == "sq1"
     assert result.dodges[0].type is DodgeType.deflection
     assert result.dodges[0].sub_question_id == "sq2"
+
+
+def test_prior_answer_span_and_source_quote_are_left_alone() -> None:
+    answer = "We  staff   three named leads."
+    extraction = Extraction(
+        consistency_flags=[
+            ConsistencyFlag(
+                conflicts_with_turn=1,
+                current_answer_span="three   named leads",
+                prior_answer_span="we have not identified leads",
+                acknowledged_revision=False,
+            )
+        ],
+        fact_checks=[
+            FactCheck(
+                claim="c",
+                answer_span="three   named leads",
+                source_document_id=SourceDocument.rfp_pws,
+                source_quote="Key Personnel shall be identified at award",
+                tier=1,
+                verdict=Verdict.refuted,
+            )
+        ],
+    )
+    anchored = reanchor_spans(extraction, answer)
+    assert anchored.consistency_flags[0].current_answer_span == "three named leads"
+    assert anchored.consistency_flags[0].prior_answer_span == "we have not identified leads"
+    assert anchored.fact_checks[0].source_quote == "Key Personnel shall be identified at award"

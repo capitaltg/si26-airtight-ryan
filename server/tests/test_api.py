@@ -392,7 +392,7 @@ def test_content_rubric_is_disclosed(client: TestClient) -> None:
     dodge = next(row for row in body["rows"] if row["id"] == "dodge")
     assert dodge["note"] is None
     assert len(body["concerns"]) == 8
-    assert all(c["red_lines"] for c in body["concerns"])
+    assert all(c["red_lines"][0]["id"] for c in body["concerns"])
 
 
 def test_content_tangent_limits_are_disclosed(client: TestClient) -> None:
