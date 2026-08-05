@@ -9,6 +9,7 @@ from app.schemas.extraction import (
     Backing,
     Claim,
     ClaimType,
+    ConsistencyFlag,
     Dodge,
     DodgeType,
     Extraction,
@@ -18,6 +19,8 @@ from app.schemas.extraction import (
 )
 
 ANSWER = "We staff three named leads at contract start and the PM has twelve years of federal work."
+
+PRIOR_ANSWERS = {0: "We have not identified the leads yet."}
 
 
 def _fixture() -> tuple[Content, PersonaDefinition, Concern]:
@@ -29,7 +32,30 @@ def _fixture() -> tuple[Content, PersonaDefinition, Concern]:
 
 def _ground(extraction: Extraction) -> Extraction:
     _, persona, concern = _fixture()
-    return drop_ungrounded(extraction, answer=ANSWER, concern=concern, persona=persona)
+    return drop_ungrounded(
+        extraction, answer=ANSWER, concern=concern, persona=persona, prior_answers={}
+    )
+
+
+def _ground_with_history(extraction: Extraction) -> Extraction:
+    _, persona, concern = _fixture()
+    return drop_ungrounded(
+        extraction,
+        answer=ANSWER,
+        concern=concern,
+        persona=persona,
+        prior_answers=PRIOR_ANSWERS,
+    )
+
+
+def _flag(**overrides: object) -> ConsistencyFlag:
+    fields: dict[str, object] = {
+        "conflicts_with_turn": 0,
+        "current_answer_span": "three named leads at contract start",
+        "prior_answer_span": "We have not identified the leads yet",
+        "acknowledged_revision": False,
+    }
+    return ConsistencyFlag.model_validate({**fields, **overrides})
 
 
 def test_fabricated_red_line_span_is_dropped_and_does_not_cap() -> None:
@@ -92,7 +118,7 @@ def test_non_negotiable_hit_dropped_when_persona_lists_none() -> None:
         ]
     )
     grounded = drop_ungrounded(
-        extraction, answer=ANSWER, concern=concern, persona=persona
+        extraction, answer=ANSWER, concern=concern, persona=persona, prior_answers={}
     )
     assert grounded.red_line_hits == []
 
@@ -271,3 +297,39 @@ def test_dodge_with_a_real_answer_span_is_kept_and_scores() -> None:
     grounded = _ground(Extraction(dodges=[dodge]))
     assert grounded.dodges == [dodge]
     assert score_turn(grounded, content.rubric).support_delta == -2
+
+
+def test_contradiction_with_both_sides_grounded_is_kept_and_scores() -> None:
+    content, _, _ = _fixture()
+    flag = _flag()
+    grounded = _ground_with_history(Extraction(consistency_flags=[flag]))
+    assert grounded.consistency_flags == [flag]
+    assert score_turn(grounded, content.rubric).support_delta == -1
+
+
+def test_contradiction_naming_a_turn_with_no_stored_answer_is_dropped() -> None:
+    grounded = _ground_with_history(Extraction(consistency_flags=[_flag(conflicts_with_turn=7)]))
+    assert grounded.consistency_flags == []
+
+
+def test_contradiction_with_an_ungrounded_current_span_is_dropped() -> None:
+    grounded = _ground_with_history(
+        Extraction(consistency_flags=[_flag(current_answer_span="we never said this")])
+    )
+    assert grounded.consistency_flags == []
+
+
+def test_contradiction_with_a_span_absent_from_the_prior_answer_is_dropped() -> None:
+    grounded = _ground_with_history(
+        Extraction(consistency_flags=[_flag(prior_answer_span="we promised four leads")])
+    )
+    assert grounded.consistency_flags == []
+
+
+def test_acknowledged_revision_still_scores_a_contradiction() -> None:
+    content, _, _ = _fixture()
+    grounded = _ground_with_history(
+        Extraction(consistency_flags=[_flag(acknowledged_revision=True)])
+    )
+    assert len(grounded.consistency_flags) == 1
+    assert score_turn(grounded, content.rubric).support_delta == -1

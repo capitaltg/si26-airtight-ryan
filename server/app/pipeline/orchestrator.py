@@ -283,6 +283,7 @@ def submit_answer_events(
     persona, concern = current.persona, current.concern
 
     prior_claims = repo.get_claims(db, session.id)
+    prior_answers = {t.turn_index: t.user_answer for t in repo.get_turns(db, session.id)}
     yield {"stage": "extracting"}
     extraction_start = time.perf_counter()
     extraction_result = run_extraction(
@@ -291,6 +292,7 @@ def submit_answer_events(
         persona=persona,
         content=content,
         prior_claims=prior_claims,
+        prior_answers=prior_answers,
         client=client,  # type: ignore[arg-type]
         pin=pin,
     )

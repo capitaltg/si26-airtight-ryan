@@ -21,6 +21,7 @@ task. See the spec's out-of-scope section.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 
 from app.pipeline.span_anchor import fold
 from app.schemas.content import Concern, PersonaDefinition
@@ -43,6 +44,7 @@ def drop_ungrounded(
     answer: str,
     concern: Concern,
     persona: PersonaDefinition,
+    prior_answers: Mapping[int, str],
 ) -> Extraction:
     """Remove findings whose quote is not in ``answer`` or whose id is not real.
 
@@ -112,11 +114,38 @@ def drop_ungrounded(
             continue
         dodges.append(dodge)
 
+    flags = []
+    for flag in extraction.consistency_flags:
+        prior = prior_answers.get(flag.conflicts_with_turn)
+        if prior is None:
+            logger.warning(
+                "dropped Tier-0 flag naming turn %s (stored turns: %s)",
+                flag.conflicts_with_turn,
+                sorted(prior_answers) or "none",
+            )
+            continue
+        if not _is_quoted(flag.current_answer_span, folded_answer):
+            logger.warning(
+                "dropped Tier-0 flag with ungrounded current_answer_span: %r",
+                flag.current_answer_span,
+            )
+            continue
+        folded_prior, _ = fold(prior)
+        if not _is_quoted(flag.prior_answer_span, folded_prior):
+            logger.warning(
+                "dropped Tier-0 flag whose prior_answer_span is absent from turn %s: %r",
+                flag.conflicts_with_turn,
+                flag.prior_answer_span,
+            )
+            continue
+        flags.append(flag)
+
     unchanged = (
         len(red_line_hits) == len(extraction.red_line_hits)
         and len(claims) == len(extraction.claims)
         and len(coverage) == len(extraction.sub_question_coverage)
         and len(dodges) == len(extraction.dodges)
+        and len(flags) == len(extraction.consistency_flags)
     )
     if unchanged:
         return extraction
@@ -127,5 +156,6 @@ def drop_ungrounded(
             "claims": claims,
             "sub_question_coverage": coverage,
             "dodges": dodges,
+            "consistency_flags": flags,
         }
     )
