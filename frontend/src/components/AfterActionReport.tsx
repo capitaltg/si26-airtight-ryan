@@ -44,9 +44,12 @@ function CountRow({ label, value }: { label: string; value: number }) {
 function FindingCard({ f }: { f: ScoredFinding }) {
   const total = f.support_value * f.count
   const sign = total > 0 ? `+${total}` : `${total}`
-  // dodge and approach_cited carry a category enum (e.g. "non_commitment") as
-  // their detail; the rest carry prose, which must stay verbatim.
-  const prettifyDetail = f.rubric_row === "dodge" || f.rubric_row === "approach_cited"
+  // approach_cited always carries a category enum (e.g. "full") as its
+  // detail. dodge's detail is prose (the model's explanation) when present,
+  // falling back to a bare enum value only when it is not (see
+  // server/app/report/builder.py's `_turn_findings`) — either way it must
+  // stay verbatim, never title-cased.
+  const prettifyDetail = f.rubric_row === "approach_cited"
   return (
     <Card as="details" padding="sm" className="print:shadow-none">
       <summary className="flex cursor-pointer items-center gap-2 text-body-sm">
@@ -190,7 +193,16 @@ function ReportBody({ report }: { report: Report }) {
           {/* scored findings, each with its verbatim quote */}
           <section className="space-y-2">
             <MicroCaps as="h2">Scored findings: every line carries its quote</MicroCaps>
-            {report.score_audit_agrees ? (
+            {report.score_audit.length === 0 ? (
+              // A report from before the audit shipped validates with the
+              // schema's empty-list default. Rendering the "recomputed and
+              // matched" assurance against zero audited turns would make the
+              // same kind of unkept claim this plan exists to eliminate, so
+              // say plainly that no audit ran instead.
+              <p className="text-body-sm text-text-faint">
+                No score audit is available for this report.
+              </p>
+            ) : report.score_audit_agrees ? (
               <p className="text-body-sm text-text-muted">
                 Every turn's score was recomputed from the evidence above and matched what was
                 recorded ({report.score_audit.length} of {report.score_audit.length}).
