@@ -25,6 +25,7 @@ from app.schemas.extraction import (
     SubQuestionCoverage,
 )
 from app.schemas.reaction import PersonaReaction
+from tests.conftest import ExtractResultFromExtract
 from tests.test_extraction import ScriptedBedrockClient
 
 
@@ -45,7 +46,7 @@ def test_app_boots_with_content_on_state():
         assert content.rubric.version == 2
 
 
-class _FakeClient:
+class _FakeClient(ExtractResultFromExtract):
     """Returns a backed, fully-covering extraction for the first concern and a
     canned reaction — enough for one green answer round-trip."""
 

@@ -14,12 +14,13 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.bedrock.cache import CacheKeyInput
-from app.bedrock.client import BedrockClient
+from app.bedrock.client import BedrockClient, ExtractOutcome
 from app.config import settings
 from app.content.loader import load_content
 from app.db.models import ClaimLedger
 from app.pipeline.extraction import (
     EXTRACTOR_CONTRACT_VERSION,
+    ExtractionProvenance,
     ExtractionResult,
     build_extraction_dynamic_suffix,
     build_extraction_prompt,
@@ -29,9 +30,10 @@ from app.pipeline.extraction import (
 from app.pipeline.extraction_pin import InMemoryExtractionPin, extraction_key
 from app.pipeline.scoring import score_turn
 from app.schemas.extraction import Backing, Claim, ClaimType, Extraction
+from tests.conftest import ExtractResultFromExtract
 
 
-class FakeBedrockClient:
+class FakeBedrockClient(ExtractResultFromExtract):
     def __init__(self, result: Extraction) -> None:
         self._result = result
         self.calls: list[dict[str, Any]] = []
@@ -511,7 +513,7 @@ def test_cold_call_leaves_the_models_own_span_untouched() -> None:
     assert result.extraction.claims[0].span == "Our PM has 12 years of federal work"
 
 
-class ScriptedBedrockClient:
+class ScriptedBedrockClient(ExtractResultFromExtract):
     """Returns a different extraction on each call, to prove the pin holds."""
 
     def __init__(self, results: list[Extraction]) -> None:
@@ -531,7 +533,7 @@ class ScriptedBedrockClient:
         return self._results.pop(0)
 
 
-class SynchronizedRacingBedrockClient:
+class SynchronizedRacingBedrockClient(ExtractResultFromExtract):
     """Makes two cold extraction calls return opposing valid findings."""
 
     def __init__(self) -> None:
@@ -821,3 +823,78 @@ def test_a_model_change_calls_the_model_instead_of_replaying(monkeypatch: Any) -
     assert pin.get(_pin_key(content, persona, concern, model_id=original)) is not None, (
         "the pre-upgrade row is left in place for a targeted delete"
     )
+
+
+class CacheHitBedrockClient(ExtractResultFromExtract):
+    """A pin miss that lands on the response cache: reports the replay the real
+    client reports, so no transport call happened."""
+
+    def __init__(self, result: Extraction) -> None:
+        self._result = result
+
+    def extract(self, content: Any, **kwargs: Any) -> Extraction:
+        return self._result
+
+    def extract_result(self, content: Any, **kwargs: Any) -> ExtractOutcome[Extraction]:
+        return ExtractOutcome(content=self._result, cache_hit=True)
+
+
+def test_a_first_extraction_records_a_fresh_source() -> None:
+    content, persona, concern = _fixture()
+    client = ScriptedBedrockClient([_clean_extraction()])
+    result = run_extraction(
+        answer=_GROUNDED_ANSWER,
+        concern=concern,
+        persona=persona,
+        content=content,
+        prior_claims=[],
+        prior_answers={},
+        client=client,  # type: ignore[arg-type]
+        pin=InMemoryExtractionPin(),
+    )
+    assert result.provenance == ExtractionProvenance(
+        source="fresh",
+        key=_pin_key(content, persona, concern, model_id=settings.bedrock_model_id),
+        contract_version=EXTRACTOR_CONTRACT_VERSION,
+        model_id=settings.bedrock_model_id,
+    )
+
+
+def test_a_replayed_extraction_records_a_pin_source() -> None:
+    content, persona, concern = _fixture()
+    client = ScriptedBedrockClient([_clean_extraction(), _harsher_extraction()])
+    pin = InMemoryExtractionPin()
+
+    def once() -> ExtractionResult:
+        return run_extraction(
+            answer=_GROUNDED_ANSWER,
+            concern=concern,
+            persona=persona,
+            content=content,
+            prior_claims=[],
+            prior_answers={},
+            client=client,  # type: ignore[arg-type]
+            pin=pin,
+        )
+
+    assert once().provenance.source == "fresh"
+    assert once().provenance.source == "pin"
+    assert client.calls == 1
+
+
+def test_a_response_cache_replay_records_a_response_cache_source() -> None:
+    """The pin missed and the model was never called: the stored response came
+    back instead. Recorded distinctly so "did this turn cost a model call" has an
+    answer in the database."""
+    content, persona, concern = _fixture()
+    result = run_extraction(
+        answer=_GROUNDED_ANSWER,
+        concern=concern,
+        persona=persona,
+        content=content,
+        prior_claims=[],
+        prior_answers={},
+        client=CacheHitBedrockClient(_clean_extraction()),  # type: ignore[arg-type]
+        pin=InMemoryExtractionPin(),
+    )
+    assert result.provenance.source == "response_cache"
