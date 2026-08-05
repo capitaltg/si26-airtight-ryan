@@ -18,7 +18,7 @@ from typing import Any
 
 from app.content.loader import load_content
 from app.db.models import PersonaMeter, Turn
-from app.pipeline.scoring import score_turn
+from app.pipeline.scoring import apply_limit_penalty, score_turn
 from app.report.builder import (
     _turn_findings,
     build_report,
@@ -42,7 +42,7 @@ from app.schemas.extraction import (
     Verdict,
 )
 from app.schemas.report import ScoredFinding, ScoredReport
-from app.schemas.scoring import ScoreOutput
+from app.schemas.scoring import LimitKind, LimitMeasurement, ScoreOutput
 
 
 class FakeReactClient:
@@ -220,6 +220,54 @@ def test_score_audit_reports_a_turn_whose_persisted_number_disagrees() -> None:
         report.score_audit[0].persisted_support_delta
         != report.score_audit[0].recomputed_support_delta
     )
+
+
+def test_score_audit_reproduces_the_limit_penalty() -> None:
+    """The audit recomputes ``apply_limit_penalty`` too, not just ``score_turn``'s
+    row combination: a turn that landed over its word limit must reproduce the
+    same over_limit deduction from its stored measurement, independently."""
+    content = load_content()
+    rubric = content.rubric
+    ext = Extraction(
+        sub_question_coverage=[
+            SubQuestionCoverage(id="architecture", addressed=Addressed.full, span="three services")
+        ]
+    )
+    base_score = score_turn(ext, rubric)
+    measurement = LimitMeasurement(
+        kind=LimitKind.text_words, measured=240, warning_threshold=150, limit_threshold=200
+    )
+    persisted_score = apply_limit_penalty(base_score, rubric, measurement)
+    assert persisted_score.limit is not None
+    assert persisted_score.limit.penalty_applied is True
+    assert persisted_score.support_delta == base_score.support_delta - 1  # over_limit is -1
+
+    turn = Turn(
+        session_id=uuid.uuid4(),
+        turn_index=0,
+        persona_id="technical_evaluator",
+        concern_id="technical_approach",
+        user_answer="word " * 240,
+        extraction_json=ext.model_dump(mode="json"),
+        score_json=persisted_score.model_dump(mode="json"),
+        reaction_json=None,
+    )
+
+    report = build_scored_report(
+        session_id=turn.session_id,
+        status="complete",
+        turns=[turn],
+        meters=[],
+        concern_statuses={},
+        content=content,
+    )
+
+    assert report.score_audit_agrees is True
+    audit = report.score_audit[0]
+    assert audit.agrees is True
+    assert audit.persisted_support_delta == persisted_score.support_delta
+    assert audit.recomputed_support_delta == persisted_score.support_delta
+    assert "over_limit" in audit.recomputed_matched_rows
 
 
 def test_scored_report_counts_match_hand_computed() -> None:
@@ -545,3 +593,143 @@ def test_false_fact_finding_quotes_the_answer_and_the_source() -> None:
     assert evidence.detail == "claims roughly 25 million records"
     assert evidence.counter_span == "approximately 42 million case records"
     assert evidence.counter_label == "rfp_pws"
+
+
+def test_every_charged_row_across_a_session_carries_verified_evidence() -> None:
+    """Acceptance criterion 5: no non-zero matched row exists without a verified
+    evidence object. Walk a session that charges every kind the rubric supports
+    -- evidence_backed, approach_cited, dodge, contradiction, red_line, and
+    false_fact -- and prove each one produced a finding, and that every finding
+    whose row has a non-zero support value carries at least one evidence entry."""
+    content = load_content()
+    rubric = content.rubric
+    red_line = content.concerns["technical_approach"].red_lines[0]
+
+    turns = [
+        _turn(  # evidence_backed
+            0,
+            "technical_evaluator",
+            "technical_approach",
+            Extraction(
+                claims=[
+                    Claim(
+                        text="A named PM leads the effort.",
+                        type=ClaimType.commitment,
+                        backing=Backing.backed,
+                        span="a named PM with twelve years",
+                    )
+                ]
+            ),
+            rubric,
+        ),
+        _turn(  # approach_cited (coverage only, no backed commitment)
+            1,
+            "technical_evaluator",
+            "technical_approach",
+            Extraction(
+                sub_question_coverage=[
+                    SubQuestionCoverage(
+                        id="architecture", addressed=Addressed.full, span="three services"
+                    )
+                ]
+            ),
+            rubric,
+        ),
+        _turn(  # dodge
+            2,
+            "contracting_officer",
+            "key_personnel",
+            Extraction(
+                dodges=[
+                    Dodge(
+                        sub_question_id="named_leads",
+                        type=DodgeType.non_commitment,
+                        answer_span="figure out the names later",
+                        explanation="lots of enthusiasm, no names",
+                    )
+                ]
+            ),
+            rubric,
+            answer="We're excited about staffing and will figure out the names later.",
+        ),
+        _turn(  # contradiction, naming turn 2 above
+            3,
+            "contracting_officer",
+            "key_personnel",
+            Extraction(
+                consistency_flags=[
+                    ConsistencyFlag(
+                        conflicts_with_turn=2,
+                        current_answer_span="figure out the names later",
+                        prior_answer_span="three named leads at contract start",
+                        acknowledged_revision=False,
+                        explanation="contradicts earlier staffing claim",
+                    )
+                ]
+            ),
+            rubric,
+        ),
+        _turn(  # red_line
+            4,
+            "program_rep",
+            "technical_approach",
+            Extraction(
+                red_line_hits=[
+                    RedLineHit(
+                        source_id=red_line.id,
+                        source_kind=RedLineSourceKind.concern_red_line,
+                        span="we will host it on premises",
+                        why="the PWS forbids on-premises hosting",
+                    )
+                ]
+            ),
+            rubric,
+        ),
+        _turn(  # false_fact
+            5,
+            "program_rep",
+            "transition",
+            Extraction(
+                fact_checks=[
+                    FactCheck(
+                        claim="claims 12M records",
+                        answer_span="12M records",
+                        source_document_id=SourceDocument.rfp_pws,
+                        source_quote="PWS 3.1 states approximately 42 million records",
+                        tier=1,
+                        verdict=Verdict.refuted,
+                    )
+                ]
+            ),
+            rubric,
+            answer="We process about 12M records this year.",
+        ),
+    ]
+    meters = [
+        PersonaMeter(session_id=turns[0].session_id, persona_id=p, support=50, capped=False)
+        for p in ("technical_evaluator", "contracting_officer", "program_rep")
+    ]
+    statuses = {"technical_approach": "dodged", "key_personnel": "dodged", "transition": "partial"}
+
+    report = build_scored_report(
+        session_id=turns[0].session_id,
+        status="complete",
+        turns=turns,
+        meters=meters,
+        concern_statuses=statuses,
+        content=content,
+    )
+
+    rows_seen = {f.rubric_row for f in report.findings}
+    assert rows_seen == {
+        "evidence_backed",
+        "approach_cited",
+        "dodge",
+        "contradiction",
+        "red_line",
+        "false_fact",
+    }
+    for f in report.findings:
+        if f.support_value != 0:
+            assert f.evidence, f"{f.rubric_row} charged {f.support_value} with no evidence"
+            assert all(e.span.strip() for e in f.evidence)

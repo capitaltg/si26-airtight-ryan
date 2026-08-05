@@ -225,6 +225,38 @@ def test_red_line_caps_and_stays_capped_across_next_good_answer(
     assert second.capped is True
 
 
+def test_invented_red_line_source_id_leaves_meter_and_concern_status_untouched(
+    db: Session, content: Content
+) -> None:
+    """An invented ``source_id`` must not survive grounding, so the finding that
+    would otherwise cap the meter and terminate the concern as ``dodged`` never
+    reaches ``score_turn`` or ``_next_status`` at all. The turn scores exactly as
+    if the model had returned nothing: no delta, no cap, and the concern gets
+    another attempt like any other unaddressed first turn."""
+    session = orchestrator.start_session(db, content)
+    client = ScriptedClient()
+    client.next_extraction = Extraction(
+        red_line_hits=[
+            RedLineHit(
+                source_id="not-a-real-authored-red-line",
+                source_kind=RedLineSourceKind.concern_red_line,
+                span="we'll just lift and shift the mainframe overnight",
+                why="real span, invented rule",
+            )
+        ]
+    )
+
+    result = orchestrator.submit_answer(
+        db, content, client, session, "We'll just lift and shift the mainframe overnight."
+    )
+
+    assert result.support_delta == 0
+    assert result.meter == 50  # unchanged from the starting meter
+    assert result.capped is False
+    assert result.concern_status != "dodged"
+    assert result.concern_status == "partial"  # first attempt with no grounded finding
+
+
 def test_submit_answer_with_audio_persists_it_on_the_turn(db: Session, content: Content) -> None:
     session = orchestrator.start_session(db, content)
     client = ScriptedClient()
