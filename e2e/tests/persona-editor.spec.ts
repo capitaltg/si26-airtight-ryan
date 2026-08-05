@@ -179,6 +179,33 @@ test("a 422 renders against the editable exemplar field that caused it", async (
   await expect(page.getByRole("status")).toHaveCount(0)
 })
 
+test("a 422 renders against the editable non-negotiable row that caused it", async ({ page }) => {
+  await mockList(page, [MARCUS])
+  await page.route("**/api/content/personas/contracting_officer", (route) =>
+    route.fulfill({
+      status: 422,
+      contentType: "application/json",
+      body: JSON.stringify({
+        detail: [
+          {
+            loc: ["body", "non_negotiables", 0, "text"],
+            msg: "String should have at least 1 character",
+            type: "string_too_short",
+          },
+        ],
+      }),
+    }),
+  )
+
+  await openEditor(page)
+  await page.getByTestId("toggle-contracting_officer").click()
+  await page.getByTestId("field-non_negotiables-0").fill("")
+  await page.getByRole("button", { name: "Save persona" }).click()
+
+  await expect(page.getByRole("alert")).toHaveText("String should have at least 1 character")
+  await expect(page.getByRole("status")).toHaveCount(0)
+})
+
 test("a non-validation failure is a banner, not a field error", async ({ page }) => {
   await mockList(page, [MARCUS])
   await page.route("**/api/content/personas/contracting_officer", (route) =>

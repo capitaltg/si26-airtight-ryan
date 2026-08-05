@@ -225,26 +225,29 @@ export function PersonaForm({
           {draft.non_negotiables.map((nn, i) => (
             // Index keys are correct here: the rows are positional and a row's
             // identity is its position in the authored list.
-            <div key={`non_negotiables-${i}`} className="flex items-start gap-2">
-              <Input
-                aria-label={`Non-negotiables ${i + 1}`}
-                data-testid={`field-non_negotiables-${i}`}
-                value={nn.text}
-                onChange={(e) => setNonNegotiable(i, e.target.value)}
-              />
-              <Button
-                variant="secondary"
-                size="sm"
-                aria-label={`Remove non-negotiables ${i + 1}`}
-                onClick={() =>
-                  setField(
-                    "non_negotiables",
-                    draft.non_negotiables.filter((_, index) => index !== i),
-                  )
-                }
-              >
-                Remove
-              </Button>
+            <div key={`non_negotiables-${i}`} className="space-y-1">
+              <div className="flex items-start gap-2">
+                <Input
+                  aria-label={`Non-negotiables ${i + 1}`}
+                  data-testid={`field-non_negotiables-${i}`}
+                  value={nn.text}
+                  onChange={(e) => setNonNegotiable(i, e.target.value)}
+                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  aria-label={`Remove non-negotiables ${i + 1}`}
+                  onClick={() =>
+                    setField(
+                      "non_negotiables",
+                      draft.non_negotiables.filter((_, index) => index !== i),
+                    )
+                  }
+                >
+                  Remove
+                </Button>
+              </div>
+              <FieldMessage message={errorFor(errors, `non_negotiables.${i}.text`)} />
             </div>
           ))}
           <Button
