@@ -71,6 +71,18 @@ function FindingCard({ f }: { f: ScoredFinding }) {
             {e.detail && (
               <p className="text-text-muted">{prettifyDetail ? prettify(e.detail) : e.detail}</p>
             )}
+            {e.counter_span && (
+              <div className="space-y-1">
+                {e.counter_label && (
+                  <MicroCaps as="span" tone="faint" className="block">
+                    {e.counter_label}
+                  </MicroCaps>
+                )}
+                <blockquote className="border-l-2 pl-2 italic text-text-body">
+                  “{e.counter_span}”
+                </blockquote>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -178,6 +190,21 @@ function ReportBody({ report }: { report: Report }) {
           {/* scored findings, each with its verbatim quote */}
           <section className="space-y-2">
             <MicroCaps as="h2">Scored findings: every line carries its quote</MicroCaps>
+            {report.score_audit_agrees ? (
+              <p className="text-body-sm text-text-muted">
+                Every turn's score was recomputed from the evidence above and matched what was
+                recorded ({report.score_audit.length} of {report.score_audit.length}).
+              </p>
+            ) : (
+              <p
+                role="alert"
+                className="rounded-card border border-crimson-700 bg-crimson-100 px-3 py-2 text-body-sm font-medium text-crimson-700 print:border-crimson-700"
+              >
+                Recomputing from the evidence above disagreed with the recorded score on{" "}
+                {report.score_audit.filter((a) => !a.agrees).length} of {report.score_audit.length}{" "}
+                turns.
+              </p>
+            )}
             {report.findings.length === 0 ? (
               <p className="text-body-sm text-text-faint">
                 No span-bearing findings were recorded.

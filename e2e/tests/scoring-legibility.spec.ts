@@ -208,7 +208,14 @@ test("an archived turn renders counts and the marker", async ({ page }) => {
             rubric_row: "false_fact",
             support_value: -1,
             count: 1,
-            evidence: [{ span: "Twelve million records", detail: "PWS 3.1" }],
+            evidence: [
+              {
+                span: "Twelve million records",
+                detail: "PWS 3.1",
+                counter_span: "The PWS states nine million records across two waves.",
+                counter_label: "Source: PWS 3.1",
+              },
+            ],
           },
           {
             turn_index: 0,
@@ -222,6 +229,17 @@ test("an archived turn renders counts and the marker", async ({ page }) => {
         ],
         limit_findings: [],
         clarifications: [],
+        score_audit: [
+          {
+            turn_index: 0,
+            persisted_support_delta: -2,
+            recomputed_support_delta: -2,
+            persisted_matched_rows: ["false_fact"],
+            recomputed_matched_rows: ["false_fact"],
+            agrees: true,
+          },
+        ],
+        score_audit_agrees: true,
         narrative: { scored: false, header: "Not scored", text: "Keep drilling details." },
       }),
     }),
@@ -240,4 +258,13 @@ test("an archived turn renders counts and the marker", async ({ page }) => {
   await page.locator("details").filter({ hasText: "Three waves" }).locator("summary").click()
   await expect(page.getByText("“Twelve million records”", { exact: true })).toBeVisible()
   await expect(page.getByText("“Three waves”", { exact: true })).toBeVisible()
+  await expect(
+    page.getByText("“The PWS states nine million records across two waves.”", { exact: true }),
+  ).toBeVisible()
+  await expect(page.getByText("Source: PWS 3.1")).toBeVisible()
+  await expect(
+    page.getByText(
+      "Every turn's score was recomputed from the evidence above and matched what was recorded (1 of 1).",
+    ),
+  ).toBeVisible()
 })

@@ -153,6 +153,8 @@ export interface RateStats {
 export interface FindingEvidence {
   span: string
   detail: string
+  counter_span?: string | null
+  counter_label?: string | null
 }
 
 export interface ScoredFinding {
@@ -178,6 +180,17 @@ export interface NarrativeSection {
   text: string
 }
 
+// An independent recomputation of one turn's number from its stored evidence,
+// so the report can show the audit rather than assert it happened.
+export interface TurnScoreAudit {
+  turn_index: number
+  persisted_support_delta: number
+  recomputed_support_delta: number
+  persisted_matched_rows: string[]
+  recomputed_matched_rows: string[]
+  agrees: boolean
+}
+
 export interface Report {
   session_id: string
   status: string
@@ -189,6 +202,8 @@ export interface Report {
   findings: ScoredFinding[]
   limit_findings: LimitFinding[]
   clarifications: ClarificationLine[]
+  score_audit: TurnScoreAudit[]
+  score_audit_agrees: boolean
   narrative: NarrativeSection
 }
 
