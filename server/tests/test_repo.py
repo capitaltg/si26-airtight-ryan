@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db import repo
-from app.db.models import Base, RehearsalSession
+from app.db.models import Base, ExtractionPinRow, RehearsalSession, Turn
 from app.schemas.extraction import (
     Backing,
     Claim,
@@ -439,3 +439,40 @@ def test_deleting_a_session_cascades_to_every_child_row(db: Session) -> None:
     assert repo.get_clarifications(db, session.id) == []
     assert repo.get_meters(db, session.id) == []
     assert repo.get_concern_statuses(db, session.id) == {}
+
+
+def test_append_turn_stores_extraction_provenance(db: Session) -> None:
+    session = repo.create_session(
+        db, scenario_version="v1", rubric_version=1, persona_ids=["technical_evaluator"]
+    )
+    provenance = {
+        "source": "fresh",
+        "key": "9f2c" + "0" * 60,
+        "contract_version": 1,
+        "model_id": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    }
+    repo.append_turn(
+        db,
+        session_id=session.id,
+        turn_index=0,
+        persona_id="technical_evaluator",
+        concern_id="technical_approach",
+        user_answer="We staff three named leads at contract start.",
+        extraction=Extraction(),
+        score=ScoreOutput(support_delta=0, matched_rows=["unsubstantiated"], capped=False),
+        reaction=None,
+        extraction_provenance=provenance,
+    )
+    db.commit()
+
+    turn = repo.get_turns(db, session.id)[0]
+    assert turn.extraction_provenance == provenance
+
+
+def test_migration_0008_columns_match_the_orm() -> None:
+    """The suite has no alembic harness, so this is what keeps the ORM and
+    revision 0008 from silently disagreeing about shape. `extraction_provenance`
+    is nullable (rows written before 0008 have no value); the pin's contract
+    version is not (0008 clears the table first, so NOT NULL needs no default)."""
+    assert Turn.__table__.c["extraction_provenance"].nullable is True
+    assert ExtractionPinRow.__table__.c["extractor_contract_version"].nullable is False

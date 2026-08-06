@@ -115,6 +115,13 @@ class Turn(Base):
     # The persona's self-introduction, non-null only on their first prompt of
     # the session.
     prompt_intro: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # How this turn's extraction was produced: `ExtractionProvenance` as a dict
+    # (source, key, contract_version, model_id). Written for the audit trail and
+    # read by nothing yet. Nullable because rows written before migration 0008
+    # have no value — the same pattern `prompt` above uses.
+    extraction_provenance: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON_, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

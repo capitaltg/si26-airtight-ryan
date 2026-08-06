@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -65,6 +66,7 @@ def append_turn(
     transcript: str | None = None,
     prompt: str | None = None,
     prompt_intro: str | None = None,
+    extraction_provenance: dict[str, Any] | None = None,
 ) -> Turn:
     turn = Turn(
         session_id=session_id,
@@ -80,6 +82,7 @@ def append_turn(
         transcript=transcript,
         prompt=prompt,
         prompt_intro=prompt_intro,
+        extraction_provenance=extraction_provenance,
     )
     db.add(turn)
     db.flush()

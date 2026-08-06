@@ -27,7 +27,7 @@ import logging
 import time
 from collections import Counter
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import cast
 
 from sqlalchemy.orm import Session
@@ -298,9 +298,10 @@ def submit_answer_events(
     )
     extraction = extraction_result.extraction
     logger.info(
-        "extraction (%s) took %.0f ms",
+        "extraction (%s) took %.0f ms [source=%s]",
         persona.id,
         (time.perf_counter() - extraction_start) * 1000,
+        extraction_result.provenance.source,
     )
 
     yield {"stage": "scoring"}
@@ -366,6 +367,7 @@ def submit_answer_events(
         transcript=audio.transcript if audio is not None else None,
         prompt=current.prompt,
         prompt_intro=current.intro,
+        extraction_provenance=asdict(extraction_result.provenance),
     )
     repo.append_claims(
         db, session_id=session.id, turn_index=turn_index, claims=extraction.claims

@@ -11,10 +11,12 @@ from sqlalchemy.pool import StaticPool
 
 from app.api.deps import get_bedrock_client, get_db, get_extraction_pin, get_session_factory
 from app.bedrock.cache import CacheKeyInput
+from app.config import settings
 from app.content.loader import Content
 from app.db import repo
-from app.db.models import Base
+from app.db.models import Base, ExtractionPinRow, Turn
 from app.main import app
+from app.pipeline.extraction import EXTRACTOR_CONTRACT_VERSION
 from app.pipeline.extraction_pin import DbExtractionPin
 from app.schemas.extraction import (
     Addressed,
@@ -836,3 +838,23 @@ def test_transcript_works_on_a_live_session(client: TestClient) -> None:
     session_id = client.post("/sessions").json()["id"]
 
     assert client.get(f"/sessions/{session_id}/transcript").json() == {"turns": []}
+
+
+def test_a_turn_row_records_provenance_matching_its_pin_row(
+    client: TestClient, db_factory: sessionmaker[Session]
+) -> None:
+    """End to end: the turn's recorded key is the row the pin actually wrote, so
+    a stored provenance can be joined against `extraction_pin` directly."""
+    session_id = client.post("/sessions").json()["id"]
+    client.post(f"/sessions/{session_id}/answer", json={"answer": "Here is the architecture."})
+
+    with db_factory() as db:
+        turn = db.query(Turn).one()
+        assert turn.extraction_provenance is not None
+        provenance = turn.extraction_provenance
+        assert provenance["source"] == "fresh"
+        assert provenance["contract_version"] == EXTRACTOR_CONTRACT_VERSION
+        assert provenance["model_id"] == settings.bedrock_model_id
+        pin_row = db.get(ExtractionPinRow, provenance["key"])
+        assert pin_row is not None
+        assert pin_row.extractor_contract_version == EXTRACTOR_CONTRACT_VERSION
