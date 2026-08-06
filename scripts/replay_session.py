@@ -194,9 +194,13 @@ def _fmt_result(r: dict) -> str:
     delta = r["support_delta"]
     delta_s = c(f"{delta:+d}", "32" if delta > 0 else "31" if delta < 0 else "2")
     cap = c(" CAPPED", "31") if r["capped"] else ""
-    status_color = {"satisfied": "32", "dodged": "31", "partial": "33"}.get(
-        r["concern_status"], "0"
-    )
+    status_color = {
+        "satisfied": "32",
+        "partial_exhausted": "33",
+        "partial": "33",
+        "dodged": "31",
+        "breached": "31",
+    }.get(r["concern_status"], "0")
     return (
         f"    -> rows=[{rows}] delta={delta_s} "
         f"meter={c(str(r['meter']), '1')}{cap} status={c(r['concern_status'], status_color)}"

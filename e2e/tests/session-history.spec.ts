@@ -55,6 +55,7 @@ const REPORT = {
     concerns_total: 8,
     concerns_satisfied: 7,
     coverage_rate: 0.875,
+    concerns_by_status: { satisfied: 7, partial_exhausted: 1, dodged: 0, breached: 0 },
   },
   personas: [{ persona_id: "technical_evaluator", support: 58, capped: false }],
   coverage_counts: { full: 20, partial: 3, none: 1 },
@@ -141,6 +142,11 @@ test("opening a past rehearsal shows its transcript and its report", async ({ pa
   // Over-limit turns keep their own section in the archived report.
   await expect(archive).toContainText("Answer limits")
   await expect(archive).toContainText("240 words (200 words limit)")
+  // The breakdown that keeps "the rehearsal finished" from reading as "the
+  // rubric was met".
+  await expect(archive).toContainText("Concern outcomes")
+  await expect(archive).toContainText("Partial, attempts used")
+  await expect(archive).toContainText("Complete means every concern used up its attempts")
 
   await page.getByRole("button", { name: "← Back" }).click()
   await expect(page.getByRole("button", { name: "Start rehearsal" })).toBeVisible()

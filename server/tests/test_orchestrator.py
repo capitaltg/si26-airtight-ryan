@@ -109,6 +109,21 @@ def _full(concern: Concern) -> Extraction:
     )
 
 
+def _partial(concern: Concern) -> Extraction:
+    """Covers the first sub-question and nothing else: partial credit, no dodge.
+
+    The span has to appear in the answer the test submits or `drop_ungrounded`
+    removes the row and the turn reads as no coverage at all.
+    """
+    return Extraction(
+        sub_question_coverage=[
+            SubQuestionCoverage(
+                id=concern.sub_questions[0].id, addressed=Addressed.full, span="covered"
+            )
+        ]
+    )
+
+
 def _dodge(concern: Concern, answer: str) -> Extraction:
     """``answer_span`` is a real slice (the whole thing) of ``answer``, the same
     text the test then submits, so a future grounding check on dodges would not
@@ -214,7 +229,7 @@ def test_red_line_caps_and_stays_capped_across_next_good_answer(
     )
     assert first.capped is True
     assert first.meter == 25  # clamped to the ceiling
-    assert first.concern_status == "dodged"  # red line is a terminal failure of the concern
+    assert first.concern_status == "breached"  # a breach, not an omission
 
     # next good answer lands on the same persona's next concern; the cap is sticky
     assert first.next is not None
@@ -406,7 +421,90 @@ def test_session_ends_after_all_concerns_resolved(db: Session, content: Content)
     assert result.next is None
     # every concern resolved, session marked complete
     statuses = repo.get_concern_statuses(db, session.id)
-    assert all(v in ("satisfied", "dodged") for v in statuses.values())
+    assert all(
+        v in ("satisfied", "partial_exhausted", "dodged", "breached")
+        for v in statuses.values()
+    )
+
+
+def test_a_second_partial_attempt_is_terminal_partial_not_satisfied(
+    db: Session, content: Content
+) -> None:
+    """The bug this task exists to fix. Partial coverage twice used to close as
+    `satisfied`, so a concern the presenter never fully answered counted toward
+    the headline coverage number."""
+    session = orchestrator.start_session(db, content)
+    client = ScriptedClient()
+    concern = content.concerns["technical_approach"]
+
+    client.next_extraction = _partial(concern)
+    first = orchestrator.submit_answer(db, content, client, session, _BACKED_ANSWER)
+    assert first.concern_status == "partial"
+    assert first.next is not None
+    assert first.next.is_follow_up is True
+
+    client.next_extraction = _partial(concern)
+    second = orchestrator.submit_answer(db, content, client, session, _BACKED_ANSWER)
+    assert second.concern_status == "partial_exhausted"
+
+    # terminal: the agenda moves on, and nothing counts as satisfied
+    assert second.next is not None
+    assert second.next.concern.concern_id != "technical_approach"
+    statuses = repo.get_concern_statuses(db, session.id)
+    assert statuses["technical_approach"] == "partial_exhausted"
+    assert sum(1 for s in statuses.values() if s == "satisfied") == 0
+
+
+def test_a_second_dodge_still_closes_as_dodged(db: Session, content: Content) -> None:
+    """`partial_exhausted` is for partial coverage only: a dodge on the follow-up
+    is still a dodge, and an answer that touches nothing is still a dodge."""
+    session = orchestrator.start_session(db, content)
+    client = ScriptedClient()
+    concern = content.concerns["technical_approach"]
+    answer = "We're excited to deliver."
+
+    client.next_extraction = _dodge(concern, answer)
+    first = orchestrator.submit_answer(db, content, client, session, answer)
+    assert first.concern_status == "partial"
+
+    client.next_extraction = _dodge(concern, answer)
+    second = orchestrator.submit_answer(db, content, client, session, answer)
+    assert second.concern_status == "dodged"
+
+
+def test_a_red_line_on_the_follow_up_is_breached_not_dodged(
+    db: Session, content: Content
+) -> None:
+    """A breach is terminal on whichever attempt it lands on, and it keeps its own
+    name there too."""
+    session = orchestrator.start_session(db, content)
+    client = ScriptedClient()
+    concern = content.concerns["technical_approach"]
+
+    client.next_extraction = _partial(concern)
+    orchestrator.submit_answer(db, content, client, session, _BACKED_ANSWER)
+
+    client.next_extraction = _red_line()
+    second = orchestrator.submit_answer(
+        db, content, client, session, "we'll just lift and shift the mainframe overnight"
+    )
+    assert second.concern_status == "breached"
+    assert second.capped is True
+
+
+def test_every_terminal_status_stops_the_concern_from_taking_turns(
+    db: Session, content: Content
+) -> None:
+    """Termination is a property of the status set, not of any one name. If a
+    fifth status is ever added, this is the test that fails when it is not wired
+    into `_TERMINAL` — a non-terminal status past the turn cap would spin the
+    agenda forever."""
+    assert orchestrator._TERMINAL == frozenset(
+        {"satisfied", "partial_exhausted", "dodged", "breached"}
+    )
+    for status in sorted(orchestrator._TERMINAL):
+        assert orchestrator._needs_turn(status, 0) is False
+        assert orchestrator._needs_turn(status, 1) is False
 
 
 def _satisfy_current(

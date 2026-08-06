@@ -14,11 +14,15 @@ eight concerns spread across the three personas without repeats.
 
 Follow-ups and termination
 --------------------------
-A concern gets at most ``MAX_TURNS_PER_CONCERN`` turns (one follow-up). A turn
-that fully covers the concern (and isn't a dodge) satisfies it and advances; a
-dodge or partial answer on the first attempt earns a same-concern follow-up; a
-crossed red line is a terminal failure. Once every concern is terminal the
-session is complete — the turn cap guarantees the loop halts.
+A concern gets at most ``MAX_TURNS_PER_CONCERN`` turns (one follow-up) and ends
+in one of four terminal states. A turn that fully covers the concern (and isn't a
+dodge) ends it ``satisfied``; a crossed red line ends it ``breached`` on the spot;
+a dodge or partial answer on the first attempt earns a same-concern follow-up, and
+once the follow-up is spent the concern closes as ``dodged`` (a dodge, or nothing
+covered) or ``partial_exhausted`` (some coverage, never all of it). Once every
+concern is terminal the session is complete — the turn cap guarantees the loop
+halts. Complete means no attempts remain. It does not mean every concern was
+satisfied, and the report is careful about that distinction.
 """
 
 from __future__ import annotations
@@ -61,8 +65,18 @@ MAX_CLARIFICATIONS_PER_CONCERN = 2
 # Non-terminal statuses: the concern still needs a turn (subject to the turn cap).
 _OPEN = "open"
 _PARTIAL = "partial"
+
+# Terminal statuses. Four, not three, because the outcome has to survive the
+# concern closing: a partial answer that ran out of follow-ups is not the same
+# result as a full one, and a crossed red line is not an omission. The report
+# counts these separately, so collapsing any two of them loses the difference
+# between "you did not answer" and "you answered with something forbidden".
 _SATISFIED = "satisfied"
+_PARTIAL_EXHAUSTED = "partial_exhausted"
 _DODGED = "dodged"
+_BREACHED = "breached"
+
+_TERMINAL = frozenset({_SATISFIED, _PARTIAL_EXHAUSTED, _DODGED, _BREACHED})
 
 
 class SessionComplete(RuntimeError):
@@ -155,6 +169,11 @@ def _agenda(content: Content, persona_ids: list[str]) -> list[tuple[str, str]]:
 
 
 def _needs_turn(status: str, turns_on_concern: int) -> bool:
+    # Terminal is a set membership, not the absence of the two names below: the
+    # loop halts because every terminal status is here, and adding a status
+    # without adding it here would spin the agenda.
+    if status in _TERMINAL:
+        return False
     if status == _OPEN:
         return True
     return status == _PARTIAL and turns_on_concern < MAX_TURNS_PER_CONCERN
@@ -176,17 +195,21 @@ def _coverage_state(concern: Concern, extraction: Extraction) -> str:
 
 def _next_status(concern: Concern, extraction: Extraction, attempts: int) -> str:
     """Concern status after a turn. ``attempts`` includes the turn just scored."""
-    # A crossed red line is a terminal failure regardless of coverage.
+    # A crossed red line is a terminal failure, and a distinct one. The meter cap
+    # already records the severity; this records the kind.
     if extraction.red_line_hits:
-        return _DODGED
+        return _BREACHED
     is_dodge = bool(extraction.dodges)
     coverage = _coverage_state(concern, extraction)
     if coverage == "full" and not is_dodge:
         return _SATISFIED
     if attempts >= MAX_TURNS_PER_CONCERN:
-        # Follow-ups exhausted: close it out. A dodge or no coverage is a failure;
-        # partial coverage gets partial credit and moves on.
-        return _DODGED if (is_dodge or coverage == "none") else _SATISFIED
+        # Follow-ups exhausted: close it out at what it actually reached. A dodge
+        # or no coverage is a failure; partial coverage keeps its partial credit
+        # in the score and its partial label in the record. It is not satisfied.
+        if is_dodge or coverage == "none":
+            return _DODGED
+        return _PARTIAL_EXHAUSTED
     return _PARTIAL  # first attempt fell short → press once more on the same concern
 
 

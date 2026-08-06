@@ -58,6 +58,99 @@ logger = logging.getLogger(__name__)
 
 _SATISFIED = "satisfied"
 
+# The four terminal concern states (`app.pipeline.orchestrator`), best outcome
+# first so the breakdown reads the same way in every report. Spelled out here
+# rather than imported: the report renders statuses read off stored rows, and an
+# archived session can carry a value this build would never write.
+_TERMINAL_ORDER = ("satisfied", "partial_exhausted", "dodged", "breached")
+
+# How each state is named to the coaching model. Prose, not identifiers, because
+# the narrative is written for the presenter.
+_STATUS_LABELS = {
+    "satisfied": "satisfied",
+    "partial_exhausted": "partial (attempts used)",
+    "dodged": "dodged",
+    "breached": "red line crossed",
+}
+
+
+def _status_counts(concern_statuses: dict[str, str]) -> dict[str, int]:
+    """Every concern's final state, counted once.
+
+    The four terminal states are always present, zeros included, so the report's
+    shape does not depend on how the rehearsal went. Anything else — ``open`` or
+    ``partial`` from a session ended early, or a value written before the terminal
+    states split — is appended in sorted order rather than dropped, so the counts
+    always sum to ``concerns_total``.
+    """
+    counts = Counter(concern_statuses.values())
+    ordered = {status: counts[status] for status in _TERMINAL_ORDER}
+    ordered.update(
+        {status: n for status, n in sorted(counts.items()) if status not in _TERMINAL_ORDER}
+    )
+    return ordered
+
+
+# full beats partial beats none, so a concern's best attempt is what stands.
+_COVERAGE_RANK = {Addressed.none: 0, Addressed.partial: 1, Addressed.full: 2}
+
+
+def _unique_coverage(
+    turns: list[Turn],
+    extractions: list[Extraction],
+    concern_ids: list[str],
+    content: Content,
+) -> CoverageCounts:
+    """Tally each authored sub-question once, at its best outcome across the
+    concern's attempts.
+
+    Summing every turn's extraction double-counts: a concern that falls short gets
+    a follow-up, and both extractions report on the same sub-questions. Best-
+    across-attempts rather than last-attempt, because ``_follow_up_prompt`` asks
+    only about what did not land, so the follow-up's extraction routinely omits
+    what the first attempt covered.
+
+    The denominator is every sub-question of every concern on the agenda, so a
+    concern that was never answered contributes ``none`` rows instead of
+    disappearing, and ``full + partial + none`` is a count of sub-questions rather
+    than of extraction rows. Coverage rows naming a sub-question the concern does
+    not author are ignored — the tally is over authored content, not over whatever
+    ids came back.
+    """
+    best: dict[tuple[str, str], int] = {}
+    for turn, extraction in zip(turns, extractions, strict=True):
+        for cov in extraction.sub_question_coverage:
+            key = (turn.concern_id, cov.id)
+            rank = _COVERAGE_RANK[cov.addressed]
+            if rank > best.get(key, 0):
+                best[key] = rank
+
+    counts = CoverageCounts()
+    for concern_id in concern_ids:
+        concern = content.concerns.get(concern_id)
+        if concern is None:
+            continue
+        for sub_question in concern.sub_questions:
+            rank = best.get((concern_id, sub_question.id), 0)
+            if rank == 2:
+                counts.full += 1
+            elif rank == 1:
+                counts.partial += 1
+            else:
+                counts.none += 1
+    return counts
+
+
+def _outcome_line(rate_stats: RateStats) -> str:
+    """The non-satisfied outcomes, named, for the narrative prompt. ``"none"``
+    when there are none, so the model is never handed a dangling label."""
+    parts = [
+        f"{_STATUS_LABELS.get(status, status)} {count}"
+        for status, count in rate_stats.concerns_by_status.items()
+        if status != _SATISFIED and count
+    ]
+    return ", ".join(parts) or "none"
+
 
 class ReactClient(Protocol):
     """The slice of the Bedrock client the narrative needs. A fake satisfies it
@@ -246,7 +339,6 @@ def build_scored_report(
     extractions = [Extraction.model_validate(t.extraction_json) for t in turns]
     scores = [ScoreOutput.model_validate(t.score_json) for t in turns]
 
-    coverage = CoverageCounts()
     dodge_types: Counter[str] = Counter()
     contradiction_count = 0
     dodge_count = 0
@@ -255,13 +347,6 @@ def build_scored_report(
     audits: list[TurnScoreAudit] = []
 
     for turn, extraction, score in zip(turns, extractions, scores, strict=True):
-        for cov in extraction.sub_question_coverage:
-            if cov.addressed is Addressed.full:
-                coverage.full += 1
-            elif cov.addressed is Addressed.partial:
-                coverage.partial += 1
-            else:
-                coverage.none += 1
         for dodge in extraction.dodges:
             dodge_types[dodge.type.value] += 1
             dodge_count += 1
@@ -281,6 +366,11 @@ def build_scored_report(
                 )
             )
 
+    # The agenda, in status order, plus any concern the turns touched that the
+    # status map does not carry — several callers build a report with no statuses.
+    concern_ids = list(dict.fromkeys([*concern_statuses, *(t.concern_id for t in turns)]))
+    coverage = _unique_coverage(turns, extractions, concern_ids, content)
+
     total_turns = len(turns)
     concerns_total = len(concern_statuses)
     concerns_satisfied = sum(1 for s in concern_statuses.values() if s == _SATISFIED)
@@ -293,6 +383,7 @@ def build_scored_report(
         concerns_total=concerns_total,
         concerns_satisfied=concerns_satisfied,
         coverage_rate=round(concerns_satisfied / concerns_total, 4) if concerns_total else 0.0,
+        concerns_by_status=_status_counts(concern_statuses),
     )
 
     return ScoredReport(
@@ -338,6 +429,7 @@ def _narrative_prompt(scored: ScoredReport, content: Content) -> str:
             "\n".join(
                 [
                     f"Concerns satisfied: {rs.concerns_satisfied} of {rs.concerns_total}",
+                    f"Other outcomes: {_outcome_line(rs)}",
                     f"Coverage rate: {rs.coverage_rate}",
                     f"Dodges: {rs.dodge_count} across {rs.total_turns} turns "
                     f"({rs.dodges_per_turn} per turn)",
@@ -345,11 +437,16 @@ def _narrative_prompt(scored: ScoredReport, content: Content) -> str:
                     f"Final evaluator support: {meters}",
                 ]
             ),
+            "A completed session means every concern used up its attempts. It does not "
+            "mean the rubric was met. A concern listed under other outcomes was not "
+            "satisfied, and a red line crossed is a breach, not an omission.",
             "## Your task",
             "In 3 or 4 sentences, tell the presenter how the rehearsal went and what "
             "to work on next. Write like a person talking to them: plain prose, short "
-            "sentences, no headings, no scores. Do not use em dashes, and do not force "
-            "the recap into a three-part list or lean on promotional adjectives.",
+            "sentences, no headings, no scores. Do not describe the rehearsal as "
+            "successful on the strength of it finishing. Do not use em dashes, and do "
+            "not force the recap into a three-part list or lean on promotional "
+            "adjectives.",
         ]
     )
 

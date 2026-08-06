@@ -151,6 +151,7 @@ test("the after-action report carries avatars on every persona line", async ({ p
           concerns_total: 8,
           concerns_satisfied: 1,
           coverage_rate: 0.125,
+          concerns_by_status: { satisfied: 1, partial_exhausted: 3, dodged: 4, breached: 0 },
         },
         personas: [{ persona_id: "technical_evaluator", support: 48, capped: false }],
         coverage_counts: { full: 0, partial: 0, none: 0 },

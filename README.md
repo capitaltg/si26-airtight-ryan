@@ -44,8 +44,16 @@ cd server
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pytest -v            # health test
+alembic upgrade head # bring the database to head before serving
 uvicorn app.main:app --reload
 ```
+
+Re-run `alembic upgrade head` after every pull that ships a migration. A database
+left on an older revision starts fine and then 500s on the first route that reads
+a table the new migration touched — e.g. `POST /sessions`, which selects `turns`
+and so needs `turns.extraction_provenance` (migration 0008). The Docker path
+(`server/Dockerfile` CMD) and the dev-container `server` command both migrate for
+you; only this hand-rolled venv path does not.
 
 ## AWS prerequisites (Bedrock)
 

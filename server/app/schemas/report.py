@@ -26,7 +26,13 @@ class PersonaLine(BaseModel):
 
 
 class CoverageCounts(BaseModel):
-    """Sub-question coverage tallied across every turn's extraction."""
+    """Sub-question coverage, each authored sub-question counted once.
+
+    One row per sub-question of every concern on the agenda, at its best outcome
+    across that concern's attempts — so ``full + partial + none`` is the number of
+    sub-questions the rehearsal had to cover, and a concern that took its
+    follow-up does not contribute its sub-questions twice.
+    """
 
     full: int = 0
     partial: int = 0
@@ -35,7 +41,14 @@ class CoverageCounts(BaseModel):
 
 class RateStats(BaseModel):
     """Length-independent headline stats — these lead the report so a short strong
-    rehearsal isn't punished against a long rambling one."""
+    rehearsal isn't punished against a long rambling one.
+
+    ``concerns_satisfied`` is the strict count of the ``satisfied`` terminal state.
+    A concern that ran out of follow-ups on partial coverage, was dodged, or
+    crossed a red line is not in it — it is in ``concerns_by_status``, which
+    accounts for every concern exactly once. ``concerns_by_status`` defaults to
+    empty so a report stored before the terminal states split still validates.
+    """
 
     total_turns: int
     dodge_count: int
@@ -44,6 +57,7 @@ class RateStats(BaseModel):
     concerns_total: int
     concerns_satisfied: int
     coverage_rate: float  # concerns_satisfied / concerns_total
+    concerns_by_status: dict[str, int] = Field(default_factory=dict)
 
 
 class FindingEvidence(BaseModel):
