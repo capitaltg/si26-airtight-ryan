@@ -330,7 +330,7 @@ def test_prior_answer_span_and_source_quote_are_left_alone() -> None:
     assert anchored.fact_checks[0].source_quote == "Key Personnel shall be identified at award"
 
 
-def test_reanchor_maps_evidence_claim_spans_onto_the_current_answer():
+def test_reanchor_maps_evidence_claim_spans_onto_the_current_answer() -> None:
     extraction = Extraction(
         claims=[
             Claim(

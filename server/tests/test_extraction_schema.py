@@ -4,6 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas.extraction import (
+    Addressed,
     Claim,
     ConsistencyFlag,
     Dodge,
@@ -12,6 +13,7 @@ from app.schemas.extraction import (
     FactCheck,
     RedLineHit,
     SourceDocument,
+    SubQuestionCoverage,
     Verdict,
 )
 
@@ -168,9 +170,7 @@ def test_extraction_tool_schema_forbids_the_dropped_free_text_fields() -> None:
     assert '"detail"' not in schema
 
 
-def test_coverage_carries_evidence_claim_spans():
-    from app.schemas.extraction import Addressed, SubQuestionCoverage
-
+def test_coverage_carries_evidence_claim_spans() -> None:
     cov = SubQuestionCoverage(
         id="pm_commitment",
         addressed=Addressed.full,
@@ -180,10 +180,8 @@ def test_coverage_carries_evidence_claim_spans():
     assert cov.evidence_claim_spans == ["she is committed full-time for the base period"]
 
 
-def test_coverage_without_links_defaults_to_empty():
+def test_coverage_without_links_defaults_to_empty() -> None:
     # A row stored before this field existed must still validate.
-    from app.schemas.extraction import SubQuestionCoverage
-
     cov = SubQuestionCoverage.model_validate(
         {"id": "hosting", "addressed": "partial", "span": "on GovCloud"}
     )
