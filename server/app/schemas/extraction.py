@@ -91,6 +91,13 @@ class SubQuestionCoverage(_Strict):
     id: str
     addressed: Addressed
     span: str | None = None
+    # Verbatim spans of the claims in `claims` that carry this sub-question's
+    # answer. Each must quote a `Claim.span` from the same extraction; grounding
+    # discards the rest, and `pipeline.coverage_contract` reads what survives
+    # against the sub-question's authored `requires`. Defaults to empty so a row
+    # stored before this field existed still validates — an old row simply has no
+    # links, which is what the contract check treats as no evidence.
+    evidence_claim_spans: list[str] = Field(default_factory=list)
 
 
 class Dodge(_Strict):
