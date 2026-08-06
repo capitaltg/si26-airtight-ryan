@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.content.loader import Content, load_content
-from app.schemas.content import Concern, NonNegotiable, PersonaDefinition
+from app.schemas.content import Concern, NonNegotiable, PersonaDefinition, Requires
 
 STORE = Path(__file__).resolve().parent.parent / "app" / "content" / "store"
 
@@ -271,3 +271,11 @@ def test_extraction_fingerprint_ignores_the_rubric() -> None:
         concerns=content.concerns,
     )
     assert same == content.extraction_fingerprint
+
+
+def test_naming_a_risk_is_satisfiable_by_a_fact() -> None:
+    """`requires` now demotes coverage, so a sub-question asking what is true
+    must not demand a commitment. Naming a risk is a statement, not a promise."""
+    concern = load_content().concerns["risk"]
+    named_risk = next(sq for sq in concern.sub_questions if sq.id == "named_risk")
+    assert named_risk.requires is Requires.fact_or_commitment
