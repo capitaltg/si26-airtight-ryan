@@ -798,3 +798,105 @@ def test_every_charged_row_across_a_session_carries_verified_evidence() -> None:
         if f.support_value != 0:
             assert f.evidence, f"{f.rubric_row} charged {f.support_value} with no evidence"
             assert all(e.span.strip() for e in f.evidence)
+
+
+def _report_with_statuses(statuses: dict[str, str]) -> ScoredReport:
+    """A report over the standard fixture's turns with hand-set concern statuses.
+
+    The turns and the statuses are independent inputs to `build_scored_report`, so
+    a status vocabulary can be exercised without hand-building turns for it.
+    """
+    session_id, turns, meters, _, content = _fixture()
+    return build_scored_report(
+        session_id=session_id,
+        status="complete",
+        turns=turns,
+        meters=meters,
+        concern_statuses=statuses,
+        content=content,
+    )
+
+
+def test_headline_counts_only_satisfied_concerns() -> None:
+    report = _report_with_statuses(
+        {
+            "technical_approach": "satisfied",
+            "key_personnel": "partial_exhausted",
+            "transition": "dodged",
+            "past_performance": "breached",
+        }
+    )
+    rs = report.rate_stats
+    assert rs.concerns_total == 4
+    assert rs.concerns_satisfied == 1
+    assert rs.coverage_rate == 0.25
+    assert rs.concerns_by_status == {
+        "satisfied": 1,
+        "partial_exhausted": 1,
+        "dodged": 1,
+        "breached": 1,
+    }
+
+
+def test_the_four_terminal_states_are_always_present_in_order() -> None:
+    """Zeros included, so the report's shape does not depend on how the rehearsal
+    went and the UI never has to invent a missing row."""
+    report = _report_with_statuses({"technical_approach": "satisfied"})
+    assert list(report.rate_stats.concerns_by_status.items()) == [
+        ("satisfied", 1),
+        ("partial_exhausted", 0),
+        ("dodged", 0),
+        ("breached", 0),
+    ]
+
+
+def test_a_status_outside_the_terminal_vocabulary_is_counted_not_dropped() -> None:
+    """A session ended early leaves concerns `open`/`partial`, and archived
+    sessions predate the split. Neither may silently vanish from the breakdown."""
+    report = _report_with_statuses(
+        {"technical_approach": "satisfied", "key_personnel": "open", "transition": "partial"}
+    )
+    counts = report.rate_stats.concerns_by_status
+    assert counts["open"] == 1
+    assert counts["partial"] == 1
+    assert sum(counts.values()) == report.rate_stats.concerns_total
+
+
+def test_the_narrative_prompt_separates_finishing_from_satisfying() -> None:
+    session_id, turns, meters, _, content = _fixture()
+    scored = build_scored_report(
+        session_id=session_id,
+        status="complete",
+        turns=turns,
+        meters=meters,
+        concern_statuses={
+            "technical_approach": "satisfied",
+            "key_personnel": "partial_exhausted",
+            "transition": "breached",
+        },
+        content=content,
+    )
+    client = FakeReactClient()
+    render_narrative(scored, content, client)
+
+    prompt = client.prompts[0]
+    assert "Concerns satisfied: 1 of 3" in prompt
+    assert "partial (attempts used) 1" in prompt
+    assert "red line crossed 1" in prompt
+    assert "does not mean the rubric was met" in prompt
+
+
+def test_a_clean_rehearsal_reports_no_other_outcomes() -> None:
+    """The model is never handed a dangling label to interpret."""
+    session_id, turns, meters, _, content = _fixture()
+    scored = build_scored_report(
+        session_id=session_id,
+        status="complete",
+        turns=turns,
+        meters=meters,
+        concern_statuses={"technical_approach": "satisfied"},
+        content=content,
+    )
+    client = FakeReactClient()
+    render_narrative(scored, content, client)
+    assert "Other outcomes: none" in client.prompts[0]

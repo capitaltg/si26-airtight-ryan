@@ -58,6 +58,49 @@ logger = logging.getLogger(__name__)
 
 _SATISFIED = "satisfied"
 
+# The four terminal concern states (`app.pipeline.orchestrator`), best outcome
+# first so the breakdown reads the same way in every report. Spelled out here
+# rather than imported: the report renders statuses read off stored rows, and an
+# archived session can carry a value this build would never write.
+_TERMINAL_ORDER = ("satisfied", "partial_exhausted", "dodged", "breached")
+
+# How each state is named to the coaching model. Prose, not identifiers, because
+# the narrative is written for the presenter.
+_STATUS_LABELS = {
+    "satisfied": "satisfied",
+    "partial_exhausted": "partial (attempts used)",
+    "dodged": "dodged",
+    "breached": "red line crossed",
+}
+
+
+def _status_counts(concern_statuses: dict[str, str]) -> dict[str, int]:
+    """Every concern's final state, counted once.
+
+    The four terminal states are always present, zeros included, so the report's
+    shape does not depend on how the rehearsal went. Anything else — ``open`` or
+    ``partial`` from a session ended early, or a value written before the terminal
+    states split — is appended in sorted order rather than dropped, so the counts
+    always sum to ``concerns_total``.
+    """
+    counts = Counter(concern_statuses.values())
+    ordered = {status: counts[status] for status in _TERMINAL_ORDER}
+    ordered.update(
+        {status: n for status, n in sorted(counts.items()) if status not in _TERMINAL_ORDER}
+    )
+    return ordered
+
+
+def _outcome_line(rate_stats: RateStats) -> str:
+    """The non-satisfied outcomes, named, for the narrative prompt. ``"none"``
+    when there are none, so the model is never handed a dangling label."""
+    parts = [
+        f"{_STATUS_LABELS.get(status, status)} {count}"
+        for status, count in rate_stats.concerns_by_status.items()
+        if status != _SATISFIED and count
+    ]
+    return ", ".join(parts) or "none"
+
 
 class ReactClient(Protocol):
     """The slice of the Bedrock client the narrative needs. A fake satisfies it
@@ -293,6 +336,7 @@ def build_scored_report(
         concerns_total=concerns_total,
         concerns_satisfied=concerns_satisfied,
         coverage_rate=round(concerns_satisfied / concerns_total, 4) if concerns_total else 0.0,
+        concerns_by_status=_status_counts(concern_statuses),
     )
 
     return ScoredReport(
@@ -338,6 +382,7 @@ def _narrative_prompt(scored: ScoredReport, content: Content) -> str:
             "\n".join(
                 [
                     f"Concerns satisfied: {rs.concerns_satisfied} of {rs.concerns_total}",
+                    f"Other outcomes: {_outcome_line(rs)}",
                     f"Coverage rate: {rs.coverage_rate}",
                     f"Dodges: {rs.dodge_count} across {rs.total_turns} turns "
                     f"({rs.dodges_per_turn} per turn)",
@@ -345,11 +390,16 @@ def _narrative_prompt(scored: ScoredReport, content: Content) -> str:
                     f"Final evaluator support: {meters}",
                 ]
             ),
+            "A completed session means every concern used up its attempts. It does not "
+            "mean the rubric was met. A concern listed under other outcomes was not "
+            "satisfied, and a red line crossed is a breach, not an omission.",
             "## Your task",
             "In 3 or 4 sentences, tell the presenter how the rehearsal went and what "
             "to work on next. Write like a person talking to them: plain prose, short "
-            "sentences, no headings, no scores. Do not use em dashes, and do not force "
-            "the recap into a three-part list or lean on promotional adjectives.",
+            "sentences, no headings, no scores. Do not describe the rehearsal as "
+            "successful on the strength of it finishing. Do not use em dashes, and do "
+            "not force the recap into a three-part list or lean on promotional "
+            "adjectives.",
         ]
     )
 
