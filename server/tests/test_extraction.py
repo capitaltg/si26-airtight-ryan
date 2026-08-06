@@ -832,10 +832,26 @@ class CacheHitBedrockClient(ExtractResultFromExtract):
     def __init__(self, result: Extraction) -> None:
         self._result = result
 
-    def extract(self, content: Any, **kwargs: Any) -> Extraction:
+    def extract(
+        self,
+        content: str | list[Any],
+        *,
+        content_schema: type[BaseModel],
+        tool_name: str,
+        max_tokens: int = 4096,
+        cache_key: CacheKeyInput | None = None,
+    ) -> BaseModel:
         return self._result
 
-    def extract_result(self, content: Any, **kwargs: Any) -> ExtractOutcome[Extraction]:
+    def extract_result(
+        self,
+        content: str | list[Any],
+        *,
+        content_schema: type[BaseModel],
+        tool_name: str,
+        max_tokens: int = 4096,
+        cache_key: CacheKeyInput | None = None,
+    ) -> ExtractOutcome[BaseModel]:
         return ExtractOutcome(content=self._result, cache_hit=True)
 
 
