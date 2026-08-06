@@ -108,6 +108,7 @@ const REPORT = {
     concerns_total: 8,
     concerns_satisfied: 7,
     coverage_rate: 0.875,
+    concerns_by_status: { satisfied: 7, partial_exhausted: 0, dodged: 0, breached: 1 },
   },
   personas: [{ persona_id: "technical_evaluator", support: 25, capped: true }],
   coverage_counts: { full: 20, partial: 3, none: 1 },

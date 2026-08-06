@@ -148,6 +148,9 @@ export interface RateStats {
   concerns_total: number
   concerns_satisfied: number
   coverage_rate: number
+  // Every concern's terminal state, counted once. Optional because an archived
+  // report built before the terminal states split has no such field.
+  concerns_by_status?: Record<string, number>
 }
 
 export interface FindingEvidence {

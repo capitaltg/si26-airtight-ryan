@@ -32,6 +32,17 @@ function pct(rate: number): string {
   return `${Math.round(rate * 100)}%`
 }
 
+// The server's four terminal concern states, spelled for a reader. Anything else
+// — `open`/`partial` from a rehearsal ended early, or a value from a report built
+// before the states split — falls through to `prettify`, so an archived report
+// renders without a special case.
+const STATUS_LABELS: Record<string, string> = {
+  satisfied: "Satisfied",
+  partial_exhausted: "Partial, attempts used",
+  dodged: "Dodged",
+  breached: "Red line crossed",
+}
+
 function CountRow({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center justify-between border-b border-subtle py-1.5 text-body-sm last:border-0">
@@ -103,6 +114,7 @@ function ReportBody({ report }: { report: Report }) {
   }))
   const capped = report.personas.filter((p) => p.capped)
   const dodgeTypes = Object.entries(report.dodge_counts_by_type)
+  const outcomes = Object.entries(rs.concerns_by_status ?? {})
 
   return (
     <div className="space-y-6">
@@ -131,6 +143,11 @@ function ReportBody({ report }: { report: Report }) {
           <StatTile label="Contradictions" value={`${rs.contradiction_count}`} />
           <StatTile label="Turns" value={`${rs.total_turns}`} />
         </div>
+        <p className="text-body-sm text-text-muted">
+          {report.status === "complete"
+            ? "Complete means every concern used up its attempts. It does not mean every concern was satisfied."
+            : "This rehearsal was ended before the agenda ran out."}
+        </p>
       </section>
 
       {report.limit_findings.length > 0 && (
@@ -170,7 +187,7 @@ function ReportBody({ report }: { report: Report }) {
           <section className="grid gap-4 sm:grid-cols-2">
             <Card className="print:shadow-none">
               <MicroCaps as="h3" className="mb-1">
-                Sub-question coverage
+                Sub-question coverage (each counted once)
               </MicroCaps>
               <CountRow label="Full" value={cov.full} />
               <CountRow label="Partial" value={cov.partial} />
@@ -185,6 +202,24 @@ function ReportBody({ report }: { report: Report }) {
               ) : (
                 dodgeTypes.map(([type, n]) => (
                   <CountRow key={type} label={prettify(type)} value={n} />
+                ))
+              )}
+            </Card>
+            <Card className="print:shadow-none">
+              <MicroCaps as="h3" className="mb-1">
+                Concern outcomes
+              </MicroCaps>
+              {outcomes.length === 0 ? (
+                <p className="py-1.5 text-body-sm text-text-faint">
+                  No per-concern outcomes were recorded for this rehearsal.
+                </p>
+              ) : (
+                outcomes.map(([status, n]) => (
+                  <CountRow
+                    key={status}
+                    label={STATUS_LABELS[status] ?? prettify(status)}
+                    value={n}
+                  />
                 ))
               )}
             </Card>
