@@ -188,7 +188,15 @@ class PersonaMeter(Base):
 
 
 class ConcernStatus(Base):
-    """Per-concern coverage state: open | partial | satisfied | dodged."""
+    """Per-concern coverage state.
+
+    Non-terminal: open | partial. Terminal: satisfied | partial_exhausted |
+    dodged | breached (see :mod:`app.pipeline.orchestrator`). Stored as free text
+    rather than an enum so the vocabulary can grow without a migration — which
+    also means rows written before the terminal states split still hold the old
+    three-word vocabulary, where a breach reads as ``dodged`` and a partial-
+    exhausted concern reads as ``satisfied``. Those rows are not rewritten.
+    """
 
     __tablename__ = "concern_status"
 
