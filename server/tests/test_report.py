@@ -294,9 +294,10 @@ def test_scored_report_counts_match_hand_computed() -> None:
     assert report.rate_stats.coverage_rate == round(1 / 3, 4)
 
     assert report.contradiction_count == 1
+    # each authored sub-question of the three concerns on the agenda, counted once
     assert report.coverage_counts.full == 1
     assert report.coverage_counts.partial == 0
-    assert report.coverage_counts.none == 0
+    assert report.coverage_counts.none == 6
     assert report.dodge_counts_by_type == {"non_commitment": 1}
 
     # per-persona meters carry the cap status
@@ -900,3 +901,76 @@ def test_a_clean_rehearsal_reports_no_other_outcomes() -> None:
     client = FakeReactClient()
     render_narrative(scored, content, client)
     assert "Other outcomes: none" in client.prompts[0]
+
+
+def _coverage_over(turns: list[Turn], statuses: dict[str, str]) -> Any:
+    content = load_content()
+    report = build_scored_report(
+        session_id=turns[0].session_id,
+        status="complete",
+        turns=turns,
+        meters=[],
+        concern_statuses=statuses,
+        content=content,
+    )
+    return report.coverage_counts
+
+
+def _coverage_turn(index: int, sub_question_id: str, addressed: Addressed) -> Turn:
+    """A technical_approach turn reporting exactly one sub-question outcome."""
+    return _turn(
+        index,
+        "technical_evaluator",
+        "technical_approach",
+        Extraction(
+            sub_question_coverage=[
+                SubQuestionCoverage(id=sub_question_id, addressed=addressed, span="covered")
+            ]
+        ),
+    )
+
+
+def test_a_follow_up_does_not_count_the_same_sub_question_twice() -> None:
+    """The double-count this task exists to fix: two attempts on one concern, the
+    same sub-question reported `full` on both, is one covered sub-question."""
+    turns = [
+        _coverage_turn(0, "architecture", Addressed.full),
+        _coverage_turn(1, "architecture", Addressed.full),
+    ]
+    cov = _coverage_over(turns, {"technical_approach": "partial_exhausted"})
+    assert cov.full == 1
+    # technical_approach authors three sub-questions; the other two went unanswered
+    assert cov.none == 2
+    assert cov.partial == 0
+
+
+def test_a_sub_question_covered_on_the_first_attempt_stays_covered() -> None:
+    """The follow-up prompt names only what did not land, so the second extraction
+    routinely omits what did. Reading the last attempt alone would demote it."""
+    turns = [
+        _coverage_turn(0, "architecture", Addressed.full),
+        _coverage_turn(1, "hosting", Addressed.full),
+    ]
+    cov = _coverage_over(turns, {"technical_approach": "partial_exhausted"})
+    assert (cov.full, cov.partial, cov.none) == (2, 0, 1)
+
+
+def test_a_sub_question_upgraded_on_the_follow_up_counts_once_at_its_best() -> None:
+    turns = [
+        _coverage_turn(0, "architecture", Addressed.partial),
+        _coverage_turn(1, "architecture", Addressed.full),
+    ]
+    cov = _coverage_over(turns, {"technical_approach": "partial_exhausted"})
+    assert (cov.full, cov.partial, cov.none) == (1, 0, 2)
+
+
+def test_a_concern_that_never_got_an_answer_still_has_a_denominator() -> None:
+    """Every sub-question on the agenda is accounted for, so `full + partial +
+    none` is a count of sub-questions rather than of extraction rows."""
+    turns = [_coverage_turn(0, "architecture", Addressed.full)]
+    content = load_content()
+    statuses = {"technical_approach": "partial_exhausted", "key_personnel": "open"}
+    cov = _coverage_over(turns, statuses)
+    expected = sum(len(content.concerns[cid].sub_questions) for cid in statuses)
+    assert cov.full + cov.partial + cov.none == expected  # 3 + 2
+    assert (cov.full, cov.partial, cov.none) == (1, 0, 4)

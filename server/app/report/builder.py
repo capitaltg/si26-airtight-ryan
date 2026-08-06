@@ -91,6 +91,56 @@ def _status_counts(concern_statuses: dict[str, str]) -> dict[str, int]:
     return ordered
 
 
+# full beats partial beats none, so a concern's best attempt is what stands.
+_COVERAGE_RANK = {Addressed.none: 0, Addressed.partial: 1, Addressed.full: 2}
+
+
+def _unique_coverage(
+    turns: list[Turn],
+    extractions: list[Extraction],
+    concern_ids: list[str],
+    content: Content,
+) -> CoverageCounts:
+    """Tally each authored sub-question once, at its best outcome across the
+    concern's attempts.
+
+    Summing every turn's extraction double-counts: a concern that falls short gets
+    a follow-up, and both extractions report on the same sub-questions. Best-
+    across-attempts rather than last-attempt, because ``_follow_up_prompt`` asks
+    only about what did not land, so the follow-up's extraction routinely omits
+    what the first attempt covered.
+
+    The denominator is every sub-question of every concern on the agenda, so a
+    concern that was never answered contributes ``none`` rows instead of
+    disappearing, and ``full + partial + none`` is a count of sub-questions rather
+    than of extraction rows. Coverage rows naming a sub-question the concern does
+    not author are ignored — the tally is over authored content, not over whatever
+    ids came back.
+    """
+    best: dict[tuple[str, str], int] = {}
+    for turn, extraction in zip(turns, extractions, strict=True):
+        for cov in extraction.sub_question_coverage:
+            key = (turn.concern_id, cov.id)
+            rank = _COVERAGE_RANK[cov.addressed]
+            if rank > best.get(key, 0):
+                best[key] = rank
+
+    counts = CoverageCounts()
+    for concern_id in concern_ids:
+        concern = content.concerns.get(concern_id)
+        if concern is None:
+            continue
+        for sub_question in concern.sub_questions:
+            rank = best.get((concern_id, sub_question.id), 0)
+            if rank == 2:
+                counts.full += 1
+            elif rank == 1:
+                counts.partial += 1
+            else:
+                counts.none += 1
+    return counts
+
+
 def _outcome_line(rate_stats: RateStats) -> str:
     """The non-satisfied outcomes, named, for the narrative prompt. ``"none"``
     when there are none, so the model is never handed a dangling label."""
@@ -289,7 +339,6 @@ def build_scored_report(
     extractions = [Extraction.model_validate(t.extraction_json) for t in turns]
     scores = [ScoreOutput.model_validate(t.score_json) for t in turns]
 
-    coverage = CoverageCounts()
     dodge_types: Counter[str] = Counter()
     contradiction_count = 0
     dodge_count = 0
@@ -298,13 +347,6 @@ def build_scored_report(
     audits: list[TurnScoreAudit] = []
 
     for turn, extraction, score in zip(turns, extractions, scores, strict=True):
-        for cov in extraction.sub_question_coverage:
-            if cov.addressed is Addressed.full:
-                coverage.full += 1
-            elif cov.addressed is Addressed.partial:
-                coverage.partial += 1
-            else:
-                coverage.none += 1
         for dodge in extraction.dodges:
             dodge_types[dodge.type.value] += 1
             dodge_count += 1
@@ -323,6 +365,11 @@ def build_scored_report(
                     penalty=score.limit.penalty_value,
                 )
             )
+
+    # The agenda, in status order, plus any concern the turns touched that the
+    # status map does not carry — several callers build a report with no statuses.
+    concern_ids = list(dict.fromkeys([*concern_statuses, *(t.concern_id for t in turns)]))
+    coverage = _unique_coverage(turns, extractions, concern_ids, content)
 
     total_turns = len(turns)
     concerns_total = len(concern_statuses)

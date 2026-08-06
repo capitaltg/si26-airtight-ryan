@@ -26,7 +26,13 @@ class PersonaLine(BaseModel):
 
 
 class CoverageCounts(BaseModel):
-    """Sub-question coverage tallied across every turn's extraction."""
+    """Sub-question coverage, each authored sub-question counted once.
+
+    One row per sub-question of every concern on the agenda, at its best outcome
+    across that concern's attempts — so ``full + partial + none`` is the number of
+    sub-questions the rehearsal had to cover, and a concern that took its
+    follow-up does not contribute its sub-questions twice.
+    """
 
     full: int = 0
     partial: int = 0
