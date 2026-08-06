@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from app.bedrock.cache import CacheKeyInput, normalize_answer
 from app.bedrock.client import BedrockClient
@@ -36,14 +36,45 @@ logger = logging.getLogger(__name__)
 
 TOOL_NAME = "record_extraction"
 
+# Identity of the extraction contract: the prompt's semantics plus the tool it
+# forces. Hashed into `extraction_key`, so bumping it is how a prompt fix reaches
+# inputs that are already pinned.
+#
+# Bump when the prompt changes what the model is asked to report: new or removed
+# instructions that change classification behavior, content newly rendered into
+# the prompt (persona exemplars, for one), a different tool name, a change in
+# extraction policy.
+#
+# Do not bump for comments, formatting, or a reword that leaves the ask
+# identical — the pin exists so that churn does not cost a model call.
+EXTRACTOR_CONTRACT_VERSION = 1
+
+ExtractionSource = Literal["pin", "response_cache", "fresh"]
+
+
+@dataclass(frozen=True)
+class ExtractionProvenance:
+    """How this turn's extraction was produced, recorded on the turn row.
+
+    Nothing reads it yet — no report field, no API field, no UI. It exists so
+    "did this turn call the model, and under which contract" has an answer in the
+    database instead of in a log that has rotated away.
+    """
+
+    source: ExtractionSource
+    key: str
+    contract_version: int
+    model_id: str
+
 
 @dataclass(frozen=True)
 class ExtractionResult:
     """What the pipeline hands to the scorer: the validated extraction plus the
-    code-owned conciseness signals."""
+    code-owned conciseness signals and how the extraction was produced."""
 
     extraction: Extraction
     conciseness: Conciseness
+    provenance: ExtractionProvenance
 
 
 def _render_persona(persona: PersonaDefinition) -> str:
@@ -249,11 +280,13 @@ def run_extraction(
     The prompt goes out as two content blocks: a cached static prefix (persona +
     RFP + proposal) and an uncached dynamic suffix (concern + ledger + answer).
 
-    ``pin`` makes the score a function of the input. The first extraction for a
-    given (normalized answer, persona, concern, ledger, content fingerprint) is
-    stored and replayed forever after, so the model cannot disagree with itself
-    across runs. It defaults to :class:`NullExtractionPin`, which keeps direct
-    callers — the golden suite above all — fully live.
+    ``pin`` makes the score a function of the input *and* of the contract that
+    produced it. The first extraction for a given (normalized answer, persona,
+    concern, ledger, prior answers, content fingerprint, contract version, model
+    id) is stored and replayed forever after, so the model cannot disagree with
+    itself across runs — while a model upgrade or an ``EXTRACTOR_CONTRACT_VERSION``
+    bump misses on purpose. It defaults to :class:`NullExtractionPin`, which keeps
+    direct callers — the golden suite above all — fully live.
 
     Post-processing runs on the replay path too, and the order matters. A pinned
     span was quoted out of an earlier phrasing, so ``reanchor_spans`` maps it onto
@@ -264,6 +297,7 @@ def run_extraction(
     Running grounding before anchoring would throw out real findings whenever a
     presenter retypes the same answer with different spacing.
     """
+    model_id = settings.bedrock_model_id
     resolved_pin: ExtractionPin = pin if pin is not None else NullExtractionPin()
     key = extraction_key(
         answer=answer,
@@ -272,11 +306,15 @@ def run_extraction(
         prior_claims=prior_claims,
         prior_answers=prior_answers,
         extraction_fingerprint=content.extraction_fingerprint,
+        extractor_contract_version=EXTRACTOR_CONTRACT_VERSION,
+        model_id=model_id,
     )
 
     pinned = resolved_pin.get(key)
+    source: ExtractionSource
     if pinned is not None:
         extraction = Extraction.model_validate(pinned)
+        source = "pin"
     else:
         content_blocks = _blocks(
             persona=persona,
@@ -286,7 +324,7 @@ def run_extraction(
             prior_claims=prior_claims,
         )
         normalized = normalize_answer(answer)
-        extraction = client.extract(
+        outcome = client.extract_result(
             content_blocks,
             content_schema=Extraction,
             tool_name=TOOL_NAME,
@@ -301,11 +339,17 @@ def run_extraction(
                 normalized_answer=normalized,
             ),
         )
+        extraction = outcome.content
+        source = "response_cache" if outcome.cache_hit else "fresh"
         resolved_pin.put(
             key,
             tool_input=extraction.model_dump(mode="json"),
-            model_id=settings.bedrock_model_id,
+            model_id=model_id,
+            contract_version=EXTRACTOR_CONTRACT_VERSION,
         )
+        # Adopting a concurrent writer's canonical row does not make this a
+        # replay: this turn either called the model or replayed a cached
+        # response, and that is what `source` records.
         canonical = resolved_pin.get(key)
         if canonical is not None:
             extraction = Extraction.model_validate(canonical)
@@ -323,4 +367,13 @@ def run_extraction(
         },
     )
     conciseness = compute_conciseness(answer, grounded)
-    return ExtractionResult(extraction=grounded, conciseness=conciseness)
+    return ExtractionResult(
+        extraction=grounded,
+        conciseness=conciseness,
+        provenance=ExtractionProvenance(
+            source=source,
+            key=key,
+            contract_version=EXTRACTOR_CONTRACT_VERSION,
+            model_id=model_id,
+        ),
+    )

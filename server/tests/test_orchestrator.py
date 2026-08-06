@@ -33,6 +33,7 @@ from app.schemas.extraction import (
     SubQuestionCoverage,
 )
 from app.schemas.reaction import PersonaReaction
+from tests.conftest import ExtractResultFromExtract
 
 _BACKED_ANSWER = "Here is a named lead, 12 years, full-time; covered."
 
@@ -55,7 +56,7 @@ def db() -> Iterator[Session]:
         yield session
 
 
-class ScriptedClient:
+class ScriptedClient(ExtractResultFromExtract):
     """A BedrockClient stand-in. ``next_extraction`` is set by the test before
     each ``submit_answer``; reactions are canned. It routes on the requested
     schema, exactly like the real forced-tool call."""
