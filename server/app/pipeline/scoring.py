@@ -73,7 +73,11 @@ def _verified_empirical(extraction: Extraction) -> bool:
         if claim.type is not ClaimType.empirical_checkable:
             continue
         span, _ = fold(claim.span)
-        if span and any(span == s or span in s or s in span for s in supported):
+        # The check's answer_span (`s`) must be findable inside the claim's span,
+        # or exactly equal — never the reverse. A narrow, unconfirmed claim must
+        # not ride a broader confirmed check's answer_span to earn this row;
+        # matches grounding.py's `_links_a_claim` convention.
+        if span and any(span == s or s in span for s in supported):
             return True
     return False
 

@@ -681,6 +681,29 @@ def test_a_tier_zero_supported_check_does_not_back_a_claim() -> None:
     assert "evidence_backed" not in out.matched_rows
 
 
+def test_a_narrower_unconfirmed_claim_riding_a_wider_confirmed_span_is_not_backed() -> None:
+    # The claim's own span is never confirmed; it merely sits inside a wider,
+    # unrelated check's answer_span. Only the check's answer_span being found
+    # inside the claim's span counts as confirmation, never the reverse.
+    ext = Extraction(
+        claims=[
+            Claim(
+                text="we will also rebuild the payments engine",
+                type=ClaimType.empirical_checkable,
+                span="we will also rebuild the payments engine",
+            )
+        ],
+        fact_checks=[
+            _supported_check(
+                "we migrated 1.8 million cases and we will also rebuild the payments engine"
+            )
+        ],
+    )
+    out = score_turn(ext, _rubric())
+    assert "evidence_backed" not in out.matched_rows
+    assert out.matched_rows == ["unsubstantiated"]
+
+
 def test_a_confirmed_commitment_claim_alone_is_not_the_empirical_path() -> None:
     # The empirical path is for `empirical_checkable`. A commitment still needs
     # `backing == backed`; a supported check does not substitute for it.

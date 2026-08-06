@@ -50,7 +50,16 @@ _SATISFYING_TYPES: dict[Requires, frozenset[ClaimType]] = {
 
 
 def _overlaps(a: str, b: str) -> bool:
-    """True when two folded spans quote overlapping text, either way round."""
+    """True when two folded spans quote overlapping text, either way round.
+
+    Used only for the refutation check in ``_qualifies``. Bidirectional is the
+    conservative choice there: over-disqualifying a claim (treating it as
+    refuted when the overlap is coincidental) is safe, while under-disqualifying
+    (letting a refuted claim count as evidence) is the defect this module exists
+    to prevent — so this stays permissive on purpose. It must not be used for
+    link-to-claim matching; see ``satisfied()`` in ``enforce_requires``, which
+    needs the narrower, one-directional containment instead.
+    """
     return bool(a) and bool(b) and (a == b or a in b or b in a)
 
 
@@ -87,7 +96,12 @@ def enforce_requires(extraction: Extraction, concern: Concern) -> Extraction:
         for link in cov_links:
             folded_link, _ = fold(link)
             for folded_span, claim in folded_claims:
-                if not _overlaps(folded_link, folded_span):
+                # One-directional only: the link must be found inside the
+                # claim's span (or equal), never the reverse. Matches
+                # grounding.py's `_links_a_claim` convention — a link naming a
+                # narrower, wrong-type claim must not also satisfy a wider,
+                # right-type claim it never actually names.
+                if not (folded_link and (folded_link == folded_span or folded_link in folded_span)):
                     continue
                 if _qualifies(claim, wanted, refuted):
                     return True

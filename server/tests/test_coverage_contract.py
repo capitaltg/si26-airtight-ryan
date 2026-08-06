@@ -172,6 +172,33 @@ def test_partial_keeps_its_degree_when_the_contract_is_met() -> None:
     assert out.sub_question_coverage[0].addressed is Addressed.partial
 
 
+def test_a_link_naming_a_wrong_type_claim_does_not_ride_a_narrower_right_type_claim() -> None:
+    # The link exactly names claim A (rhetorical), which satisfies nothing. A
+    # different, right-type claim B happens to sit textually inside that same
+    # link (a coincidental substring), but the link never names B specifically
+    # — only a one-directional containment (link inside a claim's span, never a
+    # claim's span merely found inside the link) should count as naming a
+    # claim, matching grounding.py's `_links_a_claim` convention. Bidirectional
+    # matching would wrongly let claim B's narrower span "overlap" the wider
+    # link and satisfy the contract.
+    out = enforce_requires(
+        Extraction(
+            claims=[
+                _claim(
+                    ClaimType.rhetorical,
+                    "We take risk seriously and we run on GovCloud",
+                ),
+                _claim(ClaimType.empirical_checkable, "we run on GovCloud"),
+            ],
+            sub_question_coverage=[
+                _covered(["We take risk seriously and we run on GovCloud"])
+            ],
+        ),
+        _concern(Requires.fact),
+    )
+    assert out.sub_question_coverage[0].addressed is Addressed.none
+
+
 def test_an_already_none_row_and_an_unchanged_extraction_pass_through() -> None:
     extraction = Extraction(
         sub_question_coverage=[
