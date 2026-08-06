@@ -94,7 +94,7 @@ test("the rubric drawer discloses how rows combine", async ({ page }) => {
       status: 200,
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        version: 2,
+        version: 3,
         rows: [
           {
             id: "false_fact",

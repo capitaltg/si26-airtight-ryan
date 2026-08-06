@@ -52,8 +52,41 @@ Rubric `version` 2 -> 3 (match conditions moved). `EXTRACTOR_CONTRACT_VERSION`
 1 -> 2 (prompt ask and tool schema both changed), so every pinned extraction
 re-runs on purpose.
 
-**Not verified live:** `server/tests/golden` needs AWS credentials this
-environment does not have. Its expectations were re-graded from the deterministic
-rules and the model-dependent ones marked FRAGILE. The offline pins are
+**Verified live (2026-08-06, Task 9 sweep).** Offline: `pytest -q` in `server`
+gives 504 passed, 17 skipped (the AWS/voice-gated tests and `server/tests/golden`
+skip under a plain run because `.env` isn't sourced into that process); `ruff
+check .` is clean; `mypy .` reports 233 pre-existing errors, none in
+`app/pipeline/{coverage_contract,scoring,grounding,span_anchor}.py` or
+`app/schemas/extraction.py`; frontend `tsc -b` is clean; all 77 `e2e` Playwright
+tests pass against a live `docker compose` stack.
+
+Contrary to earlier tasks' assumption, this environment's root `.env` AWS
+credentials do resolve and do reach Bedrock once exported into the process
+(`sts:GetCallerIdentity` and a `bedrock-runtime` `Converse` call both
+succeeded), so the rehearsal and the golden corpus were both run live instead
+of skipped. Driving a running session via the `/sessions` API: a vague
+reassurance on the `transition` concern reproduced the intended path exactly
+(`unsubstantiated`, support_delta 0, the same concern pressed again on
+follow-up); the same phrasing against `risk` instead matched `red_line`
+(support_delta -2, concern closed as breached) rather than `unsubstantiated`,
+and a properly evidenced mitigation answer matched `evidence_backed`
+(support_delta +2) — both confirm the `requires` contract and the broadened
+`evidence_backed` path fire on real model output, with the caveat that the
+model doesn't always pick the row a human would predict for a given phrasing.
+
+`pytest tests/golden -m golden -v` (bonus, beyond what Task 7 could run): 10
+passed, 7 failed. Four failures are the FRAGILE cases `cases.yaml` already
+called out — `approach_architecture_concrete`, `dodge_risk_deflection`,
+`false_fact_pm_years`, `combo_dodge_plus_approach` — landing exactly where
+their own notes predicted. Three are mismatches the corpus doesn't flag yet:
+`approach_transition_compliant` swings on the same axis as the flagged
+architecture case (model volunteers `evidence_backed` where `approach_cited`
+was graded); `false_fact_record_count` drops its `approach_cited` credit next
+to the `false_fact` penalty (grounding logged `dropped full coverage ...
+ungrounded span: None`); `unsubstantiated_support` lands on `red_line`, the
+exact direction its own note already named as the remaining risk. None of
+these three were re-graded here — flagging them for a follow-up calibration
+pass per `cases.yaml`'s own deferred "CALIBRATION (step 3, needs AWS creds)"
+step, not treating them as a code regression. The offline pins remain
 `server/tests/test_coverage_contract.py` and the new cases in
 `server/tests/test_scoring.py`.
