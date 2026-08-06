@@ -94,6 +94,25 @@ class ScriptedClient(ExtractResultFromExtract):
 _COVERED_SPAN = "named lead, 12 years, full-time"
 
 
+def _covered_claims() -> list[Claim]:
+    """The commitment + empirical claim pair on `_COVERED_SPAN`, shared by
+    `_full` and `_partial` so both fixtures satisfy whichever `requires` value
+    a sub-question is authored with."""
+    return [
+        Claim(
+            text="A named lead is committed with specific experience.",
+            type=ClaimType.commitment,
+            backing=Backing.backed,
+            span=_COVERED_SPAN,
+        ),
+        Claim(
+            text="The named lead has 12 years of relevant experience.",
+            type=ClaimType.empirical_checkable,
+            span=_COVERED_SPAN,
+        ),
+    ]
+
+
 def _full(concern: Concern) -> Extraction:
     """A backed answer that fully covers every sub-question → satisfies, +2.
 
@@ -102,19 +121,7 @@ def _full(concern: Concern) -> Extraction:
     its sub-question is authored with.
     """
     return Extraction(
-        claims=[
-            Claim(
-                text="A named lead is committed with specific experience.",
-                type=ClaimType.commitment,
-                backing=Backing.backed,
-                span=_COVERED_SPAN,
-            ),
-            Claim(
-                text="The named lead has 12 years of relevant experience.",
-                type=ClaimType.empirical_checkable,
-                span=_COVERED_SPAN,
-            ),
-        ],
+        claims=_covered_claims(),
         sub_question_coverage=[
             SubQuestionCoverage(
                 id=sq.id,
@@ -138,19 +145,7 @@ def _partial(concern: Concern) -> Extraction:
     one lacks evidence.
     """
     return Extraction(
-        claims=[
-            Claim(
-                text="A named lead is committed with specific experience.",
-                type=ClaimType.commitment,
-                backing=Backing.backed,
-                span=_COVERED_SPAN,
-            ),
-            Claim(
-                text="The named lead has 12 years of relevant experience.",
-                type=ClaimType.empirical_checkable,
-                span=_COVERED_SPAN,
-            ),
-        ],
+        claims=_covered_claims(),
         sub_question_coverage=[
             SubQuestionCoverage(
                 id=concern.sub_questions[0].id,

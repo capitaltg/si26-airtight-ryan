@@ -821,8 +821,9 @@ def test_transcript_marks_a_second_turn_on_one_concern_as_a_follow_up(
     client: TestClient,
 ) -> None:
     session_id = client.post("/sessions").json()["id"]
-    # `_PartialClient` covers only one sub-question, so the first concern earns a
-    # same-concern follow-up instead of satisfying.
+    # `_PartialClient` emits a linkless coverage row, which the contract check
+    # demotes to `none`; the concern still earns a same-concern follow-up
+    # instead of satisfying.
     client.app.dependency_overrides[get_bedrock_client] = _PartialClient
     for _ in range(2):
         client.post(f"/sessions/{session_id}/answer", json={"answer": "Partly there."})
