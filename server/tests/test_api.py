@@ -69,17 +69,31 @@ class _FakeClient(ExtractResultFromExtract):
                         type=ClaimType.commitment,
                         backing=Backing.backed,
                         span="architecture",
-                    )
+                    ),
+                    Claim(
+                        text="The architecture has a concrete component breakdown.",
+                        type=ClaimType.empirical_checkable,
+                        span="architecture",
+                    ),
                 ],
                 sub_question_coverage=[
                     SubQuestionCoverage(
-                        id="architecture", addressed=Addressed.full, span="architecture"
+                        id="architecture",
+                        addressed=Addressed.full,
+                        span="architecture",
+                        evidence_claim_spans=["architecture"],
                     ),
                     SubQuestionCoverage(
-                        id="hosting", addressed=Addressed.full, span="architecture"
+                        id="hosting",
+                        addressed=Addressed.full,
+                        span="architecture",
+                        evidence_claim_spans=["architecture"],
                     ),
                     SubQuestionCoverage(
-                        id="integrations", addressed=Addressed.full, span="architecture"
+                        id="integrations",
+                        addressed=Addressed.full,
+                        span="architecture",
+                        evidence_claim_spans=["architecture"],
                     ),
                 ],
             )
@@ -96,8 +110,12 @@ class _FakeClient(ExtractResultFromExtract):
 
 
 class _PartialClient(_FakeClient):
-    """Covers one sub-question only, so the concern goes `partial` and earns a
-    follow-up on the same concern."""
+    """Emits coverage with no linked claim, so the contract check demotes it to
+    `none` — the concern still goes `partial` and earns a follow-up on the same
+    concern, just via "nothing was proven" rather than "one sub-question was
+    covered". Either way the test below only checks the follow-up flag, not the
+    concern status, so leaving this linkless is the correct fixture: the point
+    is a same-concern follow-up, not a specific degree of coverage."""
 
     def extract(self, content, *, content_schema, tool_name, max_tokens=4096, cache_key=None):
         if content_schema is Extraction:
