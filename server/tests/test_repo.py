@@ -470,9 +470,10 @@ def test_append_turn_stores_extraction_provenance(db: Session) -> None:
 
 
 def test_migration_0008_columns_match_the_orm() -> None:
-    """The suite has no alembic harness, so this is what keeps the ORM and
-    revision 0008 from silently disagreeing about shape. `extraction_provenance`
-    is nullable (rows written before 0008 have no value); the pin's contract
-    version is not (0008 clears the table first, so NOT NULL needs no default)."""
+    """Pins the ORM shape that migration 0008 was written against. This test
+    only covers the ORM side; it cannot detect a revision that diverges from
+    these expectations. Real migration coverage is the manual Postgres
+    round-trip recorded in the PR description (upgrade 0007 → seed → upgrade
+    head → downgrade -1 → upgrade head)."""
     assert Turn.__table__.c["extraction_provenance"].nullable is True
     assert ExtractionPinRow.__table__.c["extractor_contract_version"].nullable is False

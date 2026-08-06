@@ -297,6 +297,7 @@ def run_extraction(
     Running grounding before anchoring would throw out real findings whenever a
     presenter retypes the same answer with different spacing.
     """
+    model_id = settings.bedrock_model_id
     resolved_pin: ExtractionPin = pin if pin is not None else NullExtractionPin()
     key = extraction_key(
         answer=answer,
@@ -306,7 +307,7 @@ def run_extraction(
         prior_answers=prior_answers,
         extraction_fingerprint=content.extraction_fingerprint,
         extractor_contract_version=EXTRACTOR_CONTRACT_VERSION,
-        model_id=settings.bedrock_model_id,
+        model_id=model_id,
     )
 
     pinned = resolved_pin.get(key)
@@ -343,7 +344,7 @@ def run_extraction(
         resolved_pin.put(
             key,
             tool_input=extraction.model_dump(mode="json"),
-            model_id=settings.bedrock_model_id,
+            model_id=model_id,
             contract_version=EXTRACTOR_CONTRACT_VERSION,
         )
         # Adopting a concurrent writer's canonical row does not make this a
@@ -373,6 +374,6 @@ def run_extraction(
             source=source,
             key=key,
             contract_version=EXTRACTOR_CONTRACT_VERSION,
-            model_id=settings.bedrock_model_id,
+            model_id=model_id,
         ),
     )
