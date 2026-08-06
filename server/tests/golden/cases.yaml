@@ -7,13 +7,20 @@
 #   2. validity   — the score matches the hand grade below.
 #
 # The `expected` block is graded against the scoring engine AS BUILT
-# (app/pipeline/scoring.py), not against an ideal. Two engine behaviours drive
+# (app/pipeline/scoring.py), not against an ideal. Three engine behaviours drive
 # most of the combinations here, so keep them in mind when reading expectations:
 #   - A crossed red line fires FIRST and alone: delta -2, capped, rows [red_line].
-#   - `approach_cited` (+1) fires whenever ANY sub-question is marked full/partial
-#     and the turn is not already `evidence_backed`. So an on-topic negative
-#     answer (a wrong fact, a contradiction) that still addresses the question
-#     nets that -1 against a +1 -> delta 0. That is the engine, not a mistake.
+#   - A sub-question counts as addressed only when `evidence_claim_spans` links a
+#     claim of the kind its `requires` tag asks for, and no document refutes that
+#     claim. `approach_cited` (+1) then fires on any surviving full/partial row,
+#     unless `evidence_backed` already did. So an on-topic negative answer (a
+#     wrong fact, a contradiction) that still answers the question with a real
+#     claim nets that -1 against a +1 -> delta 0. That is the engine.
+#   - `evidence_backed` (+2) fires two ways: a commitment with
+#     `backing == backed`, or an `empirical_checkable` claim confirmed by a
+#     tier-1 `supported` fact_check. The second path is new in rubric v3, and it
+#     is why several cases below are marked FRAGILE: whether the model bothers to
+#     record a supported check decides +1 vs +2.
 #
 # CALIBRATION (step 3, needs AWS creds): expected values are authored from domain
 # judgment. Run `pytest tests/golden -m golden -v`; for any case that swings
@@ -99,7 +106,10 @@
   note: >-
     Concrete, compliant architecture that covers the sub-questions, but no
     staffing/schedule/past-performance evidence -> approach_cited, not
-    evidence_backed.
+    evidence_backed. FRAGILE: the proposal names AWS GovCloud and the
+    integration set, so if the model records a tier-1 `supported` check against
+    those claims this becomes evidence_backed +2. Decide which is right on the
+    first live run.
 
 - id: approach_past_performance
   concern_id: past_performance
@@ -109,13 +119,14 @@
     1.8-million-case system to a cloud-native platform on schedule with zero
     data loss, and we hold an Exceptional CPARS rating for it.
   expected:
-    support_delta: 1
+    support_delta: 2
     capped: false
-    matched_rows: [approach_cited]
+    matched_rows: [evidence_backed]
   note: >-
-    Facts consistent with the proposal that cover the concern. evidence_backed
-    requires a *commitment* with backing; past performance is empirical, so this
-    lands on approach_cited.
+    The written proposal confirms this project, so the checkable claims come back
+    as tier-1 `supported` and the empirical path to evidence_backed fires. Under
+    rubric v2 this was capped at approach_cited, which is the defect
+    docs/issues/code-enforce-rubric-semantics.md reported.
 
 - id: approach_transition_compliant
   concern_id: transition
@@ -178,8 +189,9 @@
     capped: false
     matched_rows: [dodge]
   note: >-
-    Topic switch away from the PM question, no sub-question addressed -> clean
-    dodge with no approach_cited.
+    Topic switch away from the PM question, no sub-question addressed -> dodge.
+    The answer holds no fact or commitment claim to link, so the requires
+    contract leaves no coverage row to promote regardless.
 
 - id: dodge_risk_deflection
   concern_id: risk
@@ -225,9 +237,12 @@
     matched_rows: [false_fact, approach_cited]
   note: >-
     Proposal says 12 years, so "eighteen years" is refuted (-1); the answer still
-    addresses the PM sub-questions (+1) -> net 0. FRAGILE: if the model reads the
-    full-time claim as a *backed* commitment it would flip to evidence_backed;
-    the years claim is empirical, not backing, so it should not.
+    addresses the PM sub-questions (+1) -> net 0. FRAGILE under v3 for a
+    different reason than v2: the "eighteen years" claim is refuted, so it can no
+    longer satisfy pm_experience's `requires: fact`. The +1 now has to come from
+    pm_commitment ("committed full-time"), which is a commitment claim and
+    stands. If the model does not emit that claim the case falls to -1
+    [false_fact].
 
 # --- contradiction (-1): Tier-0 conflict with a prior claim ----------------
 
@@ -288,9 +303,10 @@
     matched_rows: [unsubstantiated]
   note: >-
     On-topic reassurance with no specifics and no sub-question concretely
-    addressed -> unsubstantiated fallback. FRAGILE: if the model marks this a
-    pure_affect dodge it becomes -2; if it credits partial coverage it becomes
-    +1. This is the hardest row to hold; calibrate with an exemplar.
+    addressed -> unsubstantiated fallback. Under rubric v3 the "+1 if it credits
+    partial coverage" risk is gone: the answer holds no fact and no commitment,
+    so any coverage row the model marks is demoted to none. The remaining risk is
+    the other direction, a pure_affect dodge at -2.
 
 # --- combination: dodge + approach_cited, exercises clamp/mixing -----------
 
@@ -308,4 +324,6 @@
   note: >-
     Covers pm_experience concretely (+1) but dodges the commitment sub-question
     (-2) -> net -1. The experience is empirical, not a backed commitment, so this
-    is approach_cited, not evidence_backed.
+    is approach_cited, not evidence_backed. FRAGILE: the proposal supports both
+    the twelve years and the VCO modernization, so a tier-1 `supported` check on
+    either would make this evidence_backed and net 0 instead of -1.
