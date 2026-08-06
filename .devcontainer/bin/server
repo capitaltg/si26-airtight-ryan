@@ -3,8 +3,15 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT/server"
+# Bring the schema to head before serving, the same way the deployed image's
+# CMD does (see server/Dockerfile). Without it the dev database silently sits on
+# whatever revision it was created at, and every route that reads a table a
+# newer migration touched 500s on "column ... does not exist" — e.g. `POST
+# /sessions`, which selects `turns` (and so `turns.extraction_provenance`) while
+# resolving the opening prompt.
 # `python -m` avoids depending on ~/.local/bin being on PATH (only login
 # shells add it), which non-login terminals don't get.
+python -m alembic upgrade head
 # WATCHFILES_FORCE_POLLING: the workspace is bind-mounted from macOS host, and
 # Docker Desktop's file sharing doesn't propagate inotify events through the
 # mount, so --reload's default watcher never fires on host-side saves.
