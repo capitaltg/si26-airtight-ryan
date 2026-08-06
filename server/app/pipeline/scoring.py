@@ -13,12 +13,15 @@ ignores every other row. Otherwise the matching rows are summed and clamped to
 - ``false_fact`` (-1)     — once per refuted tier-1+ fact_check (accumulates before
   clamp); tier-0 refutations are contradictions, not false facts
 - ``contradiction`` (-1)  — any consistency flag (Tier-0 conflict)
-- ``evidence_backed`` (+2) — any commitment claim with ``backing == backed``
-- ``approach_cited`` (+1) — coverage full/partial, and not already evidence_backed
+- ``evidence_backed`` (+2) — a commitment claim with ``backing == backed``, or an
+  ``empirical_checkable`` claim confirmed by a tier-1+ ``supported`` fact_check
+- ``approach_cited`` (+1) — any sub-question still full/partial after the
+  ``requires`` contract check, and not already evidence_backed
 - ``unsubstantiated`` (0) — fallback when nothing else matched, so matched_rows is
   never empty and the audit trail always names a row.
 """
 
+from app.pipeline.span_anchor import fold
 from app.schemas.content import Rubric
 from app.schemas.extraction import (
     Addressed,
@@ -41,6 +44,38 @@ _ROW_ORDER = [
     "evidence_backed",
     "over_limit",
 ]
+
+
+def _verified_empirical(extraction: Extraction) -> bool:
+    """True when a document-confirmed checkable claim survives in ``extraction``.
+
+    A ``fact_check`` at tier 1 or higher with a ``supported`` verdict has both
+    halves of its evidence already proven by ``grounding.drop_ungrounded``: the
+    ``answer_span`` is quoted in the answer and the ``source_quote`` is quoted in
+    the document it names. When such a check lands on an
+    ``empirical_checkable`` claim, that is verified evidence — the empirical half
+    of what the ``evidence_backed`` row has always described ("staffing,
+    schedule, or past-performance evidence"). Before this, a fully documented
+    past-performance answer was capped at ``approach_cited``.
+
+    Tier 0 is excluded for the same reason it is excluded from ``false_fact``: it
+    is a comparison against the presenter's own earlier answer, not against a
+    frozen document, so it verifies nothing.
+    """
+    supported = [
+        fold(fc.answer_span)[0]
+        for fc in extraction.fact_checks
+        if fc.verdict is Verdict.supported and fc.tier >= 1
+    ]
+    if not supported:
+        return False
+    for claim in extraction.claims:
+        if claim.type is not ClaimType.empirical_checkable:
+            continue
+        span, _ = fold(claim.span)
+        if span and any(span == s or span in s or s in span for s in supported):
+            return True
+    return False
 
 
 def score_turn(extraction: Extraction, rubric: Rubric) -> ScoreOutput:
@@ -79,10 +114,13 @@ def score_turn(extraction: Extraction, rubric: Rubric) -> ScoreOutput:
         counts["contradiction"] = 1
         delta += values["contradiction"]
 
+    # Two ways to earn the row, and both are verified rather than asserted. A
+    # commitment the model classified as `backed` carries its own specifics; an
+    # empirical claim earns it by being confirmed against a frozen document.
     backed = any(
         claim.type is ClaimType.commitment and claim.backing is Backing.backed
         for claim in extraction.claims
-    )
+    ) or _verified_empirical(extraction)
     if backed:
         counts["evidence_backed"] = 1
         delta += values["evidence_backed"]

@@ -45,7 +45,7 @@ def test_app_boots_with_content_on_state():
         assert isinstance(content, Content)
         assert len(content.personas) == 3
         assert len(content.concerns) == 8
-        assert content.rubric.version == 2
+        assert content.rubric.version == 3
 
 
 class _FakeClient(ExtractResultFromExtract):
@@ -401,10 +401,10 @@ def test_content_rubric_is_disclosed(client: TestClient) -> None:
     r = client.get("/content/rubric")
     assert r.status_code == 200
     body = r.json()
-    assert body["version"] == 2
+    assert body["version"] == 3
     assert "cap_ceiling" not in body  # the cap now rides inside the red_line row
     assert len(body["rows"]) == 8
-    assert len(body["combination"]) >= 6
+    assert len(body["combination"]) >= 7
     red_line = next(row for row in body["rows"] if row["id"] == "red_line")
     assert red_line["cap"] == 25
     assert all(row["cap"] is None for row in body["rows"] if row["id"] != "red_line")

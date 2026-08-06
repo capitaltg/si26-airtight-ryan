@@ -16,7 +16,7 @@ def test_load_content_returns_full_bundle() -> None:
     assert isinstance(content, Content)
     assert len(content.personas) == 3
     assert len(content.concerns) == 8
-    assert content.rubric.version == 2
+    assert content.rubric.version == 3
     assert content.rubric.cap_ceiling == 25  # computed from the red_line row's cap
 
 
