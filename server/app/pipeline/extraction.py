@@ -70,7 +70,15 @@ TOOL_NAME = "record_extraction"
 # remedy this suite documents ("add a worked exemplar") changed nothing. New
 # content in the prompt changes classification behavior, which is exactly what
 # this constant gates, so v4 pins miss on purpose.
-EXTRACTOR_CONTRACT_VERSION = 5
+#
+# v6: two worked exemplars were added to the contracting_officer persona, drawing
+# the line the `key_personnel` red-line wording could not hold on its own: an
+# overstated number on personnel the proposal names is a false fact, while a
+# project or a credential the proposal never mentions is the
+# `unsupported_experience` red line. Without them the golden case
+# `false_fact_pm_years` graded as a capped red line on roughly one live run in
+# five. A v5 pin carries the judgment made without that guidance, so it misses.
+EXTRACTOR_CONTRACT_VERSION = 6
 
 ExtractionSource = Literal["pin", "response_cache", "fresh"]
 

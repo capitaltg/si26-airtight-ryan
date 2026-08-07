@@ -65,4 +65,27 @@ exemplars:
       for the government.
     support_delta: 0
     note: Generic reassurance with no figure or reference. No claim to verify, no credit.
+  - persona: contracting_officer
+    user: >-
+      Our lead solutions architect, Samuel Ortiz, has fourteen years in cloud-native
+      design and is committed full-time.
+    support_delta: 0
+    note: >-
+      The proposal names Ortiz and puts him at nine years, so fourteen is a number the
+      document refutes. Record that as a tier-1 refuted fact check and as nothing else.
+      It crosses neither red line on this concern: unsupported_experience is for a
+      project or a credential the proposal never names at all, and pm_underqualified is
+      for someone who falls short of the minimums on the proposal's own figures, which
+      an overstated number does not make true. The full-time statement is a separate
+      commitment and it still answers its sub-question, but nothing specific stands
+      behind it, so its backing is bare, not backed.
+  - persona: contracting_officer
+    user: >-
+      Samuel Ortiz also led the Census Bureau data-lake rebuild and he holds a CISSP.
+    support_delta: -2
+    note: >-
+      The proposal names neither that project nor that certification anywhere. Crediting
+      the team with experience the document does not mention at all is the
+      unsupported_experience red line. That is the line an overstated number on
+      experience the proposal does name never crosses.
 ```

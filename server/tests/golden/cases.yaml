@@ -267,7 +267,16 @@
     longer satisfy pm_experience's `requires: fact`. The +1 now has to come from
     pm_commitment ("committed full-time"), which is a commitment claim and
     stands. If the model does not emit that claim the case falls to -1
-    [false_fact].
+    [false_fact]. Settled on the third calibration pass, and the swing it took to
+    settle is the point: this case kept grading as a capped red line on about one
+    live run in five, because both of key_personnel's red lines are about the PM's
+    experience and an overstated number found a home in either. Narrowing
+    `unsupported_experience` alone (the first pass) just moved the drift to
+    `pm_underqualified`, whose own stated reason was incoherent -- 18 and 12 both
+    clear the 10-year minimum. It took both red lines saying outright what they
+    are not, plus a contracting_officer exemplar of the same shape on different
+    personnel, to hold it at false_fact + approach_cited across 8 consecutive
+    runs. Nothing in the engine changed.
 
 # --- contradiction (-1): Tier-0 conflict with a prior claim ----------------
 

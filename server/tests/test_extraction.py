@@ -894,6 +894,23 @@ def test_prompt_renders_persona_exemplars_for_classification() -> None:
     assert "Sentiment with no support model" in prefix
 
 
+def test_contracting_officer_exemplars_separate_false_fact_from_the_red_line() -> None:
+    """The calibration that settles `false_fact_pm_years` (golden suite).
+
+    Without it the model graded an overstated number about a named PM as the
+    `unsupported_experience` red line on roughly one live run in five, which caps
+    the meter instead of charging a false fact. Deleting either exemplar reverts
+    that, silently and only on the live suite, so assert both reach the prompt.
+    """
+    content = load_content()
+    persona = content.personas["contracting_officer"]
+    prefix = build_extraction_static_prefix(persona=persona, content=content)
+    assert "Samuel Ortiz, has fourteen years in cloud-native" in prefix
+    assert "Record that as a tier-1 refuted fact check" in prefix
+    assert "Census Bureau data-lake rebuild" in prefix
+    assert "unsupported_experience red line" in prefix
+
+
 def test_exemplar_block_withholds_the_hand_graded_number() -> None:
     """Extraction never sees a score. The exemplars carry one, so the block
     renders the answer and the judgment and drops `support_delta` — otherwise
@@ -906,13 +923,15 @@ def test_exemplar_block_withholds_the_hand_graded_number() -> None:
     assert "support_delta" not in block
 
 
-def test_extractor_contract_version_is_five() -> None:
+def test_extractor_contract_version_is_six() -> None:
     # v4 asked for `SubQuestionCoverage.span`, which the prompt had never
     # requested and grounding had been discarding every full/partial row for.
-    # v5 renders the persona's worked exemplars. Both change what the model is
-    # asked to report, so earlier pins must miss rather than replay a judgment
-    # made under the old contract.
-    assert EXTRACTOR_CONTRACT_VERSION == 5
+    # v5 renders the persona's worked exemplars. v6 adds two of them to
+    # contracting_officer, separating an overstated number about named personnel
+    # (a false fact) from experience the proposal never mentions (the red line).
+    # All three change what the model is asked to report, so earlier pins must
+    # miss rather than replay a judgment made under the old contract.
+    assert EXTRACTOR_CONTRACT_VERSION == 6
 
 
 def test_the_prompt_states_the_three_part_revision_bar() -> None:
