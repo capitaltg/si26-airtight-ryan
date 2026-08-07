@@ -1,10 +1,11 @@
-// The eight rows in server/app/content/store/rubric.yaml, in the server's own
+// The nine rows in server/app/content/store/rubric.yaml, in the server's own
 // snake_case so no translation layer exists between the score payload and the
 // chip.
 export type RubricRow =
   | "evidence_backed"
   | "approach_cited"
   | "unsubstantiated"
+  | "acknowledged_revision"
   | "contradiction"
   | "over_limit"
   | "dodge"
@@ -15,6 +16,7 @@ export const RUBRIC_ROWS: RubricRow[] = [
   "evidence_backed",
   "approach_cited",
   "unsubstantiated",
+  "acknowledged_revision",
   "contradiction",
   "over_limit",
   "dodge",
@@ -37,6 +39,7 @@ const LABELS: Record<RubricRow, string> = {
   evidence_backed: "Evidence-backed",
   approach_cited: "Approach cited",
   unsubstantiated: "Unsubstantiated",
+  acknowledged_revision: "Revision",
   contradiction: "Contradiction",
   over_limit: "Over limit",
   dodge: "Dodge",
@@ -63,11 +66,12 @@ const TONES: Record<RubricRow, string> = {
   // Moss, not teal: the two positive rows now share one family, and the tint is
   // the quieter of the pair against `evidence_backed`'s solid fill.
   approach_cited: "border-moss-600 bg-moss-100 text-moss-600",
-  // Neutral, because `unsubstantiated` is the only row in the rubric worth 0
-  // (server/app/content/store/rubric.yaml:52): it costs the presenter nothing, so
-  // it must not read as a penalty next to the two amber rows that each cost -1.
-  // Taupe border on the sand fill, label in text-body at 8.93:1.
+  // Neutral, because these are the two rows in the rubric worth 0
+  // (server/app/content/store/rubric.yaml): neither costs the presenter
+  // anything, so neither may read as a penalty next to the two amber rows that
+  // each cost -1. Taupe border on the sand fill, label in text-body at 8.93:1.
   unsubstantiated: "border-taupe-600 bg-sand-200 text-text-body",
+  acknowledged_revision: "border-taupe-600 bg-sand-200 text-text-body",
   // The two -1 rows share amber. amber-600 cannot be text (3.77:1), so amber is
   // the one tone whose label is text-body rather than the accent itself.
   contradiction: "border-amber-600 bg-amber-100 text-text-body",
