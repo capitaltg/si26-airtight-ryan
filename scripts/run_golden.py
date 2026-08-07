@@ -35,6 +35,12 @@ _EXIT_NO_TESTS_COLLECTED = 5
 
 
 def main(argv: list[str]) -> int:
+    # Importing the golden module pulls in the whole Anthropic SDK, which takes
+    # several seconds cold (longer on Windows with a virus scanner reading
+    # .venv). Say so before blocking, or a silent start reads as a hang and
+    # invites the Ctrl+C that looks like an import crash.
+    print("loading extraction stack (a few seconds)...", flush=True)
+
     # `app` is installed (pip install -e server) but `tests` is not packaged, so
     # the server directory has to be on the path before the golden module can be
     # read. Imported here rather than at module level to keep that ordering
