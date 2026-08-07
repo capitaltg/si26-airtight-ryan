@@ -21,6 +21,11 @@
 #     tier-1 `supported` fact_check. The second path is new in rubric v3, and it
 #     is why several cases below are marked FRAGILE: whether the model bothers to
 #     record a supported check decides +1 vs +2.
+#   - A false fact or an unacknowledged contradiction now CEILINGS the turn at 0
+#     (rubric v4): positive rows still match and still show their evidence, but
+#     they cannot lift the delta above 0. An openly explained revision — earlier
+#     position, new position, and the reason — is not a contradiction at all; it
+#     matches `acknowledged_revision` at 0.
 #
 # CALIBRATION (step 3, needs AWS creds): expected values are authored from domain
 # judgment. Run `pytest tests/golden -m golden -v`; for any case that swings
@@ -30,8 +35,9 @@
 # case that will not settle.
 #
 # Coverage: every rubric row (red_line, dodge, unsubstantiated, false_fact,
-# contradiction, approach_cited, evidence_backed), 4 red-line crossings, and 2
-# Tier-0 contradictions (which require `prior_claims`).
+# contradiction, acknowledged_revision, approach_cited, evidence_backed), 4
+# red-line crossings, 3 Tier-0 contradictions and 1 Tier-0 revision (all of
+# which require `prior_claims`), and 2 integrity-ceiling combinations.
 
 # --- Red-line crossings (fire first, cap the meter) ------------------------
 
@@ -265,8 +271,15 @@
     matched_rows: [contradiction, approach_cited]
   note: >-
     Reverses the prior top-risk claim (-1) but names a risk with a concrete
-    mitigation, covering the concern (+1) -> net 0. Mitigation is present so it
-    does not trip the "no mitigation" risk red line.
+    mitigation, covering the concern (+1) -> net 0, now held there by the v4
+    ceiling as well as by the sum. Mitigation is present so it does not trip the
+    "no mitigation" risk red line. This is the deliberate near-miss for the
+    revision bar: "Earlier I would have pointed to data migration" names the old
+    and the new position but gives no reason for the change, so
+    acknowledged_revision must stay false and this must stay a contradiction. If
+    it grades as a revision, the three-part bar is not landing and the fix is a
+    worked exemplar in the persona file, not a code change. Contrast
+    acknowledged_revision_credited, which adds the reason.
 
 - id: contradiction_cutover_plan
   concern_id: operational_impact
@@ -327,3 +340,77 @@
     is approach_cited, not evidence_backed. FRAGILE: the proposal supports both
     the twelve years and the VCO modernization, so a tier-1 `supported` check on
     either would make this evidence_backed and net 0 instead of -1.
+
+# --- integrity ceiling (v4): a false statement holds the turn at 0 -----------
+
+- id: false_fact_ceiling_over_evidence
+  concern_id: key_personnel
+  persona_id: technical_evaluator
+  answer: >-
+    Our PM is Karen Holloway. She has eighteen years managing federal software
+    programs, including the 1.8-million-case-per-year modernization at the
+    Veterans Claims Office, and she is committed to this effort full-time for
+    the base period.
+  expected:
+    support_delta: 0
+    capped: false
+    matched_rows: [false_fact, evidence_backed]
+  note: >-
+    The proposal says twelve years, so "eighteen years" is refuted (-1). The
+    full-time commitment is backed by named past performance (+2), which summed
+    to +1 under v3 — a presenter rewarded for a turn in which they got a fact
+    wrong. Under v4 false_fact ceilings the turn at 0. This is the case the
+    issue was filed about. Contrast backed_pm_qualified, the same answer with
+    the right number, which stays +2.
+
+- id: contradiction_ceiling_over_evidence
+  concern_id: operational_impact
+  persona_id: program_rep
+  prior_claims:
+    - turn_index: 0
+      text: Cutover happens in a single weekend maintenance window.
+      type: commitment
+      backing: specified
+      span: cut over during a single weekend maintenance window
+  answer: >-
+    For cutover we will roll out region by region over about three weeks. It is
+    owned by our Migration Lead Anil Kapoor, who has seven years in large-scale
+    migration including a 50-million-record financial-services migration.
+  expected:
+    support_delta: 0
+    capped: false
+    matched_rows: [contradiction, evidence_backed]
+  note: >-
+    Reverses the prior single-weekend commitment with no acknowledgement (-1)
+    while backing the new plan with a named lead's track record (+2). Summed to
+    +1 under v3; ceilinged to 0 under v4. The proposal does not fix cutover
+    timing, so this is Tier-0, not a fact check — same reasoning as
+    contradiction_cutover_plan.
+
+# --- acknowledged_revision (0): an explained correction is not a contradiction
+
+- id: acknowledged_revision_credited
+  concern_id: risk
+  persona_id: technical_evaluator
+  prior_claims:
+    - turn_index: 0
+      text: Our biggest risk is data-migration integrity.
+      type: commitment
+      backing: specified
+      span: the biggest risk is data-migration integrity
+  answer: >-
+    Earlier I said our biggest risk was data-migration integrity. The LCS record
+    profiling came back clean last month, so that risk dropped and our top risk
+    is now staffing ramp-up, which we mitigate with a bench of pre-cleared
+    engineers ready to backfill.
+  expected:
+    support_delta: 1
+    capped: false
+    matched_rows: [acknowledged_revision, approach_cited]
+  note: >-
+    All three parts of the revision bar: names the earlier position, states the
+    new one, and gives the reason it changed. Recorded at 0 instead of charged
+    -1, so the mitigation's coverage credit stands (+1). Mitigation is present,
+    so the "no mitigation" risk red line does not fire. FRAGILE: the pre-cleared
+    bench is a specified commitment, not a backed one, so this is
+    approach_cited; if the model reads the bench as backed it becomes +2.

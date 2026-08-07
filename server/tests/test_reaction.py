@@ -23,6 +23,7 @@ from app.schemas.extraction import (
     Backing,
     Claim,
     ClaimType,
+    ConsistencyFlag,
     Dodge,
     DodgeType,
     Extraction,
@@ -147,6 +148,45 @@ def test_prompt_states_the_cap_when_capped() -> None:
     assert "cap" in prompt.lower()
 
 
+def test_prompt_explains_a_ceilinged_score() -> None:
+    persona, concern = _fixture()
+    score = ScoreOutput(
+        support_delta=0,
+        raw_support_delta=1,
+        matched_rows=["false_fact", "evidence_backed"],
+        integrity_ceiling=True,
+    )
+
+    prompt = build_reaction_prompt(
+        persona=persona,
+        concern=concern,
+        extraction=_extraction(),
+        score=score,
+    )
+
+    assert "held at 0" in prompt
+    # the withheld amount, so the persona does not invent a reason for the gap
+    assert "+1" in prompt
+    # a ceiling is not a red line: it must not claim the meter is capped
+    assert "cap" not in prompt.lower()
+
+
+def test_prompt_says_nothing_about_a_ceiling_that_did_not_fire() -> None:
+    persona, concern = _fixture()
+    score = ScoreOutput(
+        support_delta=1, raw_support_delta=1, matched_rows=["approach_cited"], capped=False
+    )
+
+    prompt = build_reaction_prompt(
+        persona=persona,
+        concern=concern,
+        extraction=_extraction(),
+        score=score,
+    )
+
+    assert "held at 0" not in prompt
+
+
 def test_prompt_summarizes_extraction_without_full_json_dump() -> None:
     persona, concern = _fixture()
     score = ScoreOutput(support_delta=-2, matched_rows=["red_line"], capped=True)
@@ -190,6 +230,105 @@ def test_prompt_summarizes_extraction_without_full_json_dump() -> None:
     # the verbose full-object JSON dump is gone
     assert '"sub_question_coverage"' not in prompt
     assert '"backing":' not in prompt
+
+
+def test_prompt_describes_an_acknowledged_revision_without_contradicting() -> None:
+    persona, concern = _fixture()
+    score = ScoreOutput(
+        support_delta=0, matched_rows=["acknowledged_revision"], capped=False
+    )
+    extraction = Extraction(
+        consistency_flags=[
+            ConsistencyFlag(
+                conflicts_with_turn=0,
+                current_answer_span="we now plan to hire two more leads",
+                prior_answer_span="we will keep the team at three",
+                acknowledged_revision=True,
+                explanation="the presenter openly corrected the earlier headcount",
+            )
+        ],
+    )
+
+    prompt = build_reaction_prompt(
+        persona=persona,
+        concern=concern,
+        extraction=extraction,
+        score=score,
+    )
+
+    # an openly explained revision must never be described as a contradiction
+    assert "Contradicts an earlier answer" not in prompt
+    assert "Openly revised an earlier answer" in prompt
+    assert "we now plan to hire two more leads" in prompt
+    assert "we will keep the team at three" in prompt
+
+
+def test_prompt_still_contradicts_for_an_unacknowledged_flag() -> None:
+    persona, concern = _fixture()
+    score = ScoreOutput(support_delta=-1, matched_rows=["contradiction"], capped=False)
+    extraction = Extraction(
+        consistency_flags=[
+            ConsistencyFlag(
+                conflicts_with_turn=0,
+                current_answer_span="the budget is fixed at ten million",
+                prior_answer_span="the budget is fifteen million",
+                acknowledged_revision=False,
+            )
+        ],
+    )
+
+    prompt = build_reaction_prompt(
+        persona=persona,
+        concern=concern,
+        extraction=extraction,
+        score=score,
+    )
+
+    assert "Contradicts an earlier answer" in prompt
+    assert "Openly revised an earlier answer" not in prompt
+    assert "the budget is fixed at ten million" in prompt
+
+
+def test_prompt_scopes_each_heading_to_its_own_flags_when_both_present() -> None:
+    persona, concern = _fixture()
+    score = ScoreOutput(
+        support_delta=-1,
+        matched_rows=["contradiction", "acknowledged_revision"],
+        capped=False,
+    )
+    extraction = Extraction(
+        consistency_flags=[
+            ConsistencyFlag(
+                conflicts_with_turn=0,
+                current_answer_span="hidden flip span",
+                prior_answer_span="hidden flip prior span",
+                acknowledged_revision=False,
+            ),
+            ConsistencyFlag(
+                conflicts_with_turn=1,
+                current_answer_span="open revision span",
+                prior_answer_span="open revision prior span",
+                acknowledged_revision=True,
+            ),
+        ],
+    )
+
+    prompt = build_reaction_prompt(
+        persona=persona,
+        concern=concern,
+        extraction=extraction,
+        score=score,
+    )
+
+    assert "Contradicts an earlier answer" in prompt
+    assert "Openly revised an earlier answer" in prompt
+    contradicts_idx = prompt.index("Contradicts an earlier answer")
+    revised_idx = prompt.index("Openly revised an earlier answer")
+    # the hidden flip's spans appear under "Contradicts", not "Openly revised"
+    hidden_span_idx = prompt.index("hidden flip span")
+    open_span_idx = prompt.index("open revision span")
+    assert contradicts_idx < hidden_span_idx < revised_idx
+    assert revised_idx < open_span_idx
 
 
 def test_run_reaction_returns_validated_persona_reaction() -> None:

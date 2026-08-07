@@ -868,10 +868,26 @@ def test_pin_defaults_to_null_so_existing_callers_are_unpinned() -> None:
     assert client.calls == 2
 
 
-def test_extractor_contract_version_is_two() -> None:
-    # The prompt's ask and the tool schema both changed, so a v1 pin — which has
-    # no links at all, and would therefore demote every coverage row — must miss.
-    assert EXTRACTOR_CONTRACT_VERSION == 2
+def test_extractor_contract_version_is_three() -> None:
+    # `acknowledged_revision` became score-bearing and the prompt now states the
+    # three-part bar for it, so a v2 pin — which set that field with no rules at
+    # all — must miss rather than feed unrated judgment straight into the number.
+    assert EXTRACTOR_CONTRACT_VERSION == 3
+
+
+def test_the_prompt_states_the_three_part_revision_bar() -> None:
+    content = load_content()
+    concern = content.concerns["risk"]
+    suffix = build_extraction_dynamic_suffix(
+        answer="Earlier I said data migration; the profiling came back clean, so it is staffing now.",
+        concern=concern,
+        prior_claims=[],
+    )
+    assert "acknowledged_revision" in suffix
+    # all three parts, or the bar is cheap enough to bolt onto a concealed flip
+    assert "refers to the earlier position" in suffix
+    assert "states the new position" in suffix
+    assert "gives a reason for the change" in suffix
 
 
 def _pin_key(content: Any, persona: Any, concern: Any, *, model_id: str) -> str:

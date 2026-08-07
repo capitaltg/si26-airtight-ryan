@@ -16,7 +16,7 @@ def test_load_content_returns_full_bundle() -> None:
     assert isinstance(content, Content)
     assert len(content.personas) == 3
     assert len(content.concerns) == 8
-    assert content.rubric.version == 3
+    assert content.rubric.version == 4
     assert content.rubric.cap_ceiling == 25  # computed from the red_line row's cap
 
 
@@ -279,3 +279,23 @@ def test_naming_a_risk_is_satisfiable_by_a_fact() -> None:
     concern = load_content().concerns["risk"]
     named_risk = next(sq for sq in concern.sub_questions if sq.id == "named_risk")
     assert named_risk.requires is Requires.fact_or_commitment
+
+
+def test_integrity_rows_carry_a_ceiling() -> None:
+    rubric = load_content().rubric
+    by_id = {row.id: row for row in rubric.rows}
+    assert by_id["false_fact"].ceiling == 0
+    assert by_id["contradiction"].ceiling == 0
+    assert by_id["acknowledged_revision"].support_value == 0
+    assert by_id["acknowledged_revision"].ceiling is None
+    # the red line still pins the meter, and the new field did not leak into it
+    assert rubric.cap_ceiling == 25
+
+
+def test_an_integrity_row_without_a_ceiling_is_rejected(tmp_path: Path) -> None:
+    store = tmp_path / "store"
+    shutil.copytree(STORE, store)
+    rubric_path = store / "rubric.yaml"
+    rubric_path.write_text(rubric_path.read_text().replace("    ceiling: 0\n", "", 1))
+    with pytest.raises(ValidationError):
+        load_content(store)

@@ -386,13 +386,16 @@ def test_contradiction_with_a_span_absent_from_the_prior_answer_is_dropped() -> 
     assert grounded.consistency_flags == []
 
 
-def test_acknowledged_revision_still_scores_a_contradiction() -> None:
+def test_acknowledged_revision_survives_grounding_and_scores_zero() -> None:
     content, _, _ = _fixture()
     grounded = _ground_with_history(
         Extraction(consistency_flags=[_flag(acknowledged_revision=True)])
     )
+    # grounding is unchanged: an acknowledged flag is still anchored and kept
     assert len(grounded.consistency_flags) == 1
-    assert score_turn(grounded, content.rubric).support_delta == -1
+    scored = score_turn(grounded, content.rubric)
+    assert scored.support_delta == 0
+    assert scored.matched_rows == ["acknowledged_revision"]
 
 
 def test_fact_check_quoting_the_named_document_is_kept_and_scores() -> None:

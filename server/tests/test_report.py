@@ -632,6 +632,60 @@ def test_contradiction_is_a_finding_with_both_sides() -> None:
     assert evidence.counter_label == "turn 2"
 
 
+def test_an_acknowledged_revision_is_a_finding_on_its_own_row() -> None:
+    content = load_content()
+    extraction = Extraction(
+        consistency_flags=[
+            ConsistencyFlag(
+                conflicts_with_turn=1,
+                current_answer_span="three named leads at contract start",
+                prior_answer_span="we have not identified the leads yet",
+                acknowledged_revision=True,
+                explanation="named leads now, none earlier",
+            )
+        ]
+    )
+    score = ScoreOutput(
+        support_delta=0,
+        raw_support_delta=0,
+        matched_rows=["acknowledged_revision"],
+        row_counts={"acknowledged_revision": 1},
+        capped=False,
+    )
+    findings = _turn_findings(_turn(), extraction, score, _values(), content)
+    assert [f.rubric_row for f in findings] == ["acknowledged_revision"]
+    evidence = findings[0].evidence[0]
+    assert evidence.span == "three named leads at contract start"
+    assert evidence.counter_span == "we have not identified the leads yet"
+    assert evidence.counter_label == "turn 2"
+    # the row id carries the meaning now, so the detail must not repeat it
+    assert "acknowledged the revision" not in evidence.detail
+
+
+def test_an_acknowledged_revision_is_not_counted_as_a_contradiction() -> None:
+    content = load_content()
+    extraction = Extraction(
+        consistency_flags=[
+            ConsistencyFlag(
+                conflicts_with_turn=0,
+                current_answer_span="three named leads at contract start",
+                prior_answer_span="we have not identified the leads yet",
+                acknowledged_revision=True,
+            )
+        ]
+    )
+    report = build_scored_report(
+        session_id=uuid.uuid4(),
+        status="complete",
+        turns=[_turn(index=1, ext=extraction)],
+        meters=[],
+        concern_statuses={},
+        content=content,
+    )
+    assert report.contradiction_count == 0
+    assert report.rate_stats.contradiction_count == 0
+
+
 def test_false_fact_finding_quotes_the_answer_and_the_source() -> None:
     content = load_content()
     extraction = Extraction(

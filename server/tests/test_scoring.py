@@ -40,6 +40,35 @@ def _backed_claim() -> Claim:
     )
 
 
+def _refuted_check() -> FactCheck:
+    return FactCheck(
+        claim="PM has eighteen years",
+        answer_span="eighteen years",
+        source_document_id=SourceDocument.written_proposal,
+        source_quote="twelve years managing federal software programs",
+        tier=1,
+        verdict=Verdict.refuted,
+    )
+
+
+def _hidden_flag() -> ConsistencyFlag:
+    return ConsistencyFlag(
+        conflicts_with_turn=1,
+        current_answer_span="region by region over three weeks",
+        prior_answer_span="a single weekend maintenance window",
+        acknowledged_revision=False,
+    )
+
+
+def _revision_flag() -> ConsistencyFlag:
+    return ConsistencyFlag(
+        conflicts_with_turn=1,
+        current_answer_span="our top risk now is staffing ramp-up",
+        prior_answer_span="the biggest risk is data-migration integrity",
+        acknowledged_revision=True,
+    )
+
+
 # --- red line fires first ---------------------------------------------------
 
 
@@ -218,7 +247,8 @@ def test_backed_beats_cited_no_double_count():
 
 
 def test_cited_plus_contradiction_nets_zero():
-    # +1 approach_cited AND -1 contradiction => net 0; both rows recorded.
+    # -1 contradiction + 1 approach_cited = 0 by sum, and the ceiling holds it
+    # at 0 regardless; both rows recorded.
     ext = Extraction(
         sub_question_coverage=[
             SubQuestionCoverage(id="tech_1", addressed=Addressed.partial, span="partial answer")
@@ -537,6 +567,112 @@ def test_bare_commitment_is_not_evidence_backed():
     out = score_turn(ext, _rubric())
     assert "evidence_backed" not in out.matched_rows
     assert out.support_delta == 0
+
+
+# --- the integrity ceiling --------------------------------------------------
+
+
+def test_false_fact_ceilings_a_backed_answer_at_zero():
+    # -1 false_fact + 2 evidence_backed = +1 before the ceiling, 0 after.
+    ext = Extraction(claims=[_backed_claim()], fact_checks=[_refuted_check()])
+    out = score_turn(ext, _rubric())
+    assert out.support_delta == 0
+    assert out.raw_support_delta == 1
+    assert out.integrity_ceiling is True
+    assert out.matched_rows == ["false_fact", "evidence_backed"]
+    assert out.capped is False  # the ceiling is not the red-line meter pin
+
+
+def test_hidden_contradiction_ceilings_a_backed_answer_at_zero():
+    ext = Extraction(claims=[_backed_claim()], consistency_flags=[_hidden_flag()])
+    out = score_turn(ext, _rubric())
+    assert out.support_delta == 0
+    assert out.raw_support_delta == 1
+    assert out.integrity_ceiling is True
+    assert out.matched_rows == ["contradiction", "evidence_backed"]
+
+
+def test_the_ceiling_never_lifts_a_negative_delta():
+    # dodge (-2) + false fact (-1) = -3, clamps to -2; a 0 ceiling must not raise it.
+    ext = Extraction(
+        dodges=[Dodge(sub_question_id="s", type=DodgeType.deflection, answer_span="e")],
+        fact_checks=[_refuted_check()],
+    )
+    out = score_turn(ext, _rubric())
+    assert out.support_delta == -2
+    # nothing was withheld, so the report has no subtraction to explain
+    assert out.integrity_ceiling is False
+
+
+def test_the_ceiling_applies_before_the_over_limit_penalty():
+    ext = Extraction(claims=[_backed_claim()], fact_checks=[_refuted_check()])
+    scored = score_turn(ext, _rubric())
+    out = apply_limit_penalty(
+        scored,
+        _rubric(),
+        LimitMeasurement(
+            kind=LimitKind.text_words, measured=210, warning_threshold=150, limit_threshold=200
+        ),
+    )
+    assert out.support_delta == -1  # 0 after the ceiling, then -1 for length
+    assert out.integrity_ceiling is True
+
+
+def test_a_red_line_ignores_the_ceiling_entirely():
+    ext = Extraction(
+        red_line_hits=[
+            RedLineHit(
+                source_id="marcus_pws",
+                source_kind=RedLineSourceKind.non_negotiable,
+                span="we'll also do X outside scope",
+                why="promised work outside the PWS",
+            )
+        ],
+        fact_checks=[_refuted_check()],
+    )
+    out = score_turn(ext, _rubric())
+    assert out.support_delta == -2
+    assert out.capped is True
+    assert out.matched_rows == ["red_line"]
+    assert out.integrity_ceiling is False
+
+
+# --- acknowledged revision --------------------------------------------------
+
+
+def test_an_acknowledged_revision_scores_zero_on_its_own_row():
+    ext = Extraction(consistency_flags=[_revision_flag()])
+    out = score_turn(ext, _rubric())
+    assert out.support_delta == 0
+    # its own row, not `unsubstantiated`: the report must name what happened
+    assert out.matched_rows == ["acknowledged_revision"]
+    assert out.integrity_ceiling is False
+
+
+def test_an_acknowledged_revision_does_not_ceiling_positive_rows():
+    ext = Extraction(claims=[_backed_claim()], consistency_flags=[_revision_flag()])
+    out = score_turn(ext, _rubric())
+    assert out.support_delta == 2
+    assert out.integrity_ceiling is False
+    assert out.matched_rows == ["acknowledged_revision", "evidence_backed"]
+
+
+def test_archived_score_json_without_the_new_field_still_validates():
+    # Sessions scored before v4 have no `integrity_ceiling` key. They must load,
+    # because the report re-derives every archived turn (see the spec, §4).
+    legacy = ScoreOutput(support_delta=-1, matched_rows=["contradiction"])
+    assert legacy.integrity_ceiling is False
+
+
+def test_one_honest_revision_does_not_cover_a_hidden_flip():
+    ext = Extraction(
+        claims=[_backed_claim()],
+        consistency_flags=[_hidden_flag(), _revision_flag()],
+    )
+    out = score_turn(ext, _rubric())
+    assert out.support_delta == 0  # -1 + 2 = +1, ceilinged to 0
+    assert out.integrity_ceiling is True
+    assert out.matched_rows == ["contradiction", "acknowledged_revision", "evidence_backed"]
 
 
 # --- meter arithmetic -------------------------------------------------------
