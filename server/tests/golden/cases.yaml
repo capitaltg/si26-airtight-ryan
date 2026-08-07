@@ -106,16 +106,18 @@
     handles the LCS data migration, and we expose a versioned REST API that the
     Payments Engine, Benefits Portal, and data warehouse read case status from.
   expected:
-    support_delta: 1
+    support_delta: 2
     capped: false
-    matched_rows: [approach_cited]
+    matched_rows: [evidence_backed]
   note: >-
-    Concrete, compliant architecture that covers the sub-questions, but no
-    staffing/schedule/past-performance evidence -> approach_cited, not
-    evidence_backed. FRAGILE: the proposal names AWS GovCloud and the
-    integration set, so if the model records a tier-1 `supported` check against
-    those claims this becomes evidence_backed +2. Decide which is right on the
-    first live run.
+    The FRAGILE branch this case was authored to decide, settled on the first
+    live run: the proposal names AWS GovCloud and all three integrations, the
+    model records tier-1 `supported` checks against them, and the empirical path
+    to evidence_backed fires. That is the right call — rubric v3 added that path
+    precisely so a claim the frozen documents confirm counts as evidence rather
+    than as bare assertion, and these claims are confirmed. approach_cited is
+    what an unconfirmable but concrete architecture earns; this one is
+    checkable and checks out.
 
 - id: approach_past_performance
   concern_id: past_performance
@@ -142,13 +144,19 @@
     systems in parallel for 60 days with reconciled outputs before retiring LCS,
     and take structured knowledge transfer from Meridian.
   expected:
-    support_delta: 1
+    support_delta: 2
     capped: false
-    matched_rows: [approach_cited]
+    matched_rows: [evidence_backed]
   note: >-
-    Compliant, specified commitments that cover the concern but carry no named
-    personnel / past-performance backing -> approach_cited. Contrast with
-    backed_transition_migration_lead.
+    Compliant, specified commitments covering the concern. Authored as
+    approach_cited on the theory that no named personnel or past-performance
+    backing meant no evidence, but every commitment here (90 calendar days, the
+    60-day parallel run, knowledge transfer from Meridian) is confirmed almost
+    word for word by proposal sections 1 and 3, so the empirical path pays +2 on
+    the documents alone. Consistent with approach_architecture_concrete and
+    false_fact_record_count, settled the same way on the same run. The cost is
+    that the contrast with backed_transition_migration_lead is now weaker: both
+    are +2, and only the reason differs.
 
 # --- evidence_backed (+2): a commitment backed by specifics ----------------
 
@@ -199,21 +207,27 @@
     The answer holds no fact or commitment claim to link, so the requires
     contract leaves no coverage row to promote regardless.
 
-- id: dodge_risk_deflection
-  concern_id: risk
-  persona_id: technical_evaluator
+- id: dodge_cost_deflection
+  concern_id: cost_realism
+  persona_id: contracting_officer
   answer: >-
-    I would rather focus on the strengths of our approach than dwell on
-    hypotheticals. Our track record speaks for itself and we are confident in
-    the team.
+    Our pricing has been through a full internal review and I am comfortable
+    with where it landed. Rather than go line by line, let me tell you about the
+    team we have assembled for this work.
   expected:
     support_delta: -2
     capped: false
     matched_rows: [dodge]
   note: >-
-    Deflection, no named risk. FRAGILE: "confident in the team" borders on the
-    risk red line "denies that any real risk exists"; if it grades as a red line
-    during calibration, soften the answer or move the case.
+    Topic switch away from the staffing-basis question, no figure and no
+    commitment. Moved here from the risk concern during calibration, which the
+    original FRAGILE note listed as the fallback if softening the answer did not
+    work. It did not: on the risk concern any refusal to name a risk grades as
+    the red line "denies that any real risk exists", and two rewrites could not
+    separate evading the question from denying there is anything to answer. That
+    red line is doing its job, so the case moved instead. cost_realism's red
+    lines are about off-proposal terms and scope creep, neither of which a
+    deflection touches, so the dodge stands alone here.
 
 # --- false_fact (-1): a checkable claim that is refuted --------------------
 
@@ -226,10 +240,15 @@
   expected:
     support_delta: 0
     capped: false
-    matched_rows: [false_fact, approach_cited]
+    matched_rows: [false_fact, evidence_backed]
   note: >-
     ~42M records per PWS 3.1, so "twelve million" is refuted (-1). The wave +
-    reconciliation approach still covers the concern (+1) -> net 0.
+    reconciliation approach is quoted almost verbatim from the proposal, so the
+    model records a tier-1 `supported` check on it and the empirical path pays
+    +2 rather than +1. Either way the v4 ceiling holds the turn at 0, which is
+    the point of the case. This case swung between the two rows before the
+    prompt asked for `SubQuestionCoverage.span`; with coverage no longer being
+    silently discarded it settles on evidence_backed.
 
 - id: false_fact_pm_years
   concern_id: key_personnel
@@ -327,19 +346,26 @@
   concern_id: key_personnel
   persona_id: technical_evaluator
   answer: >-
-    Karen Holloway brings twelve years and led the 1.8-million-case Veterans
-    Claims Office modernization. As for her exact time split on this contract, we
-    will work that out during onboarding.
+    Karen Holloway brings twelve years managing federal software programs,
+    including the 1.8-million-case-per-year modernization at the Veterans Claims
+    Office. As for her exact time split on this contract, we will work that out
+    during onboarding.
   expected:
-    support_delta: -1
+    support_delta: 0
     capped: false
-    matched_rows: [dodge, approach_cited]
+    matched_rows: [dodge, evidence_backed]
   note: >-
-    Covers pm_experience concretely (+1) but dodges the commitment sub-question
-    (-2) -> net -1. The experience is empirical, not a backed commitment, so this
-    is approach_cited, not evidence_backed. FRAGILE: the proposal supports both
-    the twelve years and the VCO modernization, so a tier-1 `supported` check on
-    either would make this evidence_backed and net 0 instead of -1.
+    Covers pm_experience (+2) but dodges the commitment sub-question (-2) ->
+    net 0. This is the FRAGILE branch the case predicted: the proposal supports
+    both the twelve years and the VCO modernization, so a tier-1 `supported`
+    check lands on them and the empirical path fires. Settled that way on the
+    live run once grounding stopped rejecting those checks over the Markdown
+    bold in the proposal's personnel bullets. The clamp/mixing this case exists
+    to exercise still happens, at +2/-2 instead of +1/-2. The answer originally
+    said Holloway "led" the VCO modernization; the proposal only places her on
+    it, so that word tripped the unsupported_experience red line on two runs out
+    of three. It now tracks the proposal's own wording, which is what the case
+    always meant to assert.
 
 # --- integrity ceiling (v4): a false statement holds the turn at 0 -----------
 

@@ -342,6 +342,20 @@ def test_prompt_states_the_requires_contract_and_the_link_field() -> None:
     assert "evidence_claim_spans" in prefix
 
 
+def test_prompt_asks_for_the_coverage_span_it_later_enforces() -> None:
+    """`SubQuestionCoverage.span` is optional in the schema but mandatory
+    downstream: grounding discards a full/partial row without one, and the report
+    only prints an approach_cited finding when it is set. The prompt has to ask
+    for it, or the model leaves it null and real coverage is thrown away.
+    """
+    content, persona, _ = _fixture()
+    prefix = build_extraction_static_prefix(persona=persona, content=content)
+    coverage_rule = prefix.split("Coverage rules.")[1].split("Fact-check rules.")[0]
+    # The row's own `span`, not the `span` the link field already borrows from a
+    # claim -- those are different fields and the rule has to name both.
+    assert "quote from the answer in `span`" in coverage_rule
+
+
 # --- normalized cache-key acceptance: whitespace/case variants replay, wording
 # and context changes still miss (server/app/bedrock/cache.py normalize_answer) ---
 
@@ -868,11 +882,37 @@ def test_pin_defaults_to_null_so_existing_callers_are_unpinned() -> None:
     assert client.calls == 2
 
 
-def test_extractor_contract_version_is_three() -> None:
-    # `acknowledged_revision` became score-bearing and the prompt now states the
-    # three-part bar for it, so a v2 pin — which set that field with no rules at
-    # all — must miss rather than feed unrated judgment straight into the number.
-    assert EXTRACTOR_CONTRACT_VERSION == 3
+def test_prompt_renders_persona_exemplars_for_classification() -> None:
+    """The hand-graded exemplars are the documented anti-drift lever (see
+    tests/golden/test_golden.py). They were loaded, stored, and editable, but
+    rendered into no prompt, so authoring one changed nothing.
+    """
+    content = load_content()
+    persona = content.personas["program_rep"]
+    prefix = build_extraction_static_prefix(persona=persona, content=content)
+    assert "We are committed to a smooth transition and a great user experience." in prefix
+    assert "Sentiment with no support model" in prefix
+
+
+def test_exemplar_block_withholds_the_hand_graded_number() -> None:
+    """Extraction never sees a score. The exemplars carry one, so the block
+    renders the answer and the judgment and drops `support_delta` — otherwise
+    wiring calibration in would hand the model the number the engine owns.
+    """
+    content = load_content()
+    persona = content.personas["program_rep"]
+    prefix = build_extraction_static_prefix(persona=persona, content=content)
+    block = prefix.split("## Worked examples")[1]
+    assert "support_delta" not in block
+
+
+def test_extractor_contract_version_is_five() -> None:
+    # v4 asked for `SubQuestionCoverage.span`, which the prompt had never
+    # requested and grounding had been discarding every full/partial row for.
+    # v5 renders the persona's worked exemplars. Both change what the model is
+    # asked to report, so earlier pins must miss rather than replay a judgment
+    # made under the old contract.
+    assert EXTRACTOR_CONTRACT_VERSION == 5
 
 
 def test_the_prompt_states_the_three_part_revision_bar() -> None:

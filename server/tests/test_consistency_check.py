@@ -40,6 +40,8 @@ def _turn(**over: object) -> dict:
         "row_counts": {"approach_cited": 1},
         "support_delta": 1,
         "raw_support_delta": 1,
+        "integrity_ceiling": False,
+        "limit": None,
         "meter": 51,
         "capped": False,
         "concern_status": "satisfied",
@@ -48,6 +50,21 @@ def _turn(**over: object) -> dict:
     }
     base.update(over)
     return base
+
+
+def _limit(**over: object) -> dict:
+    """An over-limit measurement as the API returns it on a long answer."""
+    limit = {
+        "kind": "text_words",
+        "measured": 240.0,
+        "warning_threshold": 150.0,
+        "limit_threshold": 200.0,
+        "exceeded": True,
+        "penalty_applied": True,
+        "penalty_value": -1,
+    }
+    limit.update(over)
+    return limit
 
 
 def _run(*turns: dict) -> dict:
@@ -391,8 +408,13 @@ def test_check_scenario_prints_score_summaries_and_score_divergence(
             _run(_clarification(), _turn()),
             _run(
                 _clarification(),
+                # The raw sum moves with the delta: a run that scored the same
+                # rows differently diverged on the arithmetic too, and a fixture
+                # that changed only the persisted number would describe a turn
+                # the engine cannot produce.
                 _turn(
                     support_delta=-1,
+                    raw_support_delta=-1,
                     meter=49,
                     reply="Different wording entirely.",
                 )
@@ -414,7 +436,7 @@ def test_check_scenario_prints_score_summaries_and_score_divergence(
     assert "score summary:" in output
     assert "run 1: technical_approach rows=approach_cited delta=+1 meter=51 capped=False" in output
     assert "run 2: technical_approach rows=approach_cited delta=-1 meter=49 capped=False" in output
-    assert "SCORE DIVERGED: support_delta, meter" in output
+    assert "SCORE DIVERGED: support_delta, raw_support_delta, meter" in output
     assert 'final_meters={"technical_evaluator": [51, false]}' in output
     assert "reply" in output
 
@@ -426,7 +448,12 @@ def test_consistency_report_records_each_scored_turn_and_score_divergence() -> N
             _run(_clarification(), _turn()),
             _run(
                 _clarification(),
-                _turn(support_delta=-1, meter=49, reply="Different wording entirely."),
+                _turn(
+                    support_delta=-1,
+                    raw_support_delta=-1,
+                    meter=49,
+                    reply="Different wording entirely.",
+                ),
             ),
         ],
     )
@@ -442,6 +469,8 @@ def test_consistency_report_records_each_scored_turn_and_score_divergence() -> N
                     "row_counts": {"approach_cited": 1},
                     "support_delta": 1,
                     "raw_support_delta": 1,
+                    "integrity_ceiling": False,
+                    "limit": None,
                     "meter": 51,
                     "capped": False,
                     "concern_status": "satisfied",
@@ -458,7 +487,9 @@ def test_consistency_report_records_each_scored_turn_and_score_divergence() -> N
                     "matched_rows": ["approach_cited"],
                     "row_counts": {"approach_cited": 1},
                     "support_delta": -1,
-                    "raw_support_delta": 1,
+                    "raw_support_delta": -1,
+                    "integrity_ceiling": False,
+                    "limit": None,
                     "meter": 49,
                     "capped": False,
                     "concern_status": "satisfied",
@@ -471,7 +502,7 @@ def test_consistency_report_records_each_scored_turn_and_score_divergence() -> N
         {
             "run": 2,
             "differences": report["comparisons"][0]["differences"],
-            "score_differences": ["support_delta", "meter"],
+            "score_differences": ["support_delta", "raw_support_delta", "meter"],
         }
     ]
     assert any(
@@ -714,6 +745,106 @@ def test_score_summary_shows_counts_and_the_clamp() -> None:
     summary = _score_summary(run)
     assert "false_fact x3" in summary
     assert "clamped from -5" in summary
+
+
+def test_score_summary_names_the_integrity_ceiling() -> None:
+    """A ceilinged turn stays inside [-2, +2], so the old clamp note never fired.
+
+    evidence_backed (+2) with one false_fact (-1) sums to +1 and is held to 0 by
+    the rubric v4 ceiling. Reporting a bare `delta=+0` there hides the whole
+    reason the row exists.
+    """
+    run = _run(
+        _turn(
+            matched_rows=["false_fact", "evidence_backed"],
+            row_counts={"false_fact": 1, "evidence_backed": 1},
+            support_delta=0,
+            raw_support_delta=1,
+            integrity_ceiling=True,
+        )
+    )
+    summary = _score_summary(run)
+    assert "held to +0 by the integrity ceiling" in summary
+    assert "clamped" not in summary
+
+
+def test_score_summary_names_the_over_limit_penalty() -> None:
+    run = _run(_turn(support_delta=0, raw_support_delta=1, limit=_limit()))
+    summary = _score_summary(run)
+    assert "over_limit -1" in summary
+    assert "240 > 200 text_words" in summary
+    # The penalty, not the ceiling, explains the drop from the raw sum.
+    assert "integrity ceiling" not in summary
+
+
+def test_turn_record_carries_the_limit_and_derives_the_ceiling() -> None:
+    """The API never returns `integrity_ceiling`; the runner reconstructs it.
+
+    Both reductions are in play here: the rows sum to +1, the ceiling holds that
+    to 0, and the over-limit penalty then takes the persisted delta to -1.
+    """
+    prompt = {"is_follow_up": False, "prompt": "How many records?"}
+    res = {
+        "persona_id": "technical_evaluator",
+        "concern_id": "technical_approach",
+        "matched_rows": ["evidence_backed", "false_fact"],
+        "row_counts": {"evidence_backed": 1, "false_fact": 1},
+        "raw_support_delta": 1,
+        "support_delta": -1,
+        "limit": _limit(),
+        "meter": 49,
+        "capped": False,
+        "concern_status": "partial",
+        "reply": "That number is not what the PWS says.",
+        "rationale": "One refuted count against documented staffing.",
+    }
+    record = _turn_record(prompt, "Twelve million records, and here is the crew.", res)
+    assert record["limit"] == _limit()
+    assert record["integrity_ceiling"] is True
+
+
+def test_turn_record_reports_no_ceiling_when_the_clamp_explains_the_drop() -> None:
+    prompt = {"is_follow_up": False, "prompt": "How many records?"}
+    res = {
+        "persona_id": "technical_evaluator",
+        "concern_id": "technical_approach",
+        "matched_rows": ["dodge", "false_fact"],
+        "row_counts": {"dodge": 1, "false_fact": 3},
+        "raw_support_delta": -5,
+        "support_delta": -2,
+        "limit": None,
+        "meter": 45,
+        "capped": False,
+        "concern_status": "dodged",
+        "reply": "That is not an answer.",
+        "rationale": "Dodged, with three refuted counts.",
+    }
+    record = _turn_record(prompt, "Hard to say.", res)
+    assert record["integrity_ceiling"] is False
+
+
+def test_limit_change_is_a_score_divergence() -> None:
+    """Same rows, same delta, different measurement — still not reproducible."""
+    base = _run(_turn(support_delta=0, raw_support_delta=1, limit=_limit()))
+    other = _run(
+        _turn(support_delta=0, raw_support_delta=1, limit=_limit(measured=260.0))
+    )
+    assert any("limit" in d for d in _score_differences(base, other))
+
+
+def test_integrity_ceiling_change_is_a_score_divergence() -> None:
+    base = _run(_turn(support_delta=0, raw_support_delta=1, integrity_ceiling=True))
+    other = _run(_turn(support_delta=0, raw_support_delta=0, integrity_ceiling=False))
+    assert any("integrity_ceiling" in d for d in _score_differences(base, other))
+
+
+def test_report_records_the_ceiling_and_the_limit() -> None:
+    run = _run(
+        _turn(support_delta=-1, raw_support_delta=1, integrity_ceiling=True, limit=_limit())
+    )
+    turn = consistency_report("fixture", [run])["runs"][0]["score_turns"][0]
+    assert turn["integrity_ceiling"] is True
+    assert turn["limit"] == _limit()
 
 
 def test_turn_record_persists_counts_and_the_raw_delta() -> None:

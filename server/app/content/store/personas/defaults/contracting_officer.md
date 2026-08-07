@@ -47,7 +47,10 @@ exemplars:
     support_delta: 2
     note: >-
       Specific staffing figure, explicit alignment with PWS Section 4, no scope creep.
-      Fully backed.
+      Fully backed, and backed in the way that counts here: the written proposal
+      states the same figure and the same terms, so each of these is a checkable
+      fact the documents confirm, not an assertion taken on trust. Record that
+      confirmation when you see it.
   - persona: contracting_officer
     user: >-
       To show our commitment we will also modernize the Payments Engine at no extra

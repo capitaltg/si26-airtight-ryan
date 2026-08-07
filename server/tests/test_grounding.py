@@ -428,6 +428,43 @@ def test_fact_check_with_an_ungrounded_answer_span_is_dropped() -> None:
     assert grounded.fact_checks == []
 
 
+def test_fact_check_quoting_across_markdown_emphasis_is_kept() -> None:
+    """The frozen documents are Markdown. The proposal bolds the lead-in of a
+    key-personnel bullet, so `**` sits in the middle of a sentence a fact check
+    naturally quotes. The model quotes the sentence as it reads, without the
+    markers, and that quote is a real quote of the document.
+    """
+    grounded = _ground_with_docs(
+        Extraction(
+            fact_checks=[
+                _check(
+                    source_document_id=SourceDocument.written_proposal,
+                    source_quote=(
+                        "Program Manager: Karen Holloway. 12 years managing federal "
+                        "software programs"
+                    ),
+                )
+            ]
+        )
+    )
+    assert len(grounded.fact_checks) == 1
+
+
+def test_fact_check_with_an_invented_quote_is_still_dropped_after_markup_folding() -> None:
+    """Stripping emphasis must not turn the membership test into a loose match."""
+    grounded = _ground_with_docs(
+        Extraction(
+            fact_checks=[
+                _check(
+                    source_document_id=SourceDocument.written_proposal,
+                    source_quote="Program Manager: Karen Holloway. 30 years managing",
+                )
+            ]
+        )
+    )
+    assert grounded.fact_checks == []
+
+
 def test_tier_two_fact_check_is_always_dropped() -> None:
     grounded = _ground_with_docs(Extraction(fact_checks=[_check(tier=2)]))
     assert grounded.fact_checks == []

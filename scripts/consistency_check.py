@@ -5,6 +5,12 @@ This is the executable form of the consistency claim in
 docs/ideation/2-scoring-and-drift.md: the same answer to the same prompt must
 produce the same rows, the same delta, the same meter, and the same reply.
 
+"The same delta" means the whole arithmetic, not just the final number: the raw
+row sum, the [-2, +2] clamp, the rubric v4 integrity ceiling that holds a turn
+carrying a false fact or an unexplained contradiction at or below 0, and the
+over-limit penalty applied after both. Two runs that reach the same
+``support_delta`` by different routes are a divergence.
+
 Three modes test different things:
 
   default (cache on)
@@ -57,6 +63,7 @@ from typing import Any
 from replay_session import (
     DEFAULT_BASE_URL,
     FIXTURE_DIR,
+    _delta_note,
     _format_rows,
     _get,
     _persona_snapshots,
@@ -81,6 +88,12 @@ REPORT_DIR = Path(REPO_ROOT) / "docs" / "reports"
 # Fields compared turn by turn. `prompt` and `reply` are the model's own words;
 # the rest is the engine's arithmetic. Both have to hold for a run to count as
 # reproducible, since the user sees both.
+#
+# `raw_support_delta`, `integrity_ceiling`, and `limit` are compared alongside
+# `support_delta` rather than treated as derived detail: each is a separate
+# reduction between the raw row sum and the persisted number, and two runs can
+# land on the same `support_delta` by different arithmetic. A turn clamped from
+# +3 and a turn held at 0 by the integrity ceiling are not the same turn.
 COMPARED = (
     "kind",
     "persona_id",
@@ -92,6 +105,8 @@ COMPARED = (
     "row_counts",
     "support_delta",
     "raw_support_delta",
+    "integrity_ceiling",
+    "limit",
     "meter",
     "capped",
     "concern_status",
@@ -104,6 +119,8 @@ SCORE_FIELDS = (
     "row_counts",
     "support_delta",
     "raw_support_delta",
+    "integrity_ceiling",
+    "limit",
     "meter",
     "capped",
     "concern_status",
@@ -194,10 +211,9 @@ def _score_summary(run: dict[str, Any]) -> str:
         if turn.get("kind") != "answer":
             continue
         rows = _format_rows(turn.get("matched_rows", []), turn.get("row_counts"))
-        raw = turn.get("raw_support_delta", turn["support_delta"])
-        clamp = f" (clamped from {raw:+d})" if abs(raw) > 2 else ""
         turns.append(
-            f"{turn['concern_id']} rows={rows} delta={turn['support_delta']:+d}{clamp} "
+            f"{turn['concern_id']} rows={rows} "
+            f"delta={turn['support_delta']:+d}{_delta_note(turn)} "
             f"meter={turn['meter']} capped={turn['capped']}"
         )
     scored = " | ".join(turns) or "(no scored turns)"
@@ -385,6 +401,8 @@ def consistency_report(
                     "row_counts": turn.get("row_counts", {}),
                     "support_delta": turn["support_delta"],
                     "raw_support_delta": turn.get("raw_support_delta", turn["support_delta"]),
+                    "integrity_ceiling": turn.get("integrity_ceiling", False),
+                    "limit": turn.get("limit"),
                     "meter": turn["meter"],
                     "capped": turn["capped"],
                     "concern_status": turn["concern_status"],

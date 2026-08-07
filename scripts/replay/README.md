@@ -28,22 +28,53 @@ Point at a non-default API with `--base-url` or `AIRTIGHT_API_URL`.
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `scenario-mixed.json`         | a believable full rehearsal: a clarify, clean passes, a coverage-gap follow-up that recovers, an over-claim, a concern that closes failed        |
 | `scenario-contradiction.json` | Tier-0 `contradiction`: four conflicts between two things the presenter said, on facts absent from the RFP and proposal so nothing else can fire |
+| `scenario-acknowledged-revision.json` | the mirror of the above: the same four-conflict shape, but each flip names the old position, the new one, and why it changed, so rubric v4 pays `acknowledged_revision` at 0 instead of charging `contradiction` |
 | `scenario-false-fact.json`    | Tier-1 `false_fact`: six claims refutable against the RFP or written proposal, chosen to stay off the authored red lines                         |
 | `scenario-custom-dana.json`   | full agenda with a temporary technical-evaluator customization                                                                             |
 | `scenario-custom-marcus.json` | full agenda with a temporary contracting-officer customization                                                                            |
 | `scenario-custom-priya.json`  | full agenda with a temporary program-representative customization                                                                          |
 
 A scenario may declare `"expect_rows": ["contradiction"]` — the rubric rows that
-must fire somewhere in the run. `consistency_check.py` treats an expected row
-that never fires as a failure, so a scenario that drifts into testing nothing
-says so instead of passing quietly.
+must fire somewhere in the run. Row ids come from
+[`rubric.yaml`](../../server/app/content/store/rubric.yaml); `consistency_check.py`
+treats an expected row that never fires as a failure, so a scenario that drifts
+into testing nothing says so instead of passing quietly.
+
+`scenario-contradiction.json` and `scenario-acknowledged-revision.json` are meant
+to be read together. Both plant Tier-0 conflicts between two things the presenter
+said, on facts absent from both documents; the only difference is whether the
+presenter explains the flip. Run them back to back and the rubric v4 split — a
+concealed change charged as `contradiction`, an explained one recorded as
+`acknowledged_revision` at 0 — is the whole delta between the two runs.
+
+The revision fixture was written from the authored rules, not transcribed from a
+recorded run, so it carries no observed-behaviour note. Run it against a live
+stack before trusting any specific row or meter in it.
 
 ## Consistency check
 
 `../consistency_check.py` replays a scenario N times and diffs the runs turn by
-turn — prompt, answer sent, matched rows, delta, meter, capped, concern status,
-reply, rationale — plus the final meters. Session ids and timestamps are
-excluded; they are supposed to differ.
+turn — prompt, answer sent, matched rows and their counts, the full delta
+arithmetic, meter, capped, concern status, reply, rationale — plus the final
+meters. Session ids and timestamps are excluded; they are supposed to differ.
+
+"The full delta arithmetic" is four numbers, not one, because three separate
+reductions sit between the summed rubric rows and the number that reaches the
+meter. Two runs that arrive at the same `support_delta` by different routes have
+diverged, so each is compared on its own:
+
+| field               | what it is                                                                                                             |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `raw_support_delta` | the matched rows summed, before anything is applied                                                                    |
+| `support_delta`     | the number persisted to the meter, after all three reductions                                                          |
+| `integrity_ceiling` | whether a rubric v4 ceiling row (`false_fact`, `contradiction`) held the turn at or below 0                            |
+| `limit`             | the measured length, its threshold, and the over-limit penalty — the reason a long answer can reach -3                 |
+
+`integrity_ceiling` is the one field the runner derives rather than reads: the
+engine computes it but the API does not return it, and the clamped raw sum
+sitting above the semantic delta identifies it exactly. The play-by-play spells
+each reduction out in place, e.g. `delta=+0 (held to +0 by the integrity
+ceiling)`.
 
 ```sh
 python3 scripts/consistency_check.py scripts/replay/scenario-contradiction.json

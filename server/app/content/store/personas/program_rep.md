@@ -62,5 +62,9 @@ exemplars:
   - persona: program_rep
     user: We are committed to a smooth transition and a great user experience.
     support_delta: 0
-    note: Sentiment with no support model, no plan, nothing to hold onto. No credit.
+    note: >-
+      Sentiment with no support model, no plan, nothing to hold onto. It stays on
+      the question rather than steering away from it, so this is generic
+      reassurance and not a dodge. Reassurance earns nothing; it does not cost
+      anything either.
 ```

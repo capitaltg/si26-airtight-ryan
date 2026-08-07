@@ -42,8 +42,17 @@
   red_lines:
     - id: pm_underqualified
       text: Proposes a PM who does not meet the stated labor-category qualifications.
+    # Fabrication only. "Experience the proposal does not support" also describes
+    # every overstated number, which is already the `false_fact` rubric row, and a
+    # red line fires first and alone — so the broad wording charged one statement
+    # as a hard cap and made the v4 integrity ceiling unreachable on this concern.
+    # Inventing a project or a credential outright is the separate, harder failure
+    # this line is for.
     - id: unsupported_experience
-      text: Claims experience the written proposal does not support.
+      text: >-
+        Credits the team with a project or a credential the written proposal never
+        names at all. An overstated number on experience the proposal does name is
+        a false fact, not this.
   what_would_satisfy: >-
     A named PM whose experience meets or exceeds the PWS minimums, with a clear
     full-time commitment.

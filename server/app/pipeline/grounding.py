@@ -15,10 +15,11 @@ validated against the authored ids of its ``source_kind``.
 
 A ``FactCheck`` is kept only when its ``answer_span`` is quoted in the answer
 and its ``source_quote`` is quoted in the document named by
-``source_document_id``. Tier 2 (open web) is never verifiable — there is no
-document to check its quote against — so it is always dropped outright, ahead
-of and independent from the document lookup that catches a fabricated or
-mislabeled ``source_document_id`` on a Tier-1 check.
+``source_document_id``. That document is Markdown, so the quote is matched with
+emphasis markers removed from both sides — see ``_fold_document``. Tier 2 (open
+web) is never verifiable — there is no document to check its quote against — so
+it is always dropped outright, ahead of and independent from the document lookup
+that catches a fabricated or mislabeled ``source_document_id`` on a Tier-1 check.
 
 ``SubQuestionCoverage.evidence_claim_spans`` names the claims that carry a
 sub-question's answer. A link is kept only when it quotes the span of a claim
@@ -29,6 +30,7 @@ discarded. ``pipeline.coverage_contract`` reads what is left.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Mapping
 
 from app.pipeline.span_anchor import fold
@@ -38,12 +40,39 @@ from app.schemas.extraction import Addressed, Extraction, RedLineSourceKind, Sou
 logger = logging.getLogger(__name__)
 
 
+# The frozen sources are Markdown, and the proposal bolds the lead-in of each
+# key-personnel and past-performance bullet: `- **Program Manager: Karen
+# Holloway.** 12 years managing federal software programs`. The sentence a fact
+# check wants to quote runs straight through the closing `**`, so a quote of the
+# text as it reads is not a substring of the raw file and a true check gets
+# dropped as fabricated.
+#
+# Emphasis markers only, and only on the document side of the test. `_` is left
+# alone on purpose: it is a word character in the ids these documents name
+# (`rfp_pws`, `technical_approach`), so stripping it would fuse distinct
+# identifiers into one another. Headings and list bullets are left alone too --
+# a quote spanning one is a quote across a structural boundary, which is the
+# fabrication this check exists to catch.
+_MARKDOWN_EMPHASIS = re.compile(r"[*`]")
+
+
 def _is_quoted(span: str | None, folded_answer: str) -> bool:
     """True when ``span`` occurs in the answer, ignoring case and whitespace runs."""
     if not span:
         return False
     needle, _ = fold(span)
     return bool(needle) and needle in folded_answer
+
+
+def _fold_document(text: str) -> str:
+    """Fold for the ``source_quote`` membership test, with emphasis markers gone.
+
+    Both sides of that test go through here, so a model that does include the
+    markers matches too. Only membership is asked of the result -- nothing slices
+    it back out of the raw document -- so dropping characters here is safe in a
+    way it would not be for ``span_anchor``, which needs its index mapping.
+    """
+    return fold(_MARKDOWN_EMPHASIS.sub("", text))[0]
 
 
 def _links_a_claim(link: str, folded_claim_spans: list[str]) -> bool:
@@ -181,7 +210,7 @@ def drop_ungrounded(
 
     # Folded once per document, not once per check: folding is O(len) and these
     # are the full RFP and proposal.
-    folded_documents = {name: fold(text)[0] for name, text in documents.items()}
+    folded_documents = {name: _fold_document(text) for name, text in documents.items()}
 
     fact_checks = []
     for check in extraction.fact_checks:
@@ -206,7 +235,7 @@ def drop_ungrounded(
                 check.source_document_id.value,
             )
             continue
-        if not _is_quoted(check.source_quote, folded_source):
+        if not _is_quoted(_MARKDOWN_EMPHASIS.sub("", check.source_quote), folded_source):
             logger.warning(
                 "dropped fact_check whose source_quote is absent from %s: %r",
                 check.source_document_id.value,
