@@ -233,13 +233,13 @@ def _turn_findings(
     for dodge in extraction.dodges:
         add("dodge", dodge.answer_span, dodge.explanation or dodge.type.value)
     for flag in extraction.consistency_flags:
-        detail = flag.explanation or "conflicts with an earlier answer"
-        if flag.acknowledged_revision:
-            detail = f"{detail} (presenter acknowledged the revision)"
+        # Same predicate `score_turn` uses. `add` skips any row not in
+        # `matched_rows`, so a mismatch here would silently drop the finding.
+        row = "acknowledged_revision" if flag.acknowledged_revision else "contradiction"
         add(
-            "contradiction",
+            row,
             flag.current_answer_span,
-            detail,
+            flag.explanation or "conflicts with an earlier answer",
             flag.prior_answer_span,
             f"turn {flag.conflicts_with_turn + 1}",
         )
@@ -350,7 +350,11 @@ def build_scored_report(
         for dodge in extraction.dodges:
             dodge_types[dodge.type.value] += 1
             dodge_count += 1
-        contradiction_count += len(extraction.consistency_flags)
+        # A revision is no longer a contradiction, and the stat tile is labelled
+        # "Contradictions". Revisions still surface as findings with both spans.
+        contradiction_count += sum(
+            1 for flag in extraction.consistency_flags if not flag.acknowledged_revision
+        )
         findings.extend(_turn_findings(turn, extraction, score, values, content))
         audits.append(_audit_turn(turn, extraction, score, content.rubric))
         if score.limit is not None and score.limit.penalty_applied:
