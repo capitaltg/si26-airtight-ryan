@@ -53,7 +53,12 @@ TOOL_NAME = "record_extraction"
 # `SubQuestionCoverage.evidence_claim_spans` was added to the tool schema. A
 # pinned v1 extraction has no links at all, so replaying it would demote every
 # coverage row to `none`. The bump makes those pins miss on purpose.
-EXTRACTOR_CONTRACT_VERSION = 2
+#
+# v3: `acknowledged_revision` became score-bearing (rubric v4) and the prompt now
+# states the three-part bar for it. A pinned v2 extraction set that field with no
+# rules at all, so replaying one would feed unrated judgment straight into the
+# number. The bump makes those pins miss on purpose.
+EXTRACTOR_CONTRACT_VERSION = 3
 
 ExtractionSource = Literal["pin", "response_cache", "fresh"]
 
@@ -122,7 +127,9 @@ def _render_concern(concern: Concern) -> str:
 # consistency_flags, which double-scores one error (-1 false_fact, -1
 # contradiction) and blames the presenter for contradicting themselves when they
 # did not. The empty-ledger case is stated as its own sentence because the model
-# raised a flag against turn 0 on the session's first turn.
+# raised a flag against turn 0 on the session's first turn. The revision bar is
+# spelled out because `acknowledged_revision` became score-bearing in rubric v4:
+# an undefined field feeding the number is model whim feeding the number.
 _LEDGER_RULES = (
     "Rules for `consistency_flags`. A flag means the answer conflicts with "
     "something the PRESENTER said in an earlier turn, listed above. "
@@ -131,7 +138,16 @@ _LEDGER_RULES = (
     "empty — there is nothing yet to contradict. "
     "A conflict with the solicitation or the written proposal is NOT a "
     "consistency flag: record it in `fact_checks` with `tier: 1` and a "
-    "`refuted` verdict. Never record the same conflict in both fields."
+    "`refuted` verdict. Never record the same conflict in both fields. "
+    "Rules for `acknowledged_revision`. Set it true only when the answer does "
+    "all three of these: refers to the earlier position, states the new "
+    "position, and gives a reason for the change. If any one of the three is "
+    "missing, set it false. Naming the old and the new position without a "
+    "reason is not an acknowledged revision. "
+    'TRUE: "Earlier I said a single weekend; after the dry run we found the '
+    'index rebuild runs long, so we are going region by region." '
+    'FALSE: "Earlier I would have pointed to data migration, but our top risk '
+    'is staffing ramp-up."'
 )
 
 

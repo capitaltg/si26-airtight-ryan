@@ -60,12 +60,25 @@ def _render_extraction_summary(extraction: Extraction) -> str:
         lines.append("Dodges:")
         lines.extend(f"  - {dodge.type.value}" for dodge in extraction.dodges)
     if extraction.consistency_flags:
-        lines.append("Contradicts an earlier answer:")
-        lines.extend(
-            f'  - (conflicts with turn {flag.conflicts_with_turn}) now: "'
-            f'{flag.current_answer_span}" / earlier: "{flag.prior_answer_span}"'
-            for flag in extraction.consistency_flags
-        )
+        # Same predicate `score_turn` and `_turn_findings` use: an openly
+        # explained revision is not a contradiction, and the persona must not
+        # be told it is one just because both surface from the same list.
+        hidden = [f for f in extraction.consistency_flags if not f.acknowledged_revision]
+        revised = [f for f in extraction.consistency_flags if f.acknowledged_revision]
+        if hidden:
+            lines.append("Contradicts an earlier answer:")
+            lines.extend(
+                f'  - (conflicts with turn {flag.conflicts_with_turn}) now: "'
+                f'{flag.current_answer_span}" / earlier: "{flag.prior_answer_span}"'
+                for flag in hidden
+            )
+        if revised:
+            lines.append("Openly revised an earlier answer:")
+            lines.extend(
+                f'  - (revises turn {flag.conflicts_with_turn}) now: "'
+                f'{flag.current_answer_span}" / earlier: "{flag.prior_answer_span}"'
+                for flag in revised
+            )
     if extraction.red_line_hits:
         lines.append("Red lines crossed:")
         lines.extend(f"  - {hit.why}" for hit in extraction.red_line_hits)
@@ -83,6 +96,18 @@ def _render_score(score: ScoreOutput) -> str:
             "A red line was crossed: this persona's support is now capped for the "
             "rest of the session. React as an evaluator whose confidence just hit a "
             "hard cap."
+        )
+    if score.integrity_ceiling:
+        # Named for the same reason consistency spans are passed above: a persona
+        # told to react to an invisible adjustment invents a source for it.
+        # `support_delta` is rendered without a sign here, unlike the line above:
+        # a ceilinged turn is always 0 or below and "+0" reads as a gain.
+        withheld = score.raw_support_delta - score.support_delta
+        lines.append(
+            f"Something in this answer was not true, so the turn is held at "
+            f"{score.support_delta}: {withheld:+d} of credit the answer otherwise "
+            "earned was withheld. React to an answer that covered ground but got "
+            "something wrong."
         )
     return "\n".join(lines)
 
