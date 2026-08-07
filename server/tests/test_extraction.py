@@ -879,7 +879,7 @@ def test_the_prompt_states_the_three_part_revision_bar() -> None:
     content = load_content()
     concern = content.concerns["risk"]
     suffix = build_extraction_dynamic_suffix(
-        answer="Earlier I said data migration; the profiling came back clean, so it is staffing now.",
+        answer="Earlier I said data migration; profiling came back clean, so it is staffing now.",
         concern=concern,
         prior_claims=[],
     )
