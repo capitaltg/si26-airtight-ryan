@@ -9,6 +9,9 @@ shaped this way; this file traces *how* the current code executes it.
 >
 > Updated 2026-08-06 for rubric v3: the `requires` contract check and the
 > empirical path to `evidence_backed`.
+>
+> Updated 2026-08-06 for rubric v4: the integrity ceiling and the
+> `acknowledged_revision` row.
 
 Five stages. Only stages 3 and 5 touch the number, and both are pure code.
 
@@ -67,14 +70,23 @@ No other row is evaluated. The persona's meter pins at 25 for the rest of the se
 |---|---|---|---|
 | `dodge` | any dodge present | -2 | once |
 | `false_fact` | refuted fact_check with `tier >= 1` | -1 | **once per fact** |
-| `contradiction` | any consistency flag | -1 | once |
+| `contradiction` | any *unacknowledged* consistency flag | -1 | once |
+| `acknowledged_revision` | any consistency flag the presenter openly explained | 0 | once |
 | `evidence_backed` | a commitment claim with `backing == backed`, **or** an `empirical_checkable` claim confirmed by a tier-1+ `supported` fact_check | +2 | once |
 | `approach_cited` | any sub-question still full/partial after the `requires` check, **and not** already `evidence_backed` | +1 | once |
 | `unsubstantiated` | nothing else matched | 0 | once |
 
 Row values are authored in `server/app/content/store/rubric.yaml`, not hardcoded.
 
-Two deliberate asymmetries in that table account for most of the confusion this engine
+After the clamp, any matched row that declares a `ceiling` in `rubric.yaml` holds
+the delta at or below it. `false_fact` and `contradiction` both declare `0`, so a
+turn containing a false statement cannot finish above 0 no matter what it also
+earned. `ScoreOutput.integrity_ceiling` records whether that actually lowered the
+number, which the reaction prompt reads to name the withheld credit. The over-limit
+penalty runs later and is not re-ceilinged, so a long answer with a false fact
+still reaches -1.
+
+Three deliberate asymmetries in that table account for most of the confusion this engine
 generates:
 
 - **`false_fact` is the only row that multiplies.** Three refuted facts charge -3 before
@@ -84,6 +96,13 @@ generates:
   against a frozen document, which is checked the same way a refutation is. The
   row's description always said "past-performance evidence"; before rubric v3 the
   code did not.
+- **Two rows fire off the same finding, and which one decides the ceiling.** A
+  consistency flag lands on `contradiction` or on `acknowledged_revision`
+  depending on one bool the extractor sets under a three-part bar (name the old
+  position, the new one, and the reason). Only the first ceilings. This is the
+  one place a model classification, rather than a code check, decides whether a
+  ceiling applies — `docs/ideation/2-scoring-and-drift.md` covers what to do when
+  it proves unstable.
 
 **Tier matters.** Tier 0 means the answer conflicts with something the presenter said
 earlier — that is what `contradiction` charges. Tier 1 means a document refutes it — that

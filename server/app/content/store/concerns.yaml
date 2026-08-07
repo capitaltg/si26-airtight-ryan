@@ -40,10 +40,31 @@
       text: Is the PM committed full-time, and for how long?
       requires: commitment
   red_lines:
+    # Both lines on this concern are about the PM's experience, so an answer that
+    # gets a number wrong finds two places to land and a false fact grades as a
+    # hard cap on either. Narrowing only one moved the drift to the other, so both
+    # now say outright what they are not.
+    #
+    # This one is about the person falling short of the bar, not about the number
+    # being wrong. A PM who clears the minimums on the proposal's own figures
+    # clears them whichever figure the answer quotes.
     - id: pm_underqualified
-      text: Proposes a PM who does not meet the stated labor-category qualifications.
+      text: >-
+        Proposes a PM who falls short of the labor-category minimums on the
+        proposal's own figures: under 10 years, no comparable-size program, or no
+        PMP. A PM who clears those minimums but whose experience is overstated is
+        a false fact, not this.
+    # Fabrication only. "Experience the proposal does not support" also describes
+    # every overstated number, which is already the `false_fact` rubric row, and a
+    # red line fires first and alone — so the broad wording charged one statement
+    # as a hard cap and made the v4 integrity ceiling unreachable on this concern.
+    # Inventing a project or a credential outright is the separate, harder failure
+    # this line is for.
     - id: unsupported_experience
-      text: Claims experience the written proposal does not support.
+      text: >-
+        Credits the team with a project or a credential the written proposal never
+        names at all. An overstated number on experience the proposal does name is
+        a false fact, not this.
   what_would_satisfy: >-
     A named PM whose experience meets or exceeds the PWS minimums, with a clear
     full-time commitment.

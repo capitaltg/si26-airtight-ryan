@@ -53,7 +53,32 @@ TOOL_NAME = "record_extraction"
 # `SubQuestionCoverage.evidence_claim_spans` was added to the tool schema. A
 # pinned v1 extraction has no links at all, so replaying it would demote every
 # coverage row to `none`. The bump makes those pins miss on purpose.
-EXTRACTOR_CONTRACT_VERSION = 2
+#
+# v3: `acknowledged_revision` became score-bearing (rubric v4) and the prompt now
+# states the three-part bar for it. A pinned v2 extraction set that field with no
+# rules at all, so replaying one would feed unrated judgment straight into the
+# number. The bump makes those pins miss on purpose.
+#
+# v4: the prompt now asks for `SubQuestionCoverage.span`. It never had, so the
+# model left it null and `grounding.drop_ungrounded` discarded every full/partial
+# row it saw -- real coverage thrown away, and `approach_cited` lost with it. A
+# pinned v3 extraction carries those nulls, so replaying one would keep throwing
+# the same rows away. The bump makes those pins miss on purpose.
+#
+# v5: the persona's hand-graded exemplars are rendered into the prefix. They were
+# authored, stored, and editable, but reached no prompt, so the calibration
+# remedy this suite documents ("add a worked exemplar") changed nothing. New
+# content in the prompt changes classification behavior, which is exactly what
+# this constant gates, so v4 pins miss on purpose.
+#
+# v6: two worked exemplars were added to the contracting_officer persona, drawing
+# the line the `key_personnel` red-line wording could not hold on its own: an
+# overstated number on personnel the proposal names is a false fact, while a
+# project or a credential the proposal never mentions is the
+# `unsupported_experience` red line. Without them the golden case
+# `false_fact_pm_years` graded as a capped red line on roughly one live run in
+# five. A v5 pin carries the judgment made without that guidance, so it misses.
+EXTRACTOR_CONTRACT_VERSION = 6
 
 ExtractionSource = Literal["pin", "response_cache", "fresh"]
 
@@ -98,6 +123,37 @@ def _render_persona(persona: PersonaDefinition) -> str:
     )
 
 
+def _render_exemplars(persona: PersonaDefinition) -> str | None:
+    """The persona's hand-graded worked examples, as classification guidance.
+
+    ``Exemplar.support_delta`` is deliberately left out. The extraction stage is
+    told it never assigns a score, and ``scoring.score_turn`` owns the number in
+    pure code; handing the model a column of graded deltas invites it to reason
+    toward one. What extraction needs from an exemplar is the judgment in
+    ``note`` — what counts as a dodge for this evaluator, what counts as bare
+    reassurance — and that survives without the figure.
+
+    Returns ``None`` for a persona with no exemplars, so an unauthored persona
+    contributes no empty heading to the cached prefix.
+    """
+    if not persona.exemplars:
+        return None
+    entries = "\n".join(
+        f'  - Answer: "{ex.user.strip()}"\n    How it was judged: {ex.note.strip()}'
+        for ex in persona.exemplars
+    )
+    return "\n".join(
+        [
+            "## Worked examples (how answers of this shape were graded by hand "
+            "for this evaluator)",
+            "Read them for classification only: what counts as a dodge here, what "
+            "counts as generic reassurance, what counts as backed evidence. They "
+            "carry no score and you still never assign one.",
+            entries,
+        ]
+    )
+
+
 def _render_concern(concern: Concern) -> str:
     sub = "\n".join(
         f"  - [{sq.id}] {sq.text} (requires: {sq.requires.value})"
@@ -122,7 +178,9 @@ def _render_concern(concern: Concern) -> str:
 # consistency_flags, which double-scores one error (-1 false_fact, -1
 # contradiction) and blames the presenter for contradicting themselves when they
 # did not. The empty-ledger case is stated as its own sentence because the model
-# raised a flag against turn 0 on the session's first turn.
+# raised a flag against turn 0 on the session's first turn. The revision bar is
+# spelled out because `acknowledged_revision` became score-bearing in rubric v4:
+# an undefined field feeding the number is model whim feeding the number.
 _LEDGER_RULES = (
     "Rules for `consistency_flags`. A flag means the answer conflicts with "
     "something the PRESENTER said in an earlier turn, listed above. "
@@ -131,7 +189,16 @@ _LEDGER_RULES = (
     "empty — there is nothing yet to contradict. "
     "A conflict with the solicitation or the written proposal is NOT a "
     "consistency flag: record it in `fact_checks` with `tier: 1` and a "
-    "`refuted` verdict. Never record the same conflict in both fields."
+    "`refuted` verdict. Never record the same conflict in both fields. "
+    "Rules for `acknowledged_revision`. Set it true only when the answer does "
+    "all three of these: refers to the earlier position, states the new "
+    "position, and gives a reason for the change. If any one of the three is "
+    "missing, set it false. Naming the old and the new position without a "
+    "reason is not an acknowledged revision. "
+    'TRUE: "Earlier I said a single weekend; after the dry run we found the '
+    'index rebuild runs long, so we are going region by region." '
+    'FALSE: "Earlier I would have pointed to data migration, but our top risk '
+    'is staffing ramp-up."'
 )
 
 
@@ -154,9 +221,15 @@ def build_extraction_static_prefix(
     This prefix is byte-identical across every turn of a given persona's session,
     so it carries the Bedrock prompt-cache breakpoint. It clears Sonnet 4.5's
     1024-token minimum cacheable prefix on the RFP + proposal alone.
+
+    The persona's worked exemplars ride here rather than in the per-turn suffix:
+    they are turn-invariant, so putting them in the cached half is what keeps the
+    calibration lever free to grow without a per-turn token cost.
     """
+    exemplars = _render_exemplars(persona)
     return "\n\n".join(
-        [
+        block
+        for block in [
             "You are the extraction stage of an oral-defense rehearsal scorer. "
             "Classify the presenter's answer against the schema using the "
             f"{TOOL_NAME} tool. Quote spans verbatim from the answer; a claim with "
@@ -181,6 +254,8 @@ def build_extraction_static_prefix(
             "`requires` tag. `fact` means an `empirical_checkable` claim, "
             "`commitment` means a `commitment` claim, and `fact_or_commitment` "
             "means either one. When you mark a sub-question `full` or `partial`, "
+            "put the verbatim quote from the answer in `span`. A row with no "
+            "span is discarded, exactly like a claim with no span. Then "
             "put in `evidence_claim_spans` the span of every claim in `claims` "
             "that carries that answer, copied character for character from the "
             "claim's own `span`. Do not link a claim you did not also emit in "
@@ -198,11 +273,13 @@ def build_extraction_static_prefix(
             "promotional adjectives.",
             "## Evaluator persona (context for what this evaluator cares about)",
             _render_persona(persona),
+            exemplars,
             "## Solicitation (RFP / PWS)",
             content.rfp_text,
             "## Written proposal",
             content.proposal_text,
         ]
+        if block is not None
     )
 
 

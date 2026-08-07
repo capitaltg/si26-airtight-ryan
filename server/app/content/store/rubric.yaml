@@ -1,12 +1,12 @@
-# Scoring rubric v3. Row ids are a contract the scoring engine (#5) matches on via
+# Scoring rubric v4. Row ids are a contract the scoring engine (#5) matches on via
 # matched_rows; keep them stable. Mirrors docs/ideation/2-scoring-and-drift.md:43-51.
 #
-# `note` and `combination` are disclosure copy only. `version` moved to 3 because
-# the match conditions moved: a sub-question now counts only when a claim of the
-# kind it asks for stands behind it, and Evidence Backed now covers a confirmed
-# checkable fact as well as a backed commitment. Bump it when the math moves.
+# `note` and `combination` are disclosure copy only. `version` moved to 4 because
+# the math moved again: False Fact and Contradiction now hold the answer at 0 or
+# below instead of merely subtracting, and an openly explained revision is its
+# own row at 0 rather than a Contradiction. Bump it when the math moves.
 
-version: 3
+version: 4
 combination:
   - A red line fires first and suppresses every other row on that answer.
   - All other matching rows are added together, then held to the -2 to +2 range.
@@ -17,9 +17,17 @@ combination:
     Evidence Backed already includes the credit for Approach Cited, so the two are
     never paid together.
   - >-
-    Contradiction covers conflicts with your own earlier answers. A claim the RFP
-    or your written proposal refutes is a False Fact instead. One statement is
-    never charged as both.
+    Contradiction covers unexplained conflicts with your own earlier answers. A
+    claim the RFP or your written proposal refutes is a False Fact instead. One
+    statement is never charged as both.
+  - >-
+    A False Fact or an unexplained Contradiction holds the answer at 0 or below.
+    Covering the concern still counts, but it cannot lift a turn where something
+    you said was not true.
+  - >-
+    Openly correcting yourself is not a Contradiction. Name what you said before,
+    say what it is now, and say why it changed, and the turn is recorded as a
+    Revision at no cost.
   - >-
     The over-limit penalty is measured after the -2 to +2 range is applied, so a
     long answer can reach -3.
@@ -43,14 +51,20 @@ rows:
       recover.
   - id: false_fact
     support_value: -1
+    ceiling: 0
     description: Stated a fact that turned out false.
-    note: Charged once per false fact, unlike every other row, which is charged once per answer.
+    note: >-
+      Charged once per false fact, unlike every other row, which is charged once
+      per answer. Holds the answer at 0 or below whatever else it earned.
   - id: contradiction
     support_value: -1
+    ceiling: 0
     description: Contradicted an earlier answer or the written proposal.
     note: >-
-      Covers conflicts with your own earlier answers. A claim the RFP or your
-      written proposal refutes is a False Fact instead.
+      Covers unexplained conflicts with your own earlier answers, and holds the
+      answer at 0 or below. A claim the RFP or your written proposal refutes is a
+      False Fact instead. Openly revising an earlier answer is a Revision, not a
+      Contradiction.
   - id: over_limit
     support_value: -1
     description: Answer exceeds the configured word or voice-duration limit.
@@ -58,6 +72,12 @@ rows:
   - id: unsubstantiated
     support_value: 0
     description: Unsubstantiated claim or generic reassurance.
+  - id: acknowledged_revision
+    support_value: 0
+    description: >-
+      Openly revised an earlier answer: named what you said before, said what it
+      is now, and said why it changed.
+    note: Recorded so the change is visible, but not charged.
   - id: approach_cited
     support_value: 1
     description: Cited a concrete, compliant piece of the approach.

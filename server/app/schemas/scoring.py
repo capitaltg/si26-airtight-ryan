@@ -41,6 +41,11 @@ class ScoreOutput(BaseModel):
     matched_rows: list[str] = Field(default_factory=list)
     row_counts: dict[str, int] = Field(default_factory=dict)
     capped: bool = False
+    # A ceiling row (false_fact, contradiction) held this turn's delta down.
+    # Deliberately NOT `capped`: that one is read by `apply_to_meter` to pin the
+    # persona's meter at 25 for the rest of the session, which a false fact must
+    # not do. Defaults False so archived score_json still validates.
+    integrity_ceiling: bool = False
     limit: LimitResult | None = None
 
     @model_validator(mode="after")

@@ -53,6 +53,16 @@ REPORT_DIR = os.path.join(os.path.dirname(__file__), "..", "docs", "reports")
 # is well under this.
 MAX_TURNS = 40
 
+# The range app/pipeline/scoring.py clamps the summed rubric rows to, before the
+# integrity ceiling and the over-limit penalty. Mirrored here only to explain the
+# printed number back to the reader; the engine still owns every value shown.
+SEMANTIC_RANGE = (-2, 2)
+
+
+def _clamp(raw: int) -> int:
+    low, high = SEMANTIC_RANGE
+    return max(low, min(high, raw))
+
 EDITABLE_PERSONA_FIELDS = (
     "display_name",
     "intro",
@@ -189,10 +199,70 @@ def _format_rows(matched_rows: list[str], row_counts: dict[str, int] | None = No
     return ", ".join(parts) or "(none)"
 
 
+def _limit_penalty(turn: dict) -> int:
+    """The over-limit adjustment already folded into ``support_delta``, or 0.
+
+    ``apply_limit_penalty`` runs after the semantic rows are combined and leaves
+    ``raw_support_delta`` untouched, so this is what has to come back off before
+    the semantic number can be compared with the raw row sum.
+    """
+    limit = turn.get("limit")
+    if not limit or not limit.get("penalty_applied"):
+        return 0
+    return int(limit["penalty_value"])
+
+
+def _semantic_delta(turn: dict) -> int:
+    """This turn's delta from the rubric rows alone, before the length penalty."""
+    return turn["support_delta"] - _limit_penalty(turn)
+
+
+def _integrity_ceiling(turn: dict) -> bool:
+    """True when a ceiling row (``false_fact``, ``contradiction``) held this turn.
+
+    Derived rather than read. The engine sets ``integrity_ceiling`` on its
+    ``ScoreOutput`` but the API does not carry the flag, and it is recoverable
+    exactly: scoring clamps the raw row sum to [-2, +2] and then takes the min
+    with the ceilings declared by the matched rows, so the ceiling bit is on
+    precisely when the clamped sum still sits above the semantic delta the API
+    returned. Recompute it here rather than infer it from ``matched_rows`` — a
+    ceiling row that fired on an already-low turn changed nothing.
+    """
+    raw = turn.get("raw_support_delta", turn["support_delta"])
+    return _clamp(raw) > _semantic_delta(turn)
+
+
+def _delta_note(turn: dict) -> str:
+    """Why ``support_delta`` differs from the raw row sum, when it does.
+
+    Three separate reductions can sit between the two numbers and the presenter
+    is owed all of them by name: the [-2, +2] clamp, the integrity ceiling that
+    holds a turn carrying a false fact or an unexplained contradiction at or
+    below 0, and the over-limit penalty applied after both.
+    """
+    raw = turn.get("raw_support_delta", turn["support_delta"])
+    clamped = _clamp(raw)
+    semantic = _semantic_delta(turn)
+    parts = []
+    if clamped != raw:
+        parts.append(f"clamped from {raw:+d}")
+    if clamped > semantic:
+        parts.append(f"held to {semantic:+d} by the integrity ceiling")
+    penalty = _limit_penalty(turn)
+    if penalty:
+        limit = turn["limit"]
+        parts.append(
+            f"over_limit {penalty:+d} "
+            f"({limit['measured']:g} > {limit['limit_threshold']:g} {limit['kind']})"
+        )
+    return f" ({'; '.join(parts)})" if parts else ""
+
+
 def _fmt_result(r: dict) -> str:
     rows = _format_rows(r["matched_rows"], r.get("row_counts"))
     delta = r["support_delta"]
     delta_s = c(f"{delta:+d}", "32" if delta > 0 else "31" if delta < 0 else "2")
+    note = c(_delta_note(r), "2")
     cap = c(" CAPPED", "31") if r["capped"] else ""
     status_color = {
         "satisfied": "32",
@@ -202,7 +272,7 @@ def _fmt_result(r: dict) -> str:
         "breached": "31",
     }.get(r["concern_status"], "0")
     return (
-        f"    -> rows=[{rows}] delta={delta_s} "
+        f"    -> rows=[{rows}] delta={delta_s}{note} "
         f"meter={c(str(r['meter']), '1')}{cap} status={c(r['concern_status'], status_color)}"
     )
 
@@ -213,8 +283,15 @@ def _turn_record(prompt: dict, sent: str, res: dict) -> dict:
     ``matched_rows`` is sorted because the row set is a set — two runs that
     matched the same rows in a different order agree, and an unsorted list
     would report that as a divergence.
+
+    ``limit`` is the objective length measurement and its penalty. It belongs
+    here for the same reason the rows do: the penalty is part of
+    ``support_delta`` (which is why a long answer reaches -3), so two runs that
+    measured the same answer differently have diverged even when every rubric
+    row matched. ``integrity_ceiling`` is derived, not returned — see
+    ``_integrity_ceiling``.
     """
-    return {
+    record = {
         "kind": "answer",
         "persona_id": res["persona_id"],
         "concern_id": res["concern_id"],
@@ -225,12 +302,15 @@ def _turn_record(prompt: dict, sent: str, res: dict) -> dict:
         "row_counts": dict(sorted(res.get("row_counts", {}).items())),
         "support_delta": res["support_delta"],
         "raw_support_delta": res.get("raw_support_delta", res["support_delta"]),
+        "limit": res.get("limit"),
         "meter": res["meter"],
         "capped": res["capped"],
         "concern_status": res["concern_status"],
         "reply": res["reply"],
         "rationale": res["rationale"],
     }
+    record["integrity_ceiling"] = _integrity_ceiling(record)
+    return record
 
 
 def _answer_for(spec: dict, is_follow_up: bool, cid: str) -> str:

@@ -12,13 +12,22 @@ ignores every other row. Otherwise the matching rows are summed and clamped to
 - ``dodge`` (-2)          — any dodge present
 - ``false_fact`` (-1)     — once per refuted tier-1+ fact_check (accumulates before
   clamp); tier-0 refutations are contradictions, not false facts
-- ``contradiction`` (-1)  — any consistency flag (Tier-0 conflict)
+- ``contradiction`` (-1)  — any *unacknowledged* consistency flag (Tier-0 conflict)
+- ``acknowledged_revision`` (0) — any consistency flag the presenter openly
+  explained; recorded, never charged
 - ``evidence_backed`` (+2) — a commitment claim with ``backing == backed``, or an
   ``empirical_checkable`` claim confirmed by a tier-1+ ``supported`` fact_check
 - ``approach_cited`` (+1) — any sub-question still full/partial after the
   ``requires`` contract check, and not already evidence_backed
 - ``unsubstantiated`` (0) — fallback when nothing else matched, so matched_rows is
   never empty and the audit trail always names a row.
+
+After the clamp, any matched row that declares a ``ceiling`` in rubric.yaml holds
+the delta at or below it — ``false_fact`` and ``contradiction`` both declare 0,
+so on-topic credit can no longer neutralize a false statement. ``integrity_ceiling``
+records whether that actually lowered the number. The over-limit penalty is applied
+later by ``apply_limit_penalty`` and is not re-ceilinged, so a long answer with a
+false fact still reaches -1.
 """
 
 from app.pipeline.span_anchor import fold
@@ -40,6 +49,7 @@ _ROW_ORDER = [
     "unsubstantiated",
     "false_fact",
     "contradiction",
+    "acknowledged_revision",
     "approach_cited",
     "evidence_backed",
     "over_limit",
@@ -114,9 +124,22 @@ def score_turn(extraction: Extraction, rubric: Rubric) -> ScoreOutput:
         counts["false_fact"] = refuted
         delta += values["false_fact"] * refuted
 
-    if extraction.consistency_flags:
+    # An openly explained revision is not the same failure as a concealed flip,
+    # so the two never share a row. The model sets `acknowledged_revision` under
+    # a three-part bar stated in `extraction._LEDGER_RULES`. A turn carrying both
+    # kinds is charged for the concealed one: honesty about one flip buys no
+    # cover for another.
+    hidden = [f for f in extraction.consistency_flags if not f.acknowledged_revision]
+    revised = [f for f in extraction.consistency_flags if f.acknowledged_revision]
+    if hidden:
         counts["contradiction"] = 1
         delta += values["contradiction"]
+    if revised:
+        # Worth 0, but still a matched row, so a turn whose only finding is a
+        # revision does not fall through to `unsubstantiated` and the report can
+        # name what actually happened.
+        counts["acknowledged_revision"] = 1
+        delta += values["acknowledged_revision"]
 
     # Two ways to earn the row, and both are verified rather than asserted. A
     # commitment the model classified as `backed` carries its own specifics; an
@@ -145,6 +168,15 @@ def score_turn(extraction: Extraction, rubric: Rubric) -> ScoreOutput:
 
     raw = delta
     delta = max(-2, min(2, raw))
+    # Authored on the row, not hardcoded here: which failures are unforgivable is
+    # product policy and belongs in rubric.yaml next to its disclosure copy.
+    # `min` of the matched ceilings, so two ceiling rows take the stricter one.
+    ceilings = [
+        row.ceiling for row in rubric.rows if row.id in counts and row.ceiling is not None
+    ]
+    ceiled = bool(ceilings) and delta > min(ceilings)
+    if ceilings:
+        delta = min(delta, min(ceilings))
     ordered = [row for row in _ROW_ORDER if row in counts]
     return ScoreOutput(
         support_delta=delta,
@@ -152,6 +184,7 @@ def score_turn(extraction: Extraction, rubric: Rubric) -> ScoreOutput:
         matched_rows=ordered,
         row_counts={row: counts[row] for row in ordered},
         capped=False,
+        integrity_ceiling=ceiled,
     )
 
 
@@ -183,6 +216,7 @@ def apply_limit_penalty(
         matched_rows=ordered,
         row_counts={row: counts[row] for row in ordered},
         capped=score.capped,
+        integrity_ceiling=score.integrity_ceiling,
         limit=result,
     )
 

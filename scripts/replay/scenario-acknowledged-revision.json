@@ -1,0 +1,47 @@
+{
+  "name": "Acknowledged revision run",
+  "expect_rows": ["acknowledged_revision"],
+  "notes": [
+    "The mirror of scenario-contradiction.json. Same kind of Tier-0 conflict between two things the PRESENTER said, but every flip clears the three-part bar in `extraction._LEDGER_RULES`: it names the earlier position, states the new one, and gives a reason. The rubric v4 `acknowledged_revision` row should fire instead of `contradiction`, at a support_value of 0.",
+    "Every fact that moves (how the parallel run reconciles, who leads which migration wave, how long Meridian shadows, whether cutover is one weekend or three) is absent from both the RFP and the written proposal on purpose, so a Tier-1 fact check has nothing to refute. No revision invents a headcount or a price the proposal does not state — that is the shape most likely to pull `false_fact` in alongside the flag and drag the turn to the integrity ceiling, which would hide the whole point of the row.",
+    "Planted revisions: (1) key_personnel says Anil Kapoor personally leads all three waves; its follow-up hands waves two and three to a deputy because reconciliation oversight became full-time. (2) technical_approach reconciles the two systems weekly during the parallel run; risk revises that to nightly because the wave-one dry run let a week of drift pile up. (3) transition keeps Meridian shadowing for the full 90 days; cost_realism revises that to the first 45 because the runbooks are signed off at that mark. (4) technical_approach moves all 2,400 adjudicators in a single cutover weekend; operational_impact revises that to three regional weekends because the index rebuild overruns the maintenance window.",
+    "compliance_security and past_performance are answered faithfully to the proposal so they add no noise. Every red line is given a wide berth: the PM stays qualified and full-time, hosting stays FedRAMP Moderate, no production data moves before ATO, transition stays inside 90 days, the parallel run is never skipped, and operational_impact keeps the training and help-desk obligations while admitting a slower first week rather than promising a seamless cutover.",
+    "Revision 1 is the one plant that is not guaranteed: it rides a same-concern follow-up, which only happens if the engine presses key_personnel a second time. Revisions 2, 3, and 4 all land on initial turns that the fixed agenda always reaches.",
+    "Written from the engine's authored rules rather than from a recorded run; unlike scenario-contradiction.json, this file carries no observed-behaviour note yet. Run it against a live stack before trusting any specific row or meter here.",
+    "The exact classification and meter for a turn are decided live by the engine, not by this file."
+  ],
+  "concerns": {
+    "technical_approach": {
+      "answer": "Cloud-native on AWS GovCloud at FedRAMP Moderate, containerized microservices with PostgreSQL as the system of record and a versioned REST API for the Payments Engine, the Benefits Portal, and the data warehouse. The LCS migration runs on an event-driven ingestion pipeline in three waves, oldest-first, with an automated reconciliation report after each wave and a rollback point before each one. During the 60-day parallel run the CMS and LCS reconcile weekly. Cutover itself is a single weekend that moves all 2,400 adjudicators onto the CMS.",
+      "followup": "The ingestion pipeline is queue-backed, so a failed batch replays without re-reading the whole wave. Each wave's reconciliation report is signed off by the Bureau before the next wave starts."
+    },
+    "key_personnel": {
+      "answer": "Karen Holloway is our PM: twelve years managing federal software programs, PMP since 2015, and she ran the 1.8 million case modernization at the Veterans Claims Office. She is committed full-time to this effort for the base period. Anil Kapoor is Migration Lead with seven years in large-scale data migration, and he personally leads all three migration waves.",
+      "followup": "One correction to what I just told you. I said Anil Kapoor personally leads all three migration waves. He leads wave one, and our deputy migration lead takes waves two and three. That changed because reconciliation oversight after wave one turned out to be a full-time job, and I would rather have Anil on reconciliation than split across the later waves. Karen's commitment is unchanged: full-time, base period."
+    },
+    "transition": {
+      "answer": "Transition-In Plan inside 10 business days of award, transition-in complete within the 90 calendar days, and the 60-day parallel run with reconciled outputs finishes before LCS is retired. Meridian stays on for structured knowledge transfer through the entire 90 days of transition-in, shadowing adjudication workflows the whole way.",
+      "followup": "Every adjudication workflow has a written runbook before Meridian's people leave, and we rehearse the fallback to LCS once per wave."
+    },
+    "risk": {
+      "answer": "Our top risk is migration data integrity across the 42 million records. Mitigation is the three oldest-first waves with an automated reconciliation report after each, plus a rollback point before every wave. I also need to correct something I told you on the architecture: I said the CMS and LCS reconcile weekly during the 60-day parallel run. It is nightly. We moved it after the wave-one dry run, where a week of drift piled up past what one analyst could clear before the next window opened.",
+      "followup": "Second risk is incumbent knowledge loss. Mitigation is the shadowing period with Meridian and a written runbook for every adjudication workflow before cutover."
+    },
+    "compliance_security": {
+      "answer": "We build to the NIST SP 800-53 moderate baseline and host in AWS GovCloud, which holds FedRAMP Moderate. No production case data enters the system before the ATO is granted; the government's 120-day package review runs against synthetic data only.",
+      "followup": "The ATO package covers the full control set for CUI and PII, and we deliver it for government review rather than self-attesting."
+    },
+    "cost_realism": {
+      "answer": "28 full-time equivalents at steady state, firm-fixed across the base and both option periods, with no assumptions of price adjustment. The 28 is sized against the 1.2 million cases a year the Bureau adjudicates today, not against a growth assumption. I also need to correct what I told you on transition: I committed Meridian to shadowing adjudication workflows for the full 90 days of transition-in, and it is the first 45 days. Their contract expires 2026-12-31 and the adjudication runbooks are signed off at the 45-day mark, so holding them past that buys nothing — that is what lets the 28 carry adjudication support from day 46 without a price adjustment.",
+      "followup": "The firm-fixed price does not move with that change. The shadowing period was always inside the transition-in labor we priced, not a separate line."
+    },
+    "past_performance": {
+      "answer": "The Veterans Claims Office case modernization from 2021 to 2024 is the closest comparable: a 1.8 million case system moved to a cloud-native platform, on schedule, zero data loss, CPARS Exceptional. The State of Ohio tax-system migration from 2019 to 2021 re-platformed a COBOL mainframe to a web application serving 900 users.",
+      "followup": "Both were legacy systems of record with live users throughout, which is the part that maps onto LCS."
+    },
+    "operational_impact": {
+      "answer": "All 2,400 adjudicators are trained before cutover, and the help desk answers Severity-1 incidents within 30 minutes and resolves them within 4 hours. Expect a slower first week while people learn the new screens; that is real and we staff for it. I also want to correct the cutover picture I gave you on the architecture. I said a single weekend moves all 2,400 adjudicators onto the CMS. We are going region by region across three weekends instead, because the wave-one dry run showed the index rebuild on the oldest records runs about nine hours past the maintenance window we had.",
+      "followup": "During the parallel run adjudicators work in the CMS and we reconcile back to LCS nightly, so a region that hits trouble falls back to the legacy system without losing a case."
+    }
+  }
+}

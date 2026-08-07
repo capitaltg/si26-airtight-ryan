@@ -386,13 +386,16 @@ def test_contradiction_with_a_span_absent_from_the_prior_answer_is_dropped() -> 
     assert grounded.consistency_flags == []
 
 
-def test_acknowledged_revision_still_scores_a_contradiction() -> None:
+def test_acknowledged_revision_survives_grounding_and_scores_zero() -> None:
     content, _, _ = _fixture()
     grounded = _ground_with_history(
         Extraction(consistency_flags=[_flag(acknowledged_revision=True)])
     )
+    # grounding is unchanged: an acknowledged flag is still anchored and kept
     assert len(grounded.consistency_flags) == 1
-    assert score_turn(grounded, content.rubric).support_delta == -1
+    scored = score_turn(grounded, content.rubric)
+    assert scored.support_delta == 0
+    assert scored.matched_rows == ["acknowledged_revision"]
 
 
 def test_fact_check_quoting_the_named_document_is_kept_and_scores() -> None:
@@ -421,6 +424,43 @@ def test_fact_check_quoting_the_other_document_is_dropped() -> None:
 def test_fact_check_with_an_ungrounded_answer_span_is_dropped() -> None:
     grounded = _ground_with_docs(
         Extraction(fact_checks=[_check(answer_span="we promised a fourth lead")])
+    )
+    assert grounded.fact_checks == []
+
+
+def test_fact_check_quoting_across_markdown_emphasis_is_kept() -> None:
+    """The frozen documents are Markdown. The proposal bolds the lead-in of a
+    key-personnel bullet, so `**` sits in the middle of a sentence a fact check
+    naturally quotes. The model quotes the sentence as it reads, without the
+    markers, and that quote is a real quote of the document.
+    """
+    grounded = _ground_with_docs(
+        Extraction(
+            fact_checks=[
+                _check(
+                    source_document_id=SourceDocument.written_proposal,
+                    source_quote=(
+                        "Program Manager: Karen Holloway. 12 years managing federal "
+                        "software programs"
+                    ),
+                )
+            ]
+        )
+    )
+    assert len(grounded.fact_checks) == 1
+
+
+def test_fact_check_with_an_invented_quote_is_still_dropped_after_markup_folding() -> None:
+    """Stripping emphasis must not turn the membership test into a loose match."""
+    grounded = _ground_with_docs(
+        Extraction(
+            fact_checks=[
+                _check(
+                    source_document_id=SourceDocument.written_proposal,
+                    source_quote="Program Manager: Karen Holloway. 30 years managing",
+                )
+            ]
+        )
     )
     assert grounded.fact_checks == []
 
