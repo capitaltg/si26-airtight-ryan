@@ -46,11 +46,20 @@ Code turns the extraction into a support change against a fixed rubric. Nobody i
 | Dodged the main question | -2 |
 | Unsubstantiated claim, or generic reassurance | 0 |
 | Stated a fact that turned out false | -1 |
-| Contradicted an earlier answer or the written proposal | -1 |
+| Contradicted an earlier answer or the written proposal, and never explained the change | -1 |
+| Openly revised an earlier answer — named the old position, the new one, and the reason | 0 |
 | Cited a concrete, compliant piece of the approach that answers the ask, with a fact or a commitment behind it | +1 |
 | Backed it with specific staffing, schedule, or past-performance evidence, or with a checkable fact the solicitation or the written proposal confirms | +2 |
 
-Rows combine; the answer doesn't just pick one. A single answer can cite a concrete approach element (+1) and contradict the written proposal (-1) at the same time. The rule: a crossed hard limit fires first and caps the meter regardless of everything else; otherwise the remaining rows are summed and clamped to the -2 to +2 range.
+Rows combine; the answer doesn't just pick one. A single answer can cite a concrete approach element (+1) and contradict the written proposal (-1) at the same time. The rule: a crossed hard limit fires first and caps the meter regardless of everything else; otherwise the remaining rows are summed and clamped to the -2 to +2 range. The false-fact and unexplained-contradiction rows are the two integrity rows: whichever of them matches holds this turn's change at 0 or below regardless of what else matched, so on-topic credit can't outweigh a false statement.
+
+One signal in this list is decided by the model rather than by a code check: whether
+a consistency flag is an explained revision or a concealed flip. That is a
+classification, which is what models are stable at, but the bar has three parts and
+a presenter has an incentive to clear it cheaply. If it proves unstable the fix is a
+worked exemplar in the persona file, not a code change. `contradiction_top_risk` in
+the golden corpus is the canary: it names the old and new position with no reason,
+so it must keep grading as a contradiction.
 
 A row only pays against evidence of the kind the question asked for. Each
 sub-question is authored with what would answer it — a fact, a commitment, or
@@ -225,6 +234,7 @@ One object per user turn, in two blocks. `extraction` is objective and quote-gro
 |---|---|---|
 | `conflicts_with_turn` | int | Index of the earlier turn it contradicts. |
 | `detail` | string | The contradiction in one sentence. |
+| `acknowledged_revision` | bool | True only when the answer names the earlier position, the new one, and the reason it changed. Decides which of the two rows the flag scores on. |
 
 `extraction.fact_checks[]` (only for `empirical_checkable` claims):
 
@@ -253,6 +263,7 @@ Produced by the scoring step, not the model call. Code reads the extraction, app
 | `support_delta` | int | -2 to +2. The rubric result for this turn. |
 | `matched_rows` | string[] | Which rubric rows fired, e.g. `["approach_backed", "contradiction"]`. Makes the number auditable and feeds the reaction. |
 | `capped` | bool | True when a hard limit was crossed, forcing -2 and capping the meter. |
+| `integrity_ceiling` | bool | A ceiling row held this turn's delta down. Distinct from `capped`, which is the sticky red-line meter pin. |
 
 ### Session state (bookkeeping, not returned by the judge call)
 
