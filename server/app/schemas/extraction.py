@@ -114,8 +114,11 @@ class ConsistencyFlag(_Strict):
     conflicts_with_turn: int  # Tier-0, index into the claim ledger
     current_answer_span: str  # verbatim from the answer being scored
     prior_answer_span: str  # verbatim from that turn's stored answer
-    # True when the presenter openly revised the earlier statement. Recorded and
-    # displayed; deliberately does NOT change the score (see the spec).
+    # True when the presenter openly revised the earlier statement: named the
+    # earlier position, the new one, and the reason it changed. Scoring reads
+    # this — an acknowledged revision matches the 0-value `acknowledged_revision`
+    # row instead of `contradiction`. The bar is stated in
+    # `extraction._LEDGER_RULES`.
     acknowledged_revision: bool
     explanation: str | None = None
 

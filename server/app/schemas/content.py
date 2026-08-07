@@ -140,6 +140,7 @@ class RubricRow(BaseModel):
     description: str
     support_value: int
     cap: int | None = None  # if set, crossing this row pins the meter at <= cap, sticky forever
+    ceiling: int | None = None  # if set, matching this row holds the turn's delta at <= ceiling
     note: str | None = None
 
 
@@ -160,6 +161,22 @@ class Rubric(BaseModel):
         red_line = next((row for row in self.rows if row.id == "red_line"), None)
         if red_line is not None and red_line.cap is None:
             raise ValueError("the red_line rubric row must carry a cap")
+        return self
+
+    @model_validator(mode="after")
+    def _integrity_rows_must_carry_a_ceiling(self) -> "Rubric":
+        """Guard the scoring contract: a false fact or an unexplained
+        contradiction holds the turn at or below its ceiling.
+
+        ``score_turn`` reads ``ceiling`` off the matched rows and nothing else
+        enforces it, so a row that quietly loses the field would let on-topic
+        credit neutralize a false statement again — the exact regression rubric
+        v4 exists to prevent. Fail the load instead of scoring wrong.
+        """
+        for row_id in ("false_fact", "contradiction"):
+            row = next((r for r in self.rows if r.id == row_id), None)
+            if row is not None and row.ceiling is None:
+                raise ValueError(f"the {row_id} rubric row must carry a ceiling")
         return self
 
     @property
