@@ -91,19 +91,44 @@ class ScriptedClient(ExtractResultFromExtract):
         return "Here's what I'm looking for. I still need a real answer."
 
 
+_COVERED_SPAN = "named lead, 12 years, full-time"
+
+
+def _covered_claims() -> list[Claim]:
+    """The commitment + empirical claim pair on `_COVERED_SPAN`, shared by
+    `_full` and `_partial` so both fixtures satisfy whichever `requires` value
+    a sub-question is authored with."""
+    return [
+        Claim(
+            text="A named lead is committed with specific experience.",
+            type=ClaimType.commitment,
+            backing=Backing.backed,
+            span=_COVERED_SPAN,
+        ),
+        Claim(
+            text="The named lead has 12 years of relevant experience.",
+            type=ClaimType.empirical_checkable,
+            span=_COVERED_SPAN,
+        ),
+    ]
+
+
 def _full(concern: Concern) -> Extraction:
-    """A backed answer that fully covers every sub-question → satisfies, +2."""
+    """A backed answer that fully covers every sub-question → satisfies, +2.
+
+    Carries a commitment claim and an empirical claim on the same span, and links
+    both from every coverage row, so the row satisfies whichever `requires` value
+    its sub-question is authored with.
+    """
     return Extraction(
-        claims=[
-            Claim(
-                text="A named lead is committed with specific experience.",
-                type=ClaimType.commitment,
-                backing=Backing.backed,
-                span="named lead, 12 years, full-time",
-            )
-        ],
+        claims=_covered_claims(),
         sub_question_coverage=[
-            SubQuestionCoverage(id=sq.id, addressed=Addressed.full, span="covered")
+            SubQuestionCoverage(
+                id=sq.id,
+                addressed=Addressed.full,
+                span=_COVERED_SPAN,
+                evidence_claim_spans=[_COVERED_SPAN],
+            )
             for sq in concern.sub_questions
         ],
     )
@@ -113,14 +138,22 @@ def _partial(concern: Concern) -> Extraction:
     """Covers the first sub-question and nothing else: partial credit, no dodge.
 
     The span has to appear in the answer the test submits or `drop_ungrounded`
-    removes the row and the turn reads as no coverage at all.
+    removes the row and the turn reads as no coverage at all. Carries the same
+    two-claim block as `_full`, linked only from this single row, so the one
+    sub-question it covers still clears the `requires` contract — the point of
+    this fixture is that the *other* sub-questions are untouched, not that this
+    one lacks evidence.
     """
     return Extraction(
+        claims=_covered_claims(),
         sub_question_coverage=[
             SubQuestionCoverage(
-                id=concern.sub_questions[0].id, addressed=Addressed.full, span="covered"
+                id=concern.sub_questions[0].id,
+                addressed=Addressed.full,
+                span="covered",
+                evidence_claim_spans=[_COVERED_SPAN],
             )
-        ]
+        ],
     )
 
 
@@ -151,6 +184,48 @@ def _red_line() -> Extraction:
             )
         ]
     )
+
+
+def _rhetoric_only(concern: Concern) -> Extraction:
+    """Every sub-question marked full, but the only claim behind them is
+    rhetorical. The contract check must demote all of them."""
+    return Extraction(
+        claims=[
+            Claim(
+                text="reassurance about the team",
+                type=ClaimType.rhetorical,
+                span="you are in good hands",
+            )
+        ],
+        sub_question_coverage=[
+            SubQuestionCoverage(
+                id=sq.id,
+                addressed=Addressed.full,
+                span="you are in good hands",
+                evidence_claim_spans=["you are in good hands"],
+            )
+            for sq in concern.sub_questions
+        ],
+    )
+
+
+def test_unmet_requires_contract_keeps_the_concern_open_for_a_follow_up(
+    db: Session, content: Content
+) -> None:
+    client = ScriptedClient()
+    session = orchestrator.start_session(db, content)
+    assignment = orchestrator.next_concern(db, content, session)
+    assert assignment is not None
+    client.next_extraction = _rhetoric_only(assignment.concern)
+
+    result = orchestrator.submit_answer(
+        db, content, client, session, "We take this seriously, you are in good hands."
+    )
+
+    assert result.support_delta == 0
+    assert result.matched_rows == ["unsubstantiated"]
+    assert result.concern_status == "partial"  # not satisfied: nothing was proven
+    assert result.next is not None and result.next.is_follow_up
 
 
 def test_start_session_initializes_meters_and_concerns(db: Session, content: Content) -> None:

@@ -1,11 +1,12 @@
-# Scoring rubric v2. Row ids are a contract the scoring engine (#5) matches on via
+# Scoring rubric v3. Row ids are a contract the scoring engine (#5) matches on via
 # matched_rows; keep them stable. Mirrors docs/ideation/2-scoring-and-drift.md:43-51.
 #
-# `note` and `combination` are disclosure copy only. `version` stays at 2: it tags
-# the scoring contract, and no row value or match condition changed when they were
-# added. Bump it only when the math moves.
+# `note` and `combination` are disclosure copy only. `version` moved to 3 because
+# the match conditions moved: a sub-question now counts only when a claim of the
+# kind it asks for stands behind it, and Evidence Backed now covers a confirmed
+# checkable fact as well as a backed commitment. Bump it when the math moves.
 
-version: 2
+version: 3
 combination:
   - A red line fires first and suppresses every other row on that answer.
   - All other matching rows are added together, then held to the -2 to +2 range.
@@ -22,6 +23,11 @@ combination:
   - >-
     The over-limit penalty is measured after the -2 to +2 range is applied, so a
     long answer can reach -3.
+  - >-
+    A sub-question counts as answered only when a claim of the kind it asks for
+    stands behind it. Naming the topic without a fact or a commitment counts as
+    nothing, and a claim the solicitation or your proposal refutes does not count
+    either.
 rows:
   - id: red_line
     support_value: -2
@@ -55,7 +61,11 @@ rows:
   - id: approach_cited
     support_value: 1
     description: Cited a concrete, compliant piece of the approach.
-    note: Not paid when Evidence Backed already fired on the same answer.
+    note: >-
+      Needs a claim of the kind the sub-question asks for. Not paid when Evidence
+      Backed already fired on the same answer.
   - id: evidence_backed
     support_value: 2
-    description: Backed with specific staffing, schedule, or past-performance evidence.
+    description: >-
+      Backed with specific staffing, schedule, or past-performance evidence, or a
+      checkable fact the solicitation or your written proposal confirms.

@@ -26,6 +26,7 @@ from app.config import settings
 from app.content.loader import Content
 from app.db.models import ClaimLedger
 from app.pipeline.conciseness import compute_conciseness
+from app.pipeline.coverage_contract import enforce_requires
 from app.pipeline.extraction_pin import ExtractionPin, NullExtractionPin, extraction_key
 from app.pipeline.grounding import drop_ungrounded
 from app.pipeline.span_anchor import reanchor_spans
@@ -47,7 +48,12 @@ TOOL_NAME = "record_extraction"
 #
 # Do not bump for comments, formatting, or a reword that leaves the ask
 # identical — the pin exists so that churn does not cost a model call.
-EXTRACTOR_CONTRACT_VERSION = 1
+#
+# 2: the coverage and fact-check rules were added to the prompt and
+# `SubQuestionCoverage.evidence_claim_spans` was added to the tool schema. A
+# pinned v1 extraction has no links at all, so replaying it would demote every
+# coverage row to `none`. The bump makes those pins miss on purpose.
+EXTRACTOR_CONTRACT_VERSION = 2
 
 ExtractionSource = Literal["pin", "response_cache", "fresh"]
 
@@ -102,7 +108,8 @@ def _render_concern(concern: Concern) -> str:
         [
             f"Concern: {concern.concern_id}",
             f"Core ask: {concern.core_ask}",
-            "Sub-questions:",
+            "Sub-questions (the `requires` tag names the kind of claim that "
+            "counts; see the coverage rules above):",
             sub,
             "Red lines (crossing any is a hard cap):",
             red,
@@ -170,6 +177,21 @@ def build_extraction_static_prefix(
             "with the red lines and non-negotiables. A finding whose evidence "
             "cannot be found in its stated source is discarded before scoring, "
             "so an unverifiable finding is worth nothing.",
+            "Coverage rules. Each sub-question in the active concern carries a "
+            "`requires` tag. `fact` means an `empirical_checkable` claim, "
+            "`commitment` means a `commitment` claim, and `fact_or_commitment` "
+            "means either one. When you mark a sub-question `full` or `partial`, "
+            "put in `evidence_claim_spans` the span of every claim in `claims` "
+            "that carries that answer, copied character for character from the "
+            "claim's own `span`. Do not link a claim you did not also emit in "
+            "`claims`. A coverage row with no linked claim of the required type "
+            "is scored as not addressed, so restating the question or answering "
+            "it with enthusiasm earns nothing.",
+            "Fact-check rules. Record a `fact_check` when the solicitation or the "
+            "written proposal CONFIRMS a checkable claim, not only when one is "
+            "refuted. Use `tier: 1`, `verdict: supported`, and the confirming "
+            "`source_quote`. A confirmed checkable claim is real evidence and "
+            "the scorer credits it, so leaving it out costs the presenter.",
             "When you write a free-text reason in the schema (for example the "
             "'why' behind a red-line hit), write it the way a person would: plain "
             "and direct, short sentences, no em dashes, no three-part lists, no "
@@ -291,11 +313,12 @@ def run_extraction(
     Post-processing runs on the replay path too, and the order matters. A pinned
     span was quoted out of an earlier phrasing, so ``reanchor_spans`` maps it onto
     this answer first; then ``drop_ungrounded`` discards anything the answer does
-    not actually support, Tier-0 contradictions included: it keeps a
-    ``ConsistencyFlag`` only when the named turn has a stored prior answer and
-    both the current and prior spans are quoted in their respective answers.
-    Running grounding before anchoring would throw out real findings whenever a
-    presenter retypes the same answer with different spacing.
+    not actually support, Tier-0 contradictions included; then ``enforce_requires``
+    demotes any sub-question whose authored ``requires`` type has no surviving claim
+    behind it. Running grounding before anchoring would throw out real findings
+    whenever a presenter retypes the same answer with different spacing, and running
+    the contract check before grounding would let a discarded claim satisfy a
+    sub-question.
     """
     model_id = settings.bedrock_model_id
     resolved_pin: ExtractionPin = pin if pin is not None else NullExtractionPin()
@@ -366,9 +389,15 @@ def run_extraction(
             SourceDocument.written_proposal: content.proposal_text,
         },
     )
-    conciseness = compute_conciseness(answer, grounded)
+    # Last of the three pure passes, and the only one that needs the authored
+    # concern's `requires` tags. Runs after grounding so every link it reads
+    # names a claim that survived. Its output is what gets scored, what decides
+    # the follow-up, and what is persisted, so scoring and the report never see
+    # an unenforced coverage row.
+    checked = enforce_requires(grounded, concern)
+    conciseness = compute_conciseness(answer, checked)
     return ExtractionResult(
-        extraction=grounded,
+        extraction=checked,
         conciseness=conciseness,
         provenance=ExtractionProvenance(
             source=source,

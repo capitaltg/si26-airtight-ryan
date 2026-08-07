@@ -87,6 +87,18 @@ def _ground_with_docs(extraction: Extraction) -> Extraction:
     )
 
 
+def _drop(extraction: Extraction, answer: str) -> Extraction:
+    _, persona, concern = _fixture()
+    return drop_ungrounded(
+        extraction,
+        answer=answer,
+        concern=concern,
+        persona=persona,
+        prior_answers={},
+        documents=_documents(),
+    )
+
+
 def _check(**overrides: object) -> FactCheck:
     content = load_content()
     real_quote = content.rfp_text.split("\n")[0].strip()
@@ -416,3 +428,106 @@ def test_fact_check_with_an_ungrounded_answer_span_is_dropped() -> None:
 def test_tier_two_fact_check_is_always_dropped() -> None:
     grounded = _ground_with_docs(Extraction(fact_checks=[_check(tier=2)]))
     assert grounded.fact_checks == []
+
+
+def test_link_naming_a_dropped_claim_is_removed() -> None:
+    answer = "We run on AWS GovCloud."
+    extraction = Extraction(
+        claims=[
+            Claim(
+                text="hosted on GovCloud",
+                type=ClaimType.empirical_checkable,
+                span="We run on AWS GovCloud",
+            )
+        ],
+        sub_question_coverage=[
+            SubQuestionCoverage(
+                id="hosting",
+                addressed=Addressed.full,
+                span="We run on AWS GovCloud",
+                evidence_claim_spans=[
+                    "We run on AWS GovCloud",     # real claim, kept
+                    "we hold a FedRAMP High ATO",  # no such claim, dropped
+                ],
+            )
+        ],
+    )
+    out = _drop(extraction, answer)
+    assert out.sub_question_coverage[0].evidence_claim_spans == ["We run on AWS GovCloud"]
+
+
+def test_link_survives_when_it_quotes_part_of_a_claim_span() -> None:
+    answer = "We run on AWS GovCloud and PostgreSQL is the system of record."
+    extraction = Extraction(
+        claims=[
+            Claim(
+                text="hosted on GovCloud",
+                type=ClaimType.empirical_checkable,
+                span="We run on AWS GovCloud and PostgreSQL is the system of record",
+            )
+        ],
+        sub_question_coverage=[
+            SubQuestionCoverage(
+                id="hosting",
+                addressed=Addressed.full,
+                span="We run on AWS GovCloud",
+                evidence_claim_spans=["we run on aws govcloud"],  # folded fragment
+            )
+        ],
+    )
+    out = _drop(extraction, answer)
+    assert out.sub_question_coverage[0].evidence_claim_spans == ["we run on aws govcloud"]
+
+
+def test_link_broader_than_the_claim_it_names_is_removed() -> None:
+    # A link may quote part of a claim, never more than the claim: otherwise a
+    # coverage row could stretch one short claim over a whole paragraph.
+    answer = "We run on AWS GovCloud and we will also rewrite the payments engine."
+    extraction = Extraction(
+        claims=[
+            Claim(
+                text="hosted on GovCloud",
+                type=ClaimType.empirical_checkable,
+                span="We run on AWS GovCloud",
+            )
+        ],
+        sub_question_coverage=[
+            SubQuestionCoverage(
+                id="hosting",
+                addressed=Addressed.full,
+                span="We run on AWS GovCloud",
+                evidence_claim_spans=[
+                    "We run on AWS GovCloud and we will also rewrite the payments engine"
+                ],
+            )
+        ],
+    )
+    out = _drop(extraction, answer)
+    assert out.sub_question_coverage[0].evidence_claim_spans == []
+
+
+def test_trimming_only_links_still_returns_the_trimmed_copy() -> None:
+    # Every list keeps its length here, so the length-based fast path would have
+    # returned the untrimmed original. Guards that regression directly.
+    answer = "We run on AWS GovCloud."
+    extraction = Extraction(
+        claims=[
+            Claim(
+                text="hosted on GovCloud",
+                type=ClaimType.empirical_checkable,
+                span="We run on AWS GovCloud",
+            )
+        ],
+        sub_question_coverage=[
+            SubQuestionCoverage(
+                id="hosting",
+                addressed=Addressed.full,
+                span="We run on AWS GovCloud",
+                evidence_claim_spans=["a claim nobody made"],
+            )
+        ],
+    )
+    out = _drop(extraction, answer)
+    assert out is not extraction
+    assert out.sub_question_coverage[0].evidence_claim_spans == []
+    assert len(out.claims) == 1

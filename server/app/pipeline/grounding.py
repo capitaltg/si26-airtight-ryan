@@ -6,11 +6,12 @@ that a claim without one does not count. Nothing enforced that. A fabricated
 span on a red-line hit bills -2 and pins the persona's meter at the cap,
 stickily and forever, on the model's word alone.
 
-Pure code, no model call, no I/O. It only ever removes; it never rewrites a
-field and never raises. Runs after ``span_anchor.reanchor_spans`` so a replayed
-span is mapped onto the current phrasing before the membership test — reversed,
-a whitespace-only retype would discard legitimate findings. ``RedLineHit.source_id``
-is also validated against the authored ids of its ``source_kind``.
+Pure code, no model call, no I/O. It only ever removes: a whole finding, or a
+link inside one. It never rewrites the content of a field and never raises.
+Runs after ``span_anchor.reanchor_spans`` so a replayed span is mapped onto the
+current phrasing before the membership test — reversed, a whitespace-only
+retype would discard legitimate findings. ``RedLineHit.source_id`` is also
+validated against the authored ids of its ``source_kind``.
 
 A ``FactCheck`` is kept only when its ``answer_span`` is quoted in the answer
 and its ``source_quote`` is quoted in the document named by
@@ -18,6 +19,11 @@ and its ``source_quote`` is quoted in the document named by
 document to check its quote against — so it is always dropped outright, ahead
 of and independent from the document lookup that catches a fabricated or
 mislabeled ``source_document_id`` on a Tier-1 check.
+
+``SubQuestionCoverage.evidence_claim_spans`` names the claims that carry a
+sub-question's answer. A link is kept only when it quotes the span of a claim
+that survived this same pass, so a link cannot point at evidence that was just
+discarded. ``pipeline.coverage_contract`` reads what is left.
 """
 
 from __future__ import annotations
@@ -38,6 +44,19 @@ def _is_quoted(span: str | None, folded_answer: str) -> bool:
         return False
     needle, _ = fold(span)
     return bool(needle) and needle in folded_answer
+
+
+def _links_a_claim(link: str, folded_claim_spans: list[str]) -> bool:
+    """True when ``link`` quotes the span of a claim that survived grounding.
+
+    Equal or narrower than a claim span, never broader: a coverage row may cite
+    part of a claim, but stretching one short claim across a wider quote would
+    let a single grounded phrase carry text it never covered.
+    """
+    needle, _ = fold(link)
+    if not needle:
+        return False
+    return any(needle == span or needle in span for span in folded_claim_spans)
 
 
 def drop_ungrounded(
@@ -86,7 +105,12 @@ def drop_ungrounded(
             continue
         claims.append(claim)
 
+    # Folded once, from the claims that SURVIVED: a link naming a claim this pass
+    # just discarded is not evidence of anything.
+    folded_claim_spans = [fold(claim.span)[0] for claim in claims]
+
     coverage = []
+    links_trimmed = False
     for cov in extraction.sub_question_coverage:
         if cov.id not in sub_question_ids:
             logger.warning("dropped coverage naming unknown sub-question %r", cov.id)
@@ -101,6 +125,18 @@ def drop_ungrounded(
                 cov.span,
             )
             continue
+        kept = [
+            link for link in cov.evidence_claim_spans
+            if _links_a_claim(link, folded_claim_spans)
+        ]
+        if len(kept) != len(cov.evidence_claim_spans):
+            logger.warning(
+                "trimmed %d evidence_claim_span(s) on coverage %s naming no surviving claim",
+                len(cov.evidence_claim_spans) - len(kept),
+                cov.id,
+            )
+            cov = cov.model_copy(update={"evidence_claim_spans": kept})
+            links_trimmed = True
         coverage.append(cov)
 
     dodges = []
@@ -180,7 +216,8 @@ def drop_ungrounded(
         fact_checks.append(check)
 
     unchanged = (
-        len(red_line_hits) == len(extraction.red_line_hits)
+        not links_trimmed
+        and len(red_line_hits) == len(extraction.red_line_hits)
         and len(claims) == len(extraction.claims)
         and len(coverage) == len(extraction.sub_question_coverage)
         and len(dodges) == len(extraction.dodges)

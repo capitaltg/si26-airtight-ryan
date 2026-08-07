@@ -586,3 +586,137 @@ def test_cap_ceiling_falls_back_to_100_when_no_row_caps():
         80, +2, capped=True, cap_ceiling=rubric.cap_ceiling, already_capped=False
     )
     assert (meter, capped) == (82, True)
+
+
+# --- verified empirical evidence ------------------------------------------------
+
+
+def _supported_check(answer_span: str) -> FactCheck:
+    return FactCheck(
+        claim="comparable-scale migration on the record",
+        answer_span=answer_span,
+        source_document_id=SourceDocument.written_proposal,
+        source_quote="1.8 million cases migrated with zero data loss",
+        tier=1,
+        verdict=Verdict.supported,
+    )
+
+
+def test_a_document_confirmed_empirical_claim_is_evidence_backed() -> None:
+    ext = Extraction(
+        claims=[
+            Claim(
+                text="migrated a 1.8M-case system with zero data loss",
+                type=ClaimType.empirical_checkable,
+                span="we migrated a 1.8-million-case system with zero data loss",
+            )
+        ],
+        fact_checks=[_supported_check("we migrated a 1.8-million-case system")],
+        sub_question_coverage=[
+            SubQuestionCoverage(
+                id="comparable_scale",
+                addressed=Addressed.full,
+                span="a 1.8-million-case system",
+                evidence_claim_spans=["we migrated a 1.8-million-case system with zero data loss"],
+            )
+        ],
+    )
+    out = score_turn(ext, _rubric())
+    assert out.support_delta == 2
+    assert out.matched_rows == ["evidence_backed"]  # approach_cited still suppressed
+
+
+def test_an_unconfirmed_empirical_claim_is_only_approach_cited() -> None:
+    ext = Extraction(
+        claims=[
+            Claim(
+                text="migrated a 1.8M-case system",
+                type=ClaimType.empirical_checkable,
+                span="we migrated a 1.8-million-case system",
+            )
+        ],
+        sub_question_coverage=[
+            SubQuestionCoverage(
+                id="comparable_scale",
+                addressed=Addressed.full,
+                span="a 1.8-million-case system",
+                evidence_claim_spans=["we migrated a 1.8-million-case system"],
+            )
+        ],
+    )
+    out = score_turn(ext, _rubric())
+    assert out.support_delta == 1
+    assert out.matched_rows == ["approach_cited"]
+
+
+def test_a_supported_check_with_no_empirical_claim_behind_it_is_not_backed() -> None:
+    # The row rewards a verified CLAIM, not a stray check. Nothing to attach to.
+    ext = Extraction(fact_checks=[_supported_check("we migrated a system")])
+    out = score_turn(ext, _rubric())
+    assert "evidence_backed" not in out.matched_rows
+    assert out.matched_rows == ["unsubstantiated"]
+
+
+def test_a_tier_zero_supported_check_does_not_back_a_claim() -> None:
+    ext = Extraction(
+        claims=[
+            Claim(
+                text="migrated a 1.8M-case system",
+                type=ClaimType.empirical_checkable,
+                span="we migrated a 1.8-million-case system",
+            )
+        ],
+        fact_checks=[
+            FactCheck(
+                claim="c",
+                answer_span="we migrated a 1.8-million-case system",
+                source_document_id=SourceDocument.written_proposal,
+                source_quote="q",
+                tier=0,
+                verdict=Verdict.supported,
+            )
+        ],
+    )
+    out = score_turn(ext, _rubric())
+    assert "evidence_backed" not in out.matched_rows
+
+
+def test_a_narrower_unconfirmed_claim_riding_a_wider_confirmed_span_is_not_backed() -> None:
+    # The claim's own span is never confirmed; it merely sits inside a wider,
+    # unrelated check's answer_span. Only the check's answer_span being found
+    # inside the claim's span counts as confirmation, never the reverse.
+    ext = Extraction(
+        claims=[
+            Claim(
+                text="we will also rebuild the payments engine",
+                type=ClaimType.empirical_checkable,
+                span="we will also rebuild the payments engine",
+            )
+        ],
+        fact_checks=[
+            _supported_check(
+                "we migrated 1.8 million cases and we will also rebuild the payments engine"
+            )
+        ],
+    )
+    out = score_turn(ext, _rubric())
+    assert "evidence_backed" not in out.matched_rows
+    assert out.matched_rows == ["unsubstantiated"]
+
+
+def test_a_confirmed_commitment_claim_alone_is_not_the_empirical_path() -> None:
+    # The empirical path is for `empirical_checkable`. A commitment still needs
+    # `backing == backed`; a supported check does not substitute for it.
+    ext = Extraction(
+        claims=[
+            Claim(
+                text="we commit to 90 days",
+                type=ClaimType.commitment,
+                backing=Backing.specified,
+                span="we complete transition-in within 90 calendar days",
+            )
+        ],
+        fact_checks=[_supported_check("we complete transition-in within 90 calendar days")],
+    )
+    out = score_turn(ext, _rubric())
+    assert "evidence_backed" not in out.matched_rows

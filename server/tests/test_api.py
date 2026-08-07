@@ -45,7 +45,7 @@ def test_app_boots_with_content_on_state():
         assert isinstance(content, Content)
         assert len(content.personas) == 3
         assert len(content.concerns) == 8
-        assert content.rubric.version == 2
+        assert content.rubric.version == 3
 
 
 class _FakeClient(ExtractResultFromExtract):
@@ -69,17 +69,31 @@ class _FakeClient(ExtractResultFromExtract):
                         type=ClaimType.commitment,
                         backing=Backing.backed,
                         span="architecture",
-                    )
+                    ),
+                    Claim(
+                        text="The architecture has a concrete component breakdown.",
+                        type=ClaimType.empirical_checkable,
+                        span="architecture",
+                    ),
                 ],
                 sub_question_coverage=[
                     SubQuestionCoverage(
-                        id="architecture", addressed=Addressed.full, span="architecture"
+                        id="architecture",
+                        addressed=Addressed.full,
+                        span="architecture",
+                        evidence_claim_spans=["architecture"],
                     ),
                     SubQuestionCoverage(
-                        id="hosting", addressed=Addressed.full, span="architecture"
+                        id="hosting",
+                        addressed=Addressed.full,
+                        span="architecture",
+                        evidence_claim_spans=["architecture"],
                     ),
                     SubQuestionCoverage(
-                        id="integrations", addressed=Addressed.full, span="architecture"
+                        id="integrations",
+                        addressed=Addressed.full,
+                        span="architecture",
+                        evidence_claim_spans=["architecture"],
                     ),
                 ],
             )
@@ -96,8 +110,12 @@ class _FakeClient(ExtractResultFromExtract):
 
 
 class _PartialClient(_FakeClient):
-    """Covers one sub-question only, so the concern goes `partial` and earns a
-    follow-up on the same concern."""
+    """Emits coverage with no linked claim, so the contract check demotes it to
+    `none` — the concern still goes `partial` and earns a follow-up on the same
+    concern, just via "nothing was proven" rather than "one sub-question was
+    covered". Either way the test below only checks the follow-up flag, not the
+    concern status, so leaving this linkless is the correct fixture: the point
+    is a same-concern follow-up, not a specific degree of coverage."""
 
     def extract(self, content, *, content_schema, tool_name, max_tokens=4096, cache_key=None):
         if content_schema is Extraction:
@@ -383,10 +401,10 @@ def test_content_rubric_is_disclosed(client: TestClient) -> None:
     r = client.get("/content/rubric")
     assert r.status_code == 200
     body = r.json()
-    assert body["version"] == 2
+    assert body["version"] == 3
     assert "cap_ceiling" not in body  # the cap now rides inside the red_line row
     assert len(body["rows"]) == 8
-    assert len(body["combination"]) >= 6
+    assert len(body["combination"]) >= 7
     red_line = next(row for row in body["rows"] if row["id"] == "red_line")
     assert red_line["cap"] == 25
     assert all(row["cap"] is None for row in body["rows"] if row["id"] != "red_line")
@@ -803,8 +821,9 @@ def test_transcript_marks_a_second_turn_on_one_concern_as_a_follow_up(
     client: TestClient,
 ) -> None:
     session_id = client.post("/sessions").json()["id"]
-    # `_PartialClient` covers only one sub-question, so the first concern earns a
-    # same-concern follow-up instead of satisfying.
+    # `_PartialClient` emits a linkless coverage row, which the contract check
+    # demotes to `none`; the concern still earns a same-concern follow-up
+    # instead of satisfying.
     client.app.dependency_overrides[get_bedrock_client] = _PartialClient
     for _ in range(2):
         client.post(f"/sessions/{session_id}/answer", json={"answer": "Partly there."})

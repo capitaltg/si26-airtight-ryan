@@ -328,3 +328,31 @@ def test_prior_answer_span_and_source_quote_are_left_alone() -> None:
     assert anchored.consistency_flags[0].current_answer_span == "three named leads"
     assert anchored.consistency_flags[0].prior_answer_span == "we have not identified leads"
     assert anchored.fact_checks[0].source_quote == "Key Personnel shall be identified at award"
+
+
+def test_reanchor_maps_evidence_claim_spans_onto_the_current_answer() -> None:
+    extraction = Extraction(
+        claims=[
+            Claim(
+                text="full-time for the base period",
+                type=ClaimType.commitment,
+                backing=Backing.specified,
+                span="She is committed full-time",
+            )
+        ],
+        sub_question_coverage=[
+            SubQuestionCoverage(
+                id="pm_commitment",
+                addressed=Addressed.full,
+                span="She is committed full-time",
+                evidence_claim_spans=["She is committed full-time"],
+            )
+        ],
+    )
+    # Same words, different spacing and case: the pinned spans came from the
+    # earlier phrasing and must be mapped back onto this text.
+    answer = "she  is\ncommitted   FULL-TIME for the base period."
+    out = reanchor_spans(extraction, answer)
+    link = out.sub_question_coverage[0].evidence_claim_spans[0]
+    assert link in answer
+    assert link == out.claims[0].span

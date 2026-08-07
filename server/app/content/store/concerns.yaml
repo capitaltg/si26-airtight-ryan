@@ -1,6 +1,10 @@
 # Frozen concern bank for the POC (8 concerns).
 # concern_id / core_ask / requires seeded from docs/ideation/3-spec.md:58-67.
 # sub_questions, red_lines, and what_would_satisfy authored here; calibration is #7.
+# `requires` is enforced in code (app/pipeline/coverage_contract.py): a
+# sub-question counts as answered only when an unrefuted claim of that type is
+# linked to it. Tag what the question actually asks for — `commitment` for what
+# the presenter will do, `fact` for what is already true.
 
 - concern_id: technical_approach
   core_ask: >-
@@ -143,7 +147,7 @@
   sub_questions:
     - id: named_risk
       text: Is a genuine, specific risk named rather than deflected?
-      requires: commitment
+      requires: fact_or_commitment
     - id: mitigation
       text: Is there a concrete mitigation tied to that risk?
       requires: commitment

@@ -15,6 +15,10 @@ it cannot be located rather than inventing one. Only quoted fields are rewritten
 free-text reasons and claim restatements are the model's own words and are left
 as emitted. Nothing the scorer reads is touched, so the score cannot move.
 
+``SubQuestionCoverage.evidence_claim_spans`` quotes the answer as well, so it is
+anchored here too. Anchoring it is what keeps a replayed link matchable against
+the claim span it names, since both sides get mapped onto the same current text.
+
 ``ConsistencyFlag.prior_answer_span`` and ``FactCheck.source_quote`` quote a
 *different* text than the answer under evaluation — an earlier turn's answer and
 a frozen source document, respectively — and are deliberately left alone here.
@@ -91,7 +95,19 @@ def reanchor_spans(extraction: Extraction, answer: str) -> Extraction:
         update={
             "claims": [c.model_copy(update={"span": fix(c.span)}) for c in extraction.claims],
             "sub_question_coverage": [
-                cov.model_copy(update={"span": fix(cov.span)})
+                cov.model_copy(
+                    update={
+                        "span": fix(cov.span),
+                        # Links quote the answer just like `span` does, so a
+                        # replayed link needs the same mapping. Anchored one by
+                        # one; a link that cannot be located is left alone and
+                        # grounding drops it in Task 2.
+                        "evidence_claim_spans": [
+                            _anchor(link, answer, folded_answer, origin)
+                            for link in cov.evidence_claim_spans
+                        ],
+                    }
+                )
                 for cov in extraction.sub_question_coverage
             ],
             "dodges": [

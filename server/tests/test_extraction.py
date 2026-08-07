@@ -29,7 +29,14 @@ from app.pipeline.extraction import (
 )
 from app.pipeline.extraction_pin import InMemoryExtractionPin, extraction_key
 from app.pipeline.scoring import score_turn
-from app.schemas.extraction import Backing, Claim, ClaimType, Extraction
+from app.schemas.extraction import (
+    Addressed,
+    Backing,
+    Claim,
+    ClaimType,
+    Extraction,
+    SubQuestionCoverage,
+)
 from tests.conftest import ExtractResultFromExtract
 
 
@@ -245,6 +252,94 @@ def test_run_extraction_returns_extraction_plus_computed_conciseness() -> None:
     call = client.calls[0]
     assert call["content_schema"] is Extraction
     assert call["tool_name"] == "record_extraction"
+
+
+def test_run_extraction_demotes_coverage_whose_requires_contract_is_unmet() -> None:
+    """key_personnel/pm_commitment requires a commitment. Link an empirical claim
+    to it and the coverage must come back `none`."""
+    content, persona, _ = _fixture()
+    concern = content.concerns["key_personnel"]
+    answer = "Karen Holloway has twelve years managing federal software programs."
+    scripted = Extraction(
+        claims=[
+            Claim(
+                text="twelve years of federal software programs",
+                type=ClaimType.empirical_checkable,
+                span="Karen Holloway has twelve years",
+            )
+        ],
+        sub_question_coverage=[
+            SubQuestionCoverage(
+                id="pm_commitment",
+                addressed=Addressed.full,
+                span="Karen Holloway has twelve years",
+                evidence_claim_spans=["Karen Holloway has twelve years"],
+            )
+        ],
+    )
+    result = run_extraction(
+        answer=answer,
+        concern=concern,
+        persona=persona,
+        content=content,
+        prior_claims=[],
+        prior_answers={},
+        client=FakeBedrockClient(scripted),
+    )
+    assert result.extraction.sub_question_coverage[0].addressed is Addressed.none
+
+
+def test_run_extraction_keeps_coverage_whose_requires_contract_is_met() -> None:
+    """The same shape with a commitment claim linked instead. Proves the demotion
+    above is the contract firing, not the link being dropped."""
+    content, persona, _ = _fixture()
+    concern = content.concerns["key_personnel"]
+    answer = "Karen Holloway is committed full-time for the base period."
+    scripted = Extraction(
+        claims=[
+            Claim(
+                text="full-time for the base period",
+                type=ClaimType.commitment,
+                backing=Backing.specified,
+                span="Karen Holloway is committed full-time",
+            )
+        ],
+        sub_question_coverage=[
+            SubQuestionCoverage(
+                id="pm_commitment",
+                addressed=Addressed.full,
+                span="Karen Holloway is committed full-time",
+                evidence_claim_spans=["Karen Holloway is committed full-time"],
+            )
+        ],
+    )
+    result = run_extraction(
+        answer=answer,
+        concern=concern,
+        persona=persona,
+        content=content,
+        prior_claims=[],
+        prior_answers={},
+        client=FakeBedrockClient(scripted),
+    )
+    assert result.extraction.sub_question_coverage[0].addressed is Addressed.full
+
+
+def test_prompt_states_the_requires_contract_and_the_link_field() -> None:
+    content, persona, concern = _fixture()
+    prompt = build_extraction_prompt(
+        answer="We run on AWS GovCloud.",
+        concern=concern,
+        persona=persona,
+        content=content,
+        prior_claims=[],
+    )
+    assert "evidence_claim_spans" in prompt
+    assert "fact_or_commitment" in prompt
+    assert "verdict: supported" in prompt
+    # The rule belongs in the cached prefix, not the per-turn rebuild.
+    prefix = build_extraction_static_prefix(persona=persona, content=content)
+    assert "evidence_claim_spans" in prefix
 
 
 # --- normalized cache-key acceptance: whitespace/case variants replay, wording
@@ -773,12 +868,10 @@ def test_pin_defaults_to_null_so_existing_callers_are_unpinned() -> None:
     assert client.calls == 2
 
 
-def test_the_contract_version_is_one() -> None:
-    """A tripwire, and updating it is the point: a bump must be a reviewed line
-    in a diff, never a side effect of editing a prompt builder. If this fails,
-    confirm the prompt change really altered what the model is asked to report,
-    then change the number here in the same commit."""
-    assert EXTRACTOR_CONTRACT_VERSION == 1
+def test_extractor_contract_version_is_two() -> None:
+    # The prompt's ask and the tool schema both changed, so a v1 pin — which has
+    # no links at all, and would therefore demote every coverage row — must miss.
+    assert EXTRACTOR_CONTRACT_VERSION == 2
 
 
 def _pin_key(content: Any, persona: Any, concern: Any, *, model_id: str) -> str:
